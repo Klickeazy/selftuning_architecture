@@ -31,9 +31,13 @@ Packages
 
 
 ##### Option 1 - build from [Py3_10.yml](PyEnvironment\Py3_10.yml)
-Navigate terminal to folder and create environment using:    
+Navigate terminal to folder and create environment using:
 
     conda env create -f Py3_10.yml
+
+Update an existing *Py3_10* environment using:
+
+	conda env update -f Py3_10.yml --prune
 
 You can export an environment using:
 
