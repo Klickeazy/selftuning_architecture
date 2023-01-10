@@ -2,17 +2,23 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import pickle
+from pathlib import Path
 
 
 class Item:
     """
     Class to hold value and id of an item, display it and copy it
+    class terms: ID (str), Value (int)
     """
     def __init__(self, id_in, value_in):
         self.id = str(id_in)
         self.value = value_in
 
     def print_item(self):
+        """
+        Print Item contents
+        :return:
+        """
         print("ID: " + self.id + " - Value: " + str(self.value))
         return None
 
@@ -23,6 +29,7 @@ class Item:
 
 def selection_value(selection):
     """
+    Calculate cumulative value of all Items in selection
     :param selection:   list of Item objects with id and value
     :return:     sum of item values
     """
@@ -34,8 +41,9 @@ def selection_value(selection):
 
 def constraint_check_selection(selection, limit):
     """
+    Check constraints for greedy selection - maximize selection up to limit
     :param selection:   list of Item objects with id and value
-    :param limit:   number of items to select
+    :param limit:   final number of items after selection
     :return:    check if below limits for further selection - return false if not
     """
     if len(selection) < limit:
@@ -45,15 +53,22 @@ def constraint_check_selection(selection, limit):
 
 
 def constraint_check_rejection(rejection, limit):
+    """
+    Check constraints for greedy rejection - maximize selection up to limit
+    :param rejection:   list of Item objects with id and value
+    :param limit: final number of items after rejection
+    :return:    check if below limits for further selection - return false if not
+    """
     if len(rejection) >= limit:
         return True
     else:
         return False
 
 
-def greedy_selection(choices, limit):
+def greedy_selection(choices, limit, selection=None):
     selection_start = time.time()
-    selection = []
+    if selection is None:
+        selection = []
     while constraint_check_selection(selection, limit):
         max_item = Item(None, 0)
         for c in choices:
@@ -68,9 +83,10 @@ def greedy_selection(choices, limit):
     return {"set": selection, "value": selection_value(selection), "time": np.round(selection_end-selection_start, 5)}
 
 
-def greedy_rejection(choices, limit):
+def greedy_rejection(choices, limit, rejection=None):
     rejection_start = time.time()
-    rejection = choices[:]
+    if rejection is None:
+        rejection = choices[:]
     while constraint_check_rejection(rejection, limit):
         min_item = Item(None, np.inf)
         for r in rejection:
@@ -103,14 +119,15 @@ def print_comparison(comp_values):
     print('Selection time: ', comp_values["rejection"]["time"], 'ms')
 
 
-def test_limit_range(items, step_size=1):
+def test_limit_range(items, step_size=1, start=1):
     print("Start limit range test")
     selection_data = {"limit": [], "value": [], "time": []}
     rejection_data = {"limit": [], "value": [], "time": []}
-    count = 0
-    for i in range(1, len(items)+1, step_size):
-        if not count % 10:
-            print("\r", i, end="")
+    # count = 0
+    for i in range(start, len(items)+1, step_size):
+        # if not ((i-start)//step_size) % 10:
+        #     print("\r", i, end="")
+        print("\r", i, end="")
         vals = greedy_comparison(items, i)
         selection_data["limit"].append(vals["limit"])
         selection_data["value"].append(vals["selection"]["value"])
@@ -120,9 +137,9 @@ def test_limit_range(items, step_size=1):
         rejection_data["value"].append(vals["rejection"]["value"])
         rejection_data["time"].append(vals["rejection"]["time"])
 
-        count += 1
+        # count += 1
 
-    print("End limit range test")
+    print("\r End limit range test")
 
     return {"selection": selection_data, "rejection": rejection_data}
 
@@ -152,28 +169,45 @@ def test_limit_range_visualize(values):
 
 
 def test_limit_range_pickledump(values, fname):
-    f = open(fname, "wb")
-    pickle.dump(values, f)
-    f.close()
+    if Path(fname).is_file():
+        print('Overwriting old test data')
+    with open(fname, "wb") as f:
+        pickle.dump(values, f)
+        f.close()
 
 
 def test_limit_range_pickleload(fname):
-    f = open(fname, "rb")
-    val = pickle.load(fname)
-    f.close()
-    return  val
+    try:
+        with open(fname, "rb") as f:
+            val = pickle.load(f)
+            f.close()
+            return val
+    except FileNotFoundError:
+        print('Test not run yet')
 
 
 if __name__ == "__main__":
 
-    n_items = 100
-    n_step = 10
-    items = []
-    for n in range(0, n_items):
-        items.append(Item(n, np.random.randint(1, 100)))
+    print('Code run start')
 
-    values = test_limit_range(items, n_step)
-    test_limit_range_visualize(values)
-    fname = "DataDumps/values_n"+str(n_items)+"_step"+str(n_step)+".bin"
-    test_limit_range_pickledump(values, fname)
+    n_items = 1000
+    n_step = 50
 
+    run_code = 1
+
+    if run_code:
+        items = []
+        for n in range(0, n_items):
+            items.append(Item(n, np.random.randint(1, 100)))
+
+        values = test_limit_range(items, n_step)
+        fname = "DataDumps/values_n"+str(n_items)+"_step"+str(n_step)+".bin"
+        test_limit_range_pickledump(values, fname)
+        test_limit_range_visualize(values)
+
+    else:
+        fname = "DataDumps/values_n" + str(n_items) + "_step" + str(n_step) + ".bin"
+        values = test_limit_range_pickleload(fname)
+        test_limit_range_visualize(values)
+
+    print('Code run complete')
