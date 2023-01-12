@@ -119,7 +119,7 @@ def print_comparison(comp_values):
     print('Selection time: ', comp_values["rejection"]["time"], 'ms')
 
 
-def test_limit_range(items, step_size=1, start=1):
+def test_limit_range(items, step_size=1, start=0):
     print("Start limit range test")
     selection_data = {"limit": [], "value": [], "time": []}
     rejection_data = {"limit": [], "value": [], "time": []}
