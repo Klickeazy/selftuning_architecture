@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 from copy import deepcopy as dc
 # import time
@@ -208,6 +210,38 @@ def greedy_selection(choice_list, limit, item_list, metric, policy="max"):
         # choices.display_list()
     work_list.listid = 'Work_list'
     return work_list
+
+
+def greedy_selection_recursive(choice_list, limit, item_list, metric, policy="max", t_start=None):
+    if t_start is None:
+        t_start = time.time()
+    work_list = dc(item_list)
+    work_list.listid = 'Work_list'
+    choices = dc(choice_list)
+    choices.listid = 'Choices'
+
+    if metric(work_list, limit):
+        choice_iterations = []
+        for c in choices.ids:
+            choice_iterations.append(dc(work_list))
+            choice_iterations[-1].item_add(choices.item_in_list_byid(c)['item'])
+            # choice_iterations[-1].display_list()
+        values = [i.net_value for i in choice_iterations]
+        if policy == "max":
+            target_idx = values.index(max(values))
+        elif policy == "min":
+            target_idx = values.index(min(values))
+        else:
+            raise Exception("Check target policy")
+        work_list = dc(choice_iterations[target_idx])
+        # work_list.display_list()
+        choices.item_remove(choices.item_in_list_byindex(target_idx)['item'])
+        # choices.display_list()
+        return greedy_selection_recursive(choices, limit, work_list, metric, policy)
+    else:
+        return
+
+        
 
 
 def greedy_rejection(choice_list, limit, item_list, metric, policy="max"):
