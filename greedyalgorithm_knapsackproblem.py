@@ -1,8 +1,6 @@
 import time
-
 import numpy as np
 from copy import deepcopy as dc
-# import time
 # import matplotlib.pyplot as plt
 # import pickle
 # from pathlib import Path
@@ -175,7 +173,7 @@ def list_compare(check_list1, check_list2):
     return {'list1': item_diff1, 'list2': item_diff2, 'intersect': item_intersection}
 
 
-def greedy_selection(choice_list, limit, item_list, metric, policy="max"):
+def greedy_selection(choice_list, limit, item_list, metric, policy="max", t_start=None):
     """
     Run greedy selection to iteratively select most valuable choice until limit is reached
     :param choice_list: available choices
@@ -184,6 +182,8 @@ def greedy_selection(choice_list, limit, item_list, metric, policy="max"):
     :param metric: evaluation of types
     :return: item list after greedy selection
     """
+    if t_start is None:
+        t_start = time.time()
     work_list = dc(item_list)
     work_list.listid = 'Work_list'
     choices = dc(choice_list)
@@ -208,48 +208,48 @@ def greedy_selection(choice_list, limit, item_list, metric, policy="max"):
         # work_list.display_list()
         choices.item_remove(choices.item_in_list_byindex(target_idx)['item'])
         # choices.display_list()
-    work_list.listid = 'Work_list'
-    return work_list
+    t_end = time.time()
+    return {'work_list': work_list, 'choices': choices, 'time': t_end-t_start}
 
 
-def greedy_selection_recursive(choice_list, limit, item_list, metric, policy="max", t_start=None):
+# def greedy_selection_recursive(choice_list, limit, item_list, metric, policy="max", t_start=None):
+#     if t_start is None:
+#         t_start = time.time()
+#     work_list = dc(item_list)
+#     work_list.listid = 'Work_list'
+#     choices = dc(choice_list)
+#     choices.listid = 'Choices'
+#
+#     choice_iterations = []
+#     for c in choices.ids:
+#         choice_iterations.append(dc(work_list))
+#         choice_iterations[-1].item_add(choices.item_in_list_byid(c)['item'])
+#         # choice_iterations[-1].display_list()
+#     values = [i.net_value for i in choice_iterations]
+#     if policy == "max":
+#         target_idx = values.index(max(values))
+#     elif policy == "min":
+#         target_idx = values.index(min(values))
+#     else:
+#         raise Exception("Check target policy")
+#     work_list = dc(choice_iterations[target_idx])
+#     # work_list.display_list()
+#     choices.item_remove(choices.item_in_list_byindex(target_idx)['item'])
+#     # choices.display_list()
+#     if metric(work_list, limit):
+#         return greedy_selection_recursive(choices, limit, work_list, metric, policy)
+#     else
+
+
+def greedy_rejection(choice_list, limit, item_list, metric, policy="max", t_start=None):
     if t_start is None:
         t_start = time.time()
-    work_list = dc(item_list)
-    work_list.listid = 'Work_list'
-    choices = dc(choice_list)
-    choices.listid = 'Choices'
-
-    if metric(work_list, limit):
-        choice_iterations = []
-        for c in choices.ids:
-            choice_iterations.append(dc(work_list))
-            choice_iterations[-1].item_add(choices.item_in_list_byid(c)['item'])
-            # choice_iterations[-1].display_list()
-        values = [i.net_value for i in choice_iterations]
-        if policy == "max":
-            target_idx = values.index(max(values))
-        elif policy == "min":
-            target_idx = values.index(min(values))
-        else:
-            raise Exception("Check target policy")
-        work_list = dc(choice_iterations[target_idx])
-        # work_list.display_list()
-        choices.item_remove(choices.item_in_list_byindex(target_idx)['item'])
-        # choices.display_list()
-        return greedy_selection_recursive(choices, limit, work_list, metric, policy)
-    else:
-        return
-
-        
-
-
-def greedy_rejection(choice_list, limit, item_list, metric, policy="max"):
     work_list = dc(item_list)
     work_list.listid = 'Work_list'
     # work_list.display_list()
     choices = dc(choice_list)
     choices.listid = 'Choices'
+    rejection_list = ItemList(name='Rejections')
     # choices.display_list()
     work_list.item_add_item_list(choices)
     # work_list.display_list()
@@ -270,11 +270,13 @@ def greedy_rejection(choice_list, limit, item_list, metric, policy="max"):
             raise Exception("Check target policy")
         # list_compare(work_list, choice_iterations[idx_max])['list1'].display_list()
         # choices.display_list()
-        choices.item_remove_item_list(list_compare(work_list, choice_iterations[target_idx])['list1'])
+        rejection_compare = list_compare(work_list, choice_iterations[target_idx])
+        rejection_list.item_add_item_list(rejection_compare['list1'])
+        choices.item_remove_item_list(rejection_compare['list1'])
         # choices.display_list()
         work_list = dc(choice_iterations[target_idx])
-    work_list.listid = 'Work_list'
-    return work_list
+    t_end = time.time()
+    return {'work_list': work_list, 'choices': choices, 'rejections': rejection_list, 'time': t_end-t_start}
 
 
 def greedy_algorithm(choice_list, limit, algorithm, item_list=None, metric=None):
@@ -306,35 +308,42 @@ def limit_check(item_list, limit):
 
 
 def greedy_simultaneous_optimal(choice_list, change, item_list=None, metric=None, policy="max"):
+    t_start = time.time()
     if item_list is None:
         item_list = ItemList(name='Item List')
     if metric is None:
         metric = limit_check
 
+    choices = dc(choice_list)
+    work_history = []
+    choice_history = [choices]
+
     work_list = dc(item_list)
     work_list.listid='Work_List'
+    work_history.append(work_list)
 
     for _ in range(0, change):
-        work_list.display_list()
+        # work_list.display_list()
         # references = []
-        references = [work_list]
-        compare = list_compare(choice_list, item_list)
+        base = {'work_list': work_list, 'choices': choices, 'time': 0}
+        references = [base]
+        compare = list_compare(choices, work_list)
         if compare['list1'].item_list_size() > 0:
             # At least one item in the choices is not already in the item list and can be selected
-            select = greedy_selection(choice_list, item_list.item_list_size()+1, item_list, metric, policy)
+            select = greedy_selection(choices, work_list.item_list_size()+1, work_list, metric, policy)
         else:
-            select = ItemList()
-        select.listid = 'Select'
+            select = {'work_list': ItemList()}
+        select['work_list'].listid = 'Select'
         references.append(select)
-        if compare['list1'].item_list_size() > 0:
+        if compare['intersect'].item_list_size() > 0:
             # At least one item in the choice list is not in the item list and can be selected
-            reject = greedy_selection(choice_list, item_list.item_list_size()-1, item_list, metric, policy)
+            reject = greedy_rejection(choices, work_list.item_list_size()-1, work_list, metric, policy)
         else:
-            reject = ItemList()
-        reject.listid = 'Reject'
-        references.append(select)
+            reject = {'work_list': ItemList()}
+        reject['work_list'].listid = 'Reject'
+        references.append(reject)
 
-        values = [i.values for i in references]
+        values = [i['work_list'].values for i in references]
         if policy == "max":
             # print('Max:', max(values))
             target_idx = values.index(max(values))
@@ -344,9 +353,12 @@ def greedy_simultaneous_optimal(choice_list, change, item_list=None, metric=None
         else:
             raise Exception('Check Policy')
 
-        # NEED TO FIX CHOICES BASED ON SELECTION/REJECTION
-        work_list = dc(references[target_idx])
+        work_list = dc(references[target_idx]['work_list'])
+        work_history.append(work_list)
+        choices = dc(references[target_idx]['choices'])
+        choice_history.append(choices)
 
-    return work_list
+    t_end = time.time()
+    return {'work_history': work_history, 'choice_history': choice_history, 'time': t_end-t_start}
 
 
