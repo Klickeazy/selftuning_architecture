@@ -1,40 +1,32 @@
 import time
 import numpy as np
 from copy import deepcopy as dc
-# import matplotlib.pyplot as plt
-# import pickle
-# from pathlib import Path
 
 
 class Item:
     """
     Item class containing item id string and int cost value
     """
-    rand_id_count = [1]
+    rand_id_count = [1]  # Random Item ID string updater
 
-    def __init__(self, id_in=None, value_in=None, low=1, high=1000):
+    def __init__(self, id_in=None, value_in=None, low=-500, high=500):
         if id_in is None:
-            self.id = "R"+str(self.rand_id_count[0])
+            id_in = "R"+str(self.rand_id_count[0])
             self.rand_id_count[0] += 1
-        else:
-            self.id = str(id_in)
-
+        self.item_id = str(id_in)
         if value_in is None:
-            self.value = np.random.randint(low, high)
-        else:
-            self.value = value_in
-
-    def item_compare(self, item_check):
-        if not isinstance(item_check, Item):
-            raise Exception('Incorrect data type')
-
-        if self.id == item_check.id and self.value == item_check.id:
-            return 1
-        else:
-            return 0
+            value_in = 0
+            while not value_in:
+                value_in = np.random.randint(low, high)
+        self.item_value = value_in
 
     def display_item(self):
-        print('ID: ', self.id, ' - Value: ', self.value)
+        print('ID: ', self.item_id, ' - Value: ', self.item_value)
+
+    def compare_item(self, item_check):
+        if not isinstance(item_check, Item):
+            raise Exception('Incorrect data type')
+        return item_check.item_id == self.item_id and item_check.item_value == self.item_value
 
 
 class ItemList:
@@ -42,323 +34,305 @@ class ItemList:
     Set of items with array of id strings, array of int values and int net value
     Functions to calculate net value, change item (add/remove), find item
     """
-    rand_id_count = [0]
+    rand_id_count = [0]  # Random List ID string updater
 
-    def __init__(self, item_set=None, name=None):
-        self.net_value = 0
+    def __init__(self, item_set=None, name=None, n_random_items=None, low=-500, high=500):
+        self.list_value = None
         if item_set is None:
-            self.ids = []
-            self.values = []
+            self.items = []
+            if n_random_items is not None:
+                for _ in range(0, n_random_items):
+                    self.items.append(Item(low=low, high=high))
         else:
-            self.ids = [str(x.id) for x in item_set]
-            self.values = [x.value for x in item_set]
+            self.items = item_set[:]
         if name is None:
-            self.listid = "L" + str(self.rand_id_count[0])
+            self.list_id = "L" + str(self.rand_id_count[0])
             self.rand_id_count[0] += 1
         else:
-            self.listid = dc(name)
-        self.list_net_value()
+            self.list_id = dc(name)
+        self.list_value_update()
+        self.duplicate_item_check()
 
-    def list_net_value(self):
-        if len(self.values) > 0:
-            self.net_value = sum(self.values)
-        else:
-            self.net_value = None
+    def list_value_update(self):
+        self.list_value = None
+        if len(self.items) > 0:
+            self.list_value = sum([i.item_value for i in self.items])
 
     def display_list(self):
-        print(self.listid, ':: N: ', self.item_list_size(), ' - Net value: ', self.net_value)
-        # for c in range(0, self.item_list_size()):
-        #     print('ID: ', self.ids[c], ' - Value: ', self.values[c])
-        print('IDs: ', self.ids)
-        print('Values: ', self.values)
+        print(self.list_id, ':: N: ', len(self.items), ' - Net value: ', self.list_value)
+        print('IDs(Value): ', [i.item_id+'('+str(i.item_value)+')' for i in self.items])
 
-    def display_id(self, search_id):
-        search = self.item_in_list_byid(search_id)
-        search['item'].display_item()
-
-    def item_add(self, new_item):
-        if not isinstance(new_item, Item):
+    def find_by_item(self, check_item):
+        if not isinstance(check_item, Item):
             raise Exception('Incorrect data type')
+        check = 0
+        idx = None
+        for i in range(0, len(self.items)):
+            if self.items[i].compare_item(check_item):
+                check = 1
+                idx = i
+                break
+        return {'check': check, 'idx': idx}
 
-        self.ids.append(new_item.id)
-        self.values.append(new_item.value)
-        self.list_net_value()
+    def find_by_item_idx(self, idx):
+        if idx not in range(-len(self.items), len(self.items)):
+            raise Exception('Exceeds number of items in list(', len(self.items), ')')
+        else:
+            return self.items[idx]
 
-    def item_add_item_list(self, new_item_list):
-        if not isinstance(new_item_list, ItemList):
+    def find_by_item_id(self, item_id):
+        check = 0
+        idx = []
+        for i in range(0, len(self.items)):
+            if self.items[i].item_id == item_id:
+                idx = i
+                check = 1
+                break
+        return {'check': check, 'idx': idx}
+
+    def find_by_item_value(self, item_value):
+        check = 0
+        idxs = []
+        for i in range(0, len(self.items)):
+            if self.items[i].item_value == item_value:
+                idxs.append(i)
+                check += 1
+        return {'check': check, 'idxs': idxs}
+
+    def duplicate_item_check(self):
+        for i in range(0, len(self.items)):
+            for j in range(i+1, len(self.items)):
+                if self.items[i].compare_item(self.items[j]):
+                    print('Duplicate items', i, ' and ', j)
+
+    def add_item(self, new_item=None, value_update=True, idx=None, duplicate_print_check=False):
+        if new_item is None:
+            new_item = Item()
+        elif not isinstance(new_item, Item):
             raise Exception('Incorrect data type')
-        for c in new_item_list.ids:
-            if not self.item_in_list_byid(c)['check']:
-                self.item_add(new_item_list.item_in_list_byid(c)['item'])
+        if not self.find_by_item(new_item)['check']:
+            if idx is None:
+                self.items.append(new_item)
+            elif idx not in range(-len(self.items), len(self.items)):
+                raise Exception('Check index')
+            else:
+                self.items = self.items[:idx] + [new_item] + self.items[idx:]
+        if value_update:
+            self.list_value_update()
+        if duplicate_print_check:
+            print('Duplicate item not added')
+            new_item.display_item()
 
-    def item_remove(self, old_item):
+    def add_item_list(self, new_items, duplicate_print_check=False):
+        if not isinstance(new_items, ItemList):
+            raise Exception('Incorrect data type')
+        for i in new_items.items:
+            self.add_item(i, value_update=False, duplicate_print_check=duplicate_print_check)
+        self.list_value_update()
+
+    def remove_item_by_idx(self, idx):
+        if idx not in range(-len(self.items), len(self.items)):
+            raise Exception('Check index')
+        else:
+            self.items = self.items[:idx] + self.items[idx+1:]
+
+    def remove_item(self, old_item, value_update=True, duplicate_print_check=False):
         if not isinstance(old_item, Item):
             raise Exception('Incorrect data type')
+        search = self.find_by_item(old_item)
+        if search['check']:
+            self.remove_item_by_idx(search['idx'])
+            if value_update:
+                self.list_value_update()
+        elif duplicate_print_check:
+            print('Item not found')
 
-        item_check = self.item_in_list_byid(old_item.id)
-        if item_check['check']:
-            # item_check['item'].display_item()
-            self.ids.remove(item_check['item'].id)
-            self.values.remove(item_check['item'].value)
-            self.list_net_value()
-        else:
-            raise Exception('Item not in list')
-
-    def item_remove_item_list(self, old_item_list):
-        if not isinstance(old_item_list, ItemList):
+    def remove_item_list(self, old_items, duplicate_print_check=False):
+        if not isinstance(old_items, ItemList):
             raise Exception('Incorrect data type')
-        for c in old_item_list.ids:
-            if self.item_in_list_byid(c)['check']:
-                self.item_remove(old_item_list.item_in_list_byid(c)['item'])
+        for i in old_items.items:
+            self.remove_item(i, value_update=False, duplicate_print_check=duplicate_print_check)
+        self.list_value_update()
 
-    def item_change(self, target, decision):
-        if decision == 'add':
-            self.item_add(target)
-        elif decision == 'remove':
-            self.item_remove(target)
-        else:
-            raise Exception('Check decision')
-
-    def item_list_size(self):
-        return len(self.ids)
-
-    def item_in_list_byid(self, check_item_id):
-
-        try:
-            idx = self.ids.index(check_item_id)
-            check = 1
-            ret_item = Item(self.ids[idx], self.values[idx])
-        except ValueError:
-            check = 0
-            idx = -1
-            ret_item = Item("", 0)
-        return {'check': check, 'idx': idx, 'item': ret_item}
-
-    def item_in_list_byindex(self, idx):
-        if idx < len(self.ids):
-            check = 1
-            ret_item = Item(self.ids[idx], self.values[idx])
-        else:
-            check = 0
-            ret_item = Item("", 0)
-        return {'check': check, 'idx': idx, 'item': ret_item}
+    def compare_lists(self, list2):
+        if not isinstance(list2, ItemList):
+            raise Exception('Incorrect data type')
+        compare = {'unique': ItemList(name='Unique'), 'intersect': ItemList(name='Intersect'), 'absent':ItemList(name='absent')}
+        for i in self.items:
+            if list2.find_by_item(i)['check']:
+                compare['intersect'].add_item(i)
+            else:
+                compare['unique'].add_item(i)
+        for i in list2.items:
+            if not self.find_by_item(i)['check']:
+                compare['absent'].add_item(i)
+        return compare
 
 
-def initialize_rand_items(n_items, name=None):
-    initial_list = ItemList(name=name)
-    for _ in range(0, n_items):
-        initial_list.item_add(Item())
-    return initial_list
+def max_limit(work_set, limit):
+    return len(work_set.items) < limit
 
 
-def list_compare(check_list1, check_list2):
-    if not isinstance(check_list1, ItemList) or not isinstance(check_list2, ItemList):
-        raise Exception('Incorrect data type')
-
-    item_diff1 = ItemList(name='list1')
-    item_diff2 = ItemList(name='list2')
-    item_intersection = ItemList(name='list intersection')
-    merge_list = dc(check_list1)
-    merge_list.item_add_item_list(check_list2)
-    for c in merge_list.ids:
-        test_c1 = check_list1.item_in_list_byid(c)
-        test_c2 = check_list2.item_in_list_byid(c)
-        if test_c1['check'] and test_c2['check']:
-            item_intersection.item_add(test_c1['item'])
-        else:
-            if test_c1['check']:
-                item_diff1.item_add(test_c1['item'])
-            if test_c2['check']:
-                item_diff2.item_add(test_c2['item'])
-    return {'list1': item_diff1, 'list2': item_diff2, 'intersect': item_intersection}
+def min_limit(work_set, limit):
+    return len(work_set.items) >= limit
 
 
-def greedy_selection(choice_list, limit, item_list, metric, policy="max", t_start=None):
-    """
-    Run greedy selection to iteratively select most valuable choice until limit is reached
-    :param choice_list: available choices
-    :param limit: hard (inclusive) constraint
-    :param item_list: initial set of choices if present or empty ItemList by default
-    :param metric: evaluation of types
-    :return: item list after greedy selection
-    """
-    if t_start is None:
-        t_start = time.time()
-    work_list = dc(item_list)
-    work_list.listid = 'Work_list'
-    choices = dc(choice_list)
-    choices.listid = 'Choices'
-    # work_list.display_list()
-    # choices.display_list()
-
-    while metric(work_list, limit):
-        choice_iterations = []
-        for c in choices.ids:
-            choice_iterations.append(dc(work_list))
-            choice_iterations[-1].item_add(choices.item_in_list_byid(c)['item'])
-            # choice_iterations[-1].display_list()
-        values = [i.net_value for i in choice_iterations]
-        if policy == "max":
-            target_idx = values.index(max(values))
-        elif policy == "min":
-            target_idx = values.index(min(values))
-        else:
-            raise Exception("Check target policy")
-        work_list = dc(choice_iterations[target_idx])
-        # work_list.display_list()
-        choices.item_remove(choices.item_in_list_byindex(target_idx)['item'])
-        # choices.display_list()
-    t_end = time.time()
-    return {'work_list': work_list, 'choices': choices, 'time': t_end-t_start}
+def knapsack_value(work_set):
+    return work_set.list_value
 
 
-# def greedy_selection_recursive(choice_list, limit, item_list, metric, policy="max", t_start=None):
-#     if t_start is None:
-#         t_start = time.time()
-#     work_list = dc(item_list)
-#     work_list.listid = 'Work_list'
-#     choices = dc(choice_list)
-#     choices.listid = 'Choices'
-#
-#     choice_iterations = []
-#     for c in choices.ids:
-#         choice_iterations.append(dc(work_list))
-#         choice_iterations[-1].item_add(choices.item_in_list_byid(c)['item'])
-#         # choice_iterations[-1].display_list()
-#     values = [i.net_value for i in choice_iterations]
-#     if policy == "max":
-#         target_idx = values.index(max(values))
-#     elif policy == "min":
-#         target_idx = values.index(min(values))
-#     else:
-#         raise Exception("Check target policy")
-#     work_list = dc(choice_iterations[target_idx])
-#     # work_list.display_list()
-#     choices.item_remove(choices.item_in_list_byindex(target_idx)['item'])
-#     # choices.display_list()
-#     if metric(work_list, limit):
-#         return greedy_selection_recursive(choices, limit, work_list, metric, policy)
-#     else
-
-
-def greedy_rejection(choice_list, limit, item_list, metric, policy="max", t_start=None):
-    if t_start is None:
-        t_start = time.time()
-    work_list = dc(item_list)
-    work_list.listid = 'Work_list'
-    # work_list.display_list()
-    choices = dc(choice_list)
-    choices.listid = 'Choices'
-    rejection_list = ItemList(name='Rejections')
-    # choices.display_list()
-    work_list.item_add_item_list(choices)
-    # work_list.display_list()
-
-    while not metric(work_list, limit+1):
-        choice_iterations = []
-        # choices.display_list()
-        for c in choices.ids:
-            choice_iterations.append(dc(work_list))
-            # work_list.item_in_list_byid(c)['item'].display_item()
-            choice_iterations[-1].item_remove(work_list.item_in_list_byid(c)['item'])
-        values = [i.net_value for i in choice_iterations]
-        if policy == "max":
-            target_idx = values.index(max(values))
-        elif policy == "min":
-            target_idx = values.index(min(values))
-        else:
-            raise Exception("Check target policy")
-        # list_compare(work_list, choice_iterations[idx_max])['list1'].display_list()
-        # choices.display_list()
-        rejection_compare = list_compare(work_list, choice_iterations[target_idx])
-        rejection_list.item_add_item_list(rejection_compare['list1'])
-        choices.item_remove_item_list(rejection_compare['list1'])
-        # choices.display_list()
-        work_list = dc(choice_iterations[target_idx])
-    t_end = time.time()
-    return {'work_list': work_list, 'choices': choices, 'rejections': rejection_list, 'time': t_end-t_start}
-
-
-def greedy_algorithm(choice_list, limit, algorithm, item_list=None, metric=None):
-    if item_list is None:
-        item_list = ItemList()
-    if not isinstance(item_list, ItemList) or not isinstance(choice_list, ItemList):
-        raise Exception('Incorrect data type')
-    if metric is None:
-        metric = limit_check
-
-    if algorithm == 'selection':
-        return greedy_selection(choice_list, limit, item_list, metric)
-    elif algorithm == 'rejection':
-        return greedy_rejection(choice_list, limit, item_list, metric)
+def item_index_from_policy(values, policy):
+    if policy == "max":
+        return values.index(max(values))
+    elif policy == "min":
+        return values.index(min(values))
     else:
-        raise Exception('Check algorithm')
+        raise Exception('Check policy')
 
 
-def limit_check(item_list, limit):
-    """
-    Evaluate if hard constraints on the set are satisfied
-    :param item_list:   selection list of ItemList type
-    :param limit:   hard upper limit constraint on the set
-    :return: 1 if below limit, 1 otherwise
-    """
-    if not isinstance(item_list, ItemList):
-        raise Exception('Incorrect data type')
-    return item_list.item_list_size() < limit
-
-
-def greedy_simultaneous_optimal(choice_list, change, item_list=None, metric=None, policy="max"):
-    t_start = time.time()
-    if item_list is None:
-        item_list = ItemList(name='Item List')
-    if metric is None:
-        metric = limit_check
-
-    choices = dc(choice_list)
+def greedy_selection(total_set, work_set, limit, number_of_changes=None, fixed_set=None, failure_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), no_select=False, status_check=False):
+    work_iteration, available_set = initialize_greedy(total_set, work_set, fixed_set, failure_set)
+    choice_history = []
     work_history = []
-    choice_history = [choices]
-
-    work_list = dc(item_list)
-    work_list.listid='Work_List'
-    work_history.append(work_list)
-
-    for _ in range(0, change):
-        # work_list.display_list()
-        # references = []
-        base = {'work_list': work_list, 'choices': choices, 'time': 0}
-        references = [base]
-        compare = list_compare(choices, work_list)
-        if compare['list1'].item_list_size() > 0:
-            # At least one item in the choices is not already in the item list and can be selected
-            select = greedy_selection(choices, work_list.item_list_size()+1, work_list, metric, policy)
-        else:
-            select = {'work_list': ItemList()}
-        select['work_list'].listid = 'Select'
-        references.append(select)
-        if compare['intersect'].item_list_size() > 0:
-            # At least one item in the choice list is not in the item list and can be selected
-            reject = greedy_rejection(choices, work_list.item_list_size()-1, work_list, metric, policy)
-        else:
-            reject = {'work_list': ItemList()}
-        reject['work_list'].listid = 'Reject'
-        references.append(reject)
-
-        values = [i['work_list'].values for i in references]
-        if policy == "max":
-            # print('Max:', max(values))
-            target_idx = values.index(max(values))
-        elif policy == "min":
-            # print('Min:', min(values))
-            target_idx = values.index(max(values))
-        else:
-            raise Exception('Check Policy')
-
-        work_list = dc(references[target_idx]['work_list'])
-        work_history.append(work_list)
-        choices = dc(references[target_idx]['choices'])
-        choice_history.append(choices)
-
-    t_end = time.time()
-    return {'work_history': work_history, 'choice_history': choice_history, 'time': t_end-t_start}
+    value_history = []
+    count_of_changes = 0
+    while max_greedy_limit(work_iteration, limit[1]):
+        work_history.append(dc(work_iteration))
+        choice_iteration = available_set.compare_lists(work_iteration)['unique']
+        if fixed_set is not None:
+            choice_iteration = fixed_set.compare_lists(choice_iteration)['absent']
+        choice_history.append(choice_iteration)
+        if len(choice_iteration.items) == 0:
+            if status_check:
+                print('No selections possible')
+            break
+        iteration_cases = []
+        values = []
+        if no_select and min_greedy_limit(work_iteration, limit[0]):
+            iteration_cases.append(dc(work_iteration))
+            values.append(cost_metric(iteration_cases[-1]))
+        for i in range(0, len(choice_iteration.items)):
+            iteration_cases.append(dc(work_iteration))
+            iteration_cases[-1].add_item(choice_iteration.items[i])
+            values.append(cost_metric(iteration_cases[-1]))
+        value_history.append(values)
+        target_idx = item_index_from_policy(values, policy)
+        work_iteration = dc(iteration_cases[target_idx])
+        if len(work_iteration.compare_lists(work_history[-1])['unique'].items) == 0:
+            if status_check:
+                print('No valuable selections')
+            break
+        count_of_changes += 1
+        if number_of_changes is not None and count_of_changes == number_of_changes:
+            if status_check:
+                print('Maximum number of changes done')
+            break
+    work_history.append(work_iteration)
+    work_iteration.list_id = "Greedy Selection"
+    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time()-t_start}
 
 
+def greedy_rejection(total_set, work_set, limit, number_of_changes=None, fixed_set=None, failure_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), no_reject=False, status_check=False):
+    work_iteration, available_set = initialize_greedy(total_set, work_set, fixed_set, failure_set)
+    choice_history = []
+    work_history = []
+    value_history = []
+    count_of_changes = 0
+    while min_greedy_limit(work_iteration, limit[0]+1):
+        work_history.append(dc(work_iteration))
+        choice_iteration = dc(work_iteration)
+        if fixed_set is not None:
+            choice_iteration = available_set.compare_lists(choice_iteration)['absent']
+        choice_history.append(choice_iteration)
+        if len(choice_iteration.items) == 0:
+            if status_check:
+                print('No rejections possible')
+            break
+        iteration_cases = []
+        values = []
+        if no_reject and max_greedy_limit(work_iteration, limit[1]+1):
+            iteration_cases.append(dc(work_iteration))
+            values.append(cost_metric(iteration_cases[-1]))
+        for i in range(0, len(choice_iteration.items)):
+            iteration_cases.append(dc(work_iteration))
+            iteration_cases[-1].remove_item(choice_iteration.items[i])
+            values.append(cost_metric(iteration_cases[-1]))
+        value_history.append(values)
+        target_idx = item_index_from_policy(values, policy)
+        work_iteration = dc(iteration_cases[target_idx])
+        if len(work_iteration.compare_lists(work_history[-1])['absent'].items) == 0:
+            if status_check:
+                print('No valuable rejections')
+            break
+        count_of_changes += 1
+        if number_of_changes is not None and count_of_changes == number_of_changes:
+            if status_check:
+                print('Maximum number of changes done')
+            break
+    work_history.append(work_iteration)
+    work_iteration.list_id = "Greedy Rejection"
+    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
+
+
+def initialize_greedy(total_set, work_set, fixed_set, failure_set):
+    if not isinstance(total_set, ItemList) or not isinstance(work_set, ItemList) or not (isinstance(fixed_set, ItemList) or fixed_set is None) or not (isinstance(failure_set, ItemList) or failure_set is None):
+        raise Exception('Incorrect data type')
+
+    work_iteration = dc(work_set)
+    available_set = dc(total_set)
+    if failure_set is not None:
+        work_iteration = work_iteration.compare_lists(failure_set)['unique']
+        available_set = available_set.compare_lists(failure_set)['unique']
+    return work_iteration, available_set
+
+
+def greedy_simultaneous(total_set, work_set, limit, iterations=1, changes_per_iteration=1, fixed_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), status_check=False):
+    if not isinstance(total_set, ItemList) or not isinstance(work_set, ItemList) or not (isinstance(fixed_set, ItemList) or fixed_set is None):
+        raise Exception('Incorrect data type')
+
+    work_iteration = dc(work_set)
+    work_history = [work_iteration]
+    value_history = []
+    for _ in range(0, iterations):
+        # Keep same
+        iteration_cases = [work_iteration]
+        values = [cost_metric(iteration_cases[-1])]
+        all_values = [cost_metric(iteration_cases[-1])]
+
+        # Select one
+        select = greedy_selection(total_set, work_iteration, limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=status_check)
+        iteration_cases.append(select['work_set'])
+        values.append(cost_metric(iteration_cases[-1]))
+        all_values += select['value_history']
+
+        # Reject one
+        reject = greedy_rejection(total_set, work_iteration, limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=status_check)
+        iteration_cases.append(reject['work_set'])
+        values.append(cost_metric(iteration_cases[-1]))
+        all_values += reject['value_history']
+
+        # Swap: add then drop
+        swap_select1 = greedy_selection(total_set, work_iteration, limit+np.array([0, changes_per_iteration]), number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=False)
+        swap_reject1 = greedy_rejection(total_set, swap_select1['work_set'], limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=status_check)
+        iteration_cases.append(swap_reject1['work_set'])
+        values.append(cost_metric(iteration_cases[-1]))
+        all_values += swap_reject1['value_history']
+
+        # # Swap: drop then add
+        # swap_reject2 = greedy_rejection(total_set, work_iteration, limit-np.array([1, 0]), fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=False)
+        # swap_select2 = greedy_selection(total_set, swap_reject2['work_set'], limit, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=status_check)
+        # iteration_cases.append(swap_select2['work_set'])
+        # values.append(cost_metric(iteration_cases[-1]))
+
+        # print('Simultaneous iteration values', values)
+
+        target_idx = item_index_from_policy(values, policy)
+
+        work_iteration = iteration_cases[target_idx]
+        work_history.append(work_iteration)
+        value_history.append(all_values)
+        if len(work_history[-1].compare_lists(work_history[-2])['unique'].items) == 0:
+            print('No changes to work_set')
+            break
+
+    return {'work_set': work_iteration, 'work_history': work_history, 'value_history': value_history, 'time': time.time()-t_start}
