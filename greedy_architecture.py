@@ -2,13 +2,16 @@ import networkx as nx
 import numpy as np
 import networkx as netx
 import random
+import time
+from copy import deepcopy as dc
 
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
+# import matplotlib.ticker as ticker
 from matplotlib.gridspec import GridSpec
-from matplotlib.ticker import MaxNLocator
+# from matplotlib.ticker import MaxNLocator
 import matplotlib.animation
+
 matplotlib.rcParams['axes.titlesize'] = 12
 matplotlib.rcParams['xtick.labelsize'] = 12
 matplotlib.rcParams['ytick.labelsize'] = 12
@@ -24,12 +27,9 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-import time
-from copy import deepcopy as dc
-
 
 class System:
-    def __init__(self, number_of_nodes=None, graph_model=None, rho=1, architecture=None, mpl=None):
+    def __init__(self, number_of_nodes=None, graph_model=None, rho=1, architecture=None, additive=None, mpl=None, initial_conditions=None):
         if number_of_nodes is None:
             number_of_nodes = 10
         self.dynamics = {'number': number_of_nodes}
@@ -40,15 +40,7 @@ class System:
         self.dynamics['A'] *= rho
 
         self.architecture = {'B': {}, 'C': {}}
-        keys = ['B', 'C']
-        if architecture is not None:
-            if 'B' in architecture:
-                self.architecture['B'] = architecture['B']
-                keys = [i for i in keys if i != 'B']
-            if 'C' in architecture:
-                self.architecture['C'] = architecture['C']
-                keys = [i for i in keys if i != 'C']
-        self.initialize_architecture(keys)
+        self.initialize_architecture(architecture)
 
         keys = ['dynamics', 'B', 'C']
         if mpl is not None:
@@ -65,6 +57,16 @@ class System:
                 self.architecture['C']['matrices'] = mpl['C']['matrices']
                 keys = [i for i in keys if i != 'C']
         self.initialize_no_mpl(keys)
+
+        self.additive = {'W': None, 'V': None}
+        if additive is not None:
+            for i in additive:
+                self.additive[i] = additive[i]
+
+        self.state = {'x0': np.zeros(self.dynamics['number']), 'X0': np.zeros((self.dynamics['number'], self.dynamics['number'])), 'x': np.zeros(self.dynamics['number']), 'x_estimate': np.zeros(self.dynamics['number']), 'history': []}
+        self.metric_model = {'type1': 'eigP', 'type2': 'scalar', 'type3': 'scalar'}
+        if initial_conditions is not None:
+            self.initialize_initial_conditions(initial_conditions)
 
     def graph_initialize(self, graph_model):
         connected_network_check = False
@@ -97,8 +99,9 @@ class System:
         if architecture_type is None:
             architecture_type = ['B', 'C']
         for i in architecture_type:
-            self.architecture[i]['active'] = random.sample(self.architecture[i]['available'], k=(self.architecture[i]['min']+self.architecture[i]['max'])//2)
-        self.architecture_active_to_matrix(architecture_type)
+            self.active_architecture_update(random.sample(self.architecture[i]['available'], k=(self.architecture[i]['min'] + self.architecture[i]['max']) // 2), i)
+            # self.architecture[i]['active'] = random.sample(self.architecture[i]['available'], k=(self.architecture[i]['min'] + self.architecture[i]['max']) // 2)
+        # self.architecture_active_to_matrix(architecture_type)
 
     def architecture_active_to_matrix(self, architecture_type=None):
         if architecture_type is None:
@@ -111,29 +114,43 @@ class System:
                 elif i == 'C':
                     self.architecture[i]['matrix'][k, :] = self.architecture[i]['set'][self.architecture[i]['active'][k]]
 
-    def initialize_architecture(self, keys):
-        for i in keys:
-            self.architecture[i] = {'min': 0, 'max': self.dynamics['number'],
-                                    'cost': {'Q': np.identity(self.dynamics['number']),
-                                             'R1': np.identity(self.dynamics['number']),
-                                             'R2': np.identity(self.dynamics['number']),
-                                             'R3': np.identity(self.dynamics['number'])},
-                                    'active': [],
-                                    'matrix': np.zeros((self.dynamics['number'], self.dynamics['number'])),
-                                    'available': range(0, self.dynamics['number']),
-                                    'set': []}
-        self.initialize_architecture_basis_vectors(keys)
-        self.random_architecture(keys)
+    def initialize_architecture(self, architecture):
+        architecture_model = {'min': 0, 'max': self.dynamics['number'],
+                              'cost': {'Q': np.identity(self.dynamics['number']),
+                                       'R1': np.identity(self.dynamics['number']),
+                                       'R2': 1,
+                                       'R3': 1},
+                              'active': [],
+                              'matrix': np.zeros((self.dynamics['number'], self.dynamics['number'])),
+                              'available': range(0, self.dynamics['number']),
+                              'set': [],
+                              'history': []}
+        for architecture_type in self.architecture:
+            if architecture is not None:
+                if architecture_type in architecture:
+                    for i in architecture[architecture_type]:
+                        self.architecture[architecture_type][i] = architecture[architecture_type][i]
+            for k in architecture_model:
+                if k not in self.architecture[architecture_type]:
+                    self.architecture[architecture_type][k] = dc(architecture_model[k])
+        self.initialize_architecture_set_as_basis_vectors()
+        if architecture['rand']:
+            self.random_architecture()
 
-    def initialize_architecture_basis_vectors(self, keys):
+    def active_architecture_update(self, new_architecture, architecture_type):
+        self.architecture[architecture_type]['history'].append(self.architecture[architecture_type]['active'])
+        self.architecture[architecture_type]['active'] = dc(new_architecture)
+        self.architecture_active_to_matrix([architecture_type])
+
+    def initialize_architecture_set_as_basis_vectors(self):
         basis = []
         for i in range(0, self.dynamics['number']):
             basis.append(np.zeros(self.dynamics['number']))
             basis[-1][i] = 1
-        if 'B' in keys:
+        if len(self.architecture['B']['set']) == 0:
             self.architecture['B']['set'] = basis
-        if 'C' in keys:
-            self.architecture['C']['set'] = [k.T for k in basis]
+        if len(self.architecture['C']['set']) == 0:
+            self.architecture['C']['set'] = [b.T for b in basis]
 
     def initialize_no_mpl(self, keys):
         mpl_none = {'covariances': None, 'matrices': None}
@@ -146,6 +163,36 @@ class System:
         if 'C' in keys:
             for i in mpl_none:
                 self.architecture['C'][i] = mpl_none[i]
+
+    def initialize_initial_conditions(self, initial_conditions=None):
+        if 'x0' in initial_conditions:
+            self.state['x0'] = dc(initial_conditions['x0'])
+            self.state['x'] = dc(initial_conditions['x0'])
+            self.metric_model['type1'] = 'x0'
+        elif 'X0' in initial_conditions:
+            self.state['X0'] = initial_conditions['X0']
+            self.state['x'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number']), self.state['X0'])
+            self.state['x_estimate'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number']), self.state['X0'])
+            self.metric_model['type1'] = 'X0'
+
+    # def dynamics_update(self, feedback_gain=None, noise=None):
+    #     if feedback_gain is None:
+    #         feedback_gain = {'K': np.zeros((self.dynamics['number'], self.dynamics['number'])), 'L': np.zeros((self.dynamics['number'], self.dynamics['number']))}
+    #     x_temp =
+
+    def noise_gen(self, T_sim=1):
+        noise = {}
+        if self.additive['W'] is not None:
+            noise['w'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number']), self.additive['W'], T_sim)
+        if self.additive['V'] is not None:
+            noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number']), self.additive['V'], T_sim)
+        if self.dynamics['covariances'] is not None:
+            noise['alpha_i'] = np.random.default_rng().multivariate_normal(np.zeros(len(self.dynamics['covariances'])), np.diag(self.dynamics['covariances']), T_sim)
+        if self.architecture['B']['covariances'] is not None:
+            noise['beta_j'] = np.random.default_rng().multivariate_normal(np.zeros(len(self.architecture['B']['covariances'])), np.diag(self.architecture['B']['covariances']), T_sim)
+        if self.architecture['C']['covariances'] is not None:
+            noise['gamma_j'] = np.random.default_rng().multivariate_normal(np.zeros(len(self.architecture['C']['covariances'])), np.diag(self.architecture['C']['covariances']), T_sim)
+        return noise
 
     def display_system(self):
         sys_plot = self.display_graph_gen()
@@ -198,25 +245,169 @@ class System:
             G_base = netx.from_numpy_matrix(self.dynamics['A'])
             netx.relabel_nodes(G_base, node_labels, copy=False)
             node_pos = nx.circular_layout(G_base)
-        node_pos = nx.spring_layout(G, pos=node_pos, fixed=[str(i+1) for i in range(0, self.dynamics['number'])])
+        node_pos = nx.spring_layout(G, pos=node_pos, fixed=[str(i + 1) for i in range(0, self.dynamics['number'])])
         return {'G': G, 'pos': node_pos, 'node_color': nc}
+
+    def evaluate_cost_matrix(self, P, architecture_type=None, vector=None):
+        if self.metric_model['type1'] == 'eigP':
+            return np.max(np.linalg.eigvals(P))
+        elif self.metric_model['type1'] == 'x0':
+            if vector is None:
+                x = self.state['x0']
+            else:
+                x = vector
+            if architecture_type == 'B':
+                return vector.T @ P @ vector
+            elif architecture_type == 'C':
+                return vector.T @ P @ vector
+        elif self.metric_model['type1'] == 'X0':
+            return np.matrix.trace(P @ self.state['X0'])
+        else:
+            raise Exception('Check Metric for Type 1')
+
+    def architecture_running_cost(self, architecture_type):
+        active_vector = np.zeros(self.dynamics['number'])
+        for i in self.architecture[architecture_type]['active']:
+            active_vector[i] = 1
+        if self.metric_model['type2'] == 'matrix':
+            return active_vector.T @ self.architecture[architecture_type]['cost']['R2'] @ active_vector
+        elif self.metric_model['type2'] == 'scalar':
+            return self.architecture[architecture_type]['cost']['R2'] * (active_vector.T @ active_vector)
+        else:
+            raise Exception('Check Metric for Type 2 - Running Costs')
+
+    def architecture_switching_cost(self, architecture_type):
+        active_vector = np.zeros(self.dynamics['number'])
+        history_vector = np.zeros(self.dynamics['number'])
+        for i in self.architecture[architecture_type]['active']:
+            active_vector[i] = 1
+        for i in self.architecture[architecture_type]['history'][-1]:
+            history_vector[i] = 1
+
+        if self.metric_model['type3'] == 'matrix':
+            return (active_vector - history_vector).T @ self.architecture[architecture_type]['cost']['R3'] @ (active_vector - history_vector)
+        elif self.metric_model['type3'] == 'scalar':
+            return self.architecture[architecture_type]['cost']['R3']*((active_vector - history_vector).T @ (active_vector - history_vector))
+        else:
+            raise Exception('Check Metric for Type 2 - Running Costs')
+
+    def architecture_cost_calculator(self, architecture_type, active_architecture=None):
+        self_model = dc(self)
+        if active_architecture is not None:
+            self_model.active_architecture_update(active_architecture, architecture_type)
+        if architecture_type == 'B':
+            return self_model.total_control_cost()
+        elif architecture_type == 'C':
+            return self_model.total_estimation_cost()
+        else:
+            raise Exception('Check architecture type')
+
+    def total_control_cost(self, T_horizon=30):
+        feedback_costs = self.control_feedback(T_horizon=T_horizon)
+        cost = 0
+        cost += self.evaluate_cost_matrix(feedback_costs['P'][-1], 'B')
+        cost += self.architecture_running_cost('B')
+        cost += self.architecture_switching_cost('B')
+        return cost
+
+    def control_feedback(self, T_horizon=30, converge_accuracy=10 ** (-3)):
+        P = dc(self.architecture['B']['cost']['Q'])
+        P_history = [P]
+        K_history = []
+        convergence_check = False
+        T_run = 0
+        for t in range(0, T_horizon):
+            P, K = self.iteration_control_cost(P)
+            P_history.append(P)
+            K_history.append(K)
+            convergence_check = matrix_convergence_check(P_history[-1], P_history[-2], accuracy=converge_accuracy)
+            if convergence_check:
+                T_run = t
+                break
+        return {'P': P_history, 'K': K_history, 't_run': T_run, 'convergence_check': convergence_check}
+
+    def iteration_control_cost(self, P):
+        K_mat = self.iteration_control_feedback(P)
+        P_mat = np.zeros_like(self.dynamics['A'])
+        P_mat += self.architecture['B']['cost']['Q'] + self.dynamics['A'].T @ P @ self.dynamics['A']
+        if self.dynamics['covariances'] is not None:
+            P_mat += self.dynamics_mpl(P, 'B')
+        P_mat -= self.dynamics['A'].T @ P @ self.architecture['B']['matrix'] @ K_mat
+        return P_mat, K_mat
+
+    def iteration_control_feedback(self, P):
+        K_mat = self.architecture['B']['cost']['R1'] + self.architecture['B']['matrix'].T @ P @ self.architecture['B']['matrix']
+        if self.architecture['B']['covariances'] is not None:
+            for j in range(0, self.architecture['B']['covariances']):
+                K_mat += self.architecture['B']['covariances'][j] * (
+                            self.architecture['B']['matrices'][j].T @ P @ self.architecture['B']['matrices'][j])
+        K_mat = np.linalg.inv(K_mat) @ self.architecture['B']['matrix'].T @ P @ self.dynamics['A']
+        return K_mat
+
+    def total_estimation_cost(self, T_horizon=30):
+        feedback_costs = self.estimation_feedback(T_horizon=T_horizon)
+        cost = 0
+        cost += self.evaluate_cost_matrix(feedback_costs['P'][-1], 'C')
+        cost += self.architecture_running_cost('B')
+        cost += self.architecture_switching_cost('B')
+        return cost
+
+    def estimation_feedback(self, T_horizon=30, converge_accuracy=10 ** (-3)):
+        P = dc(self.architecture['B']['cost']['Q'])
+        P_history = [P]
+        L_history = []
+        convergence_check = False
+        T_run = 0
+        for t in range(0, T_horizon):
+            P, L = self.iteration_estimation_cost(P)
+            P_history.append(P)
+            L_history.append(L)
+            convergence_check = matrix_convergence_check(P_history[-1], P_history[-2], accuracy=converge_accuracy)
+            if convergence_check:
+                T_run = t
+                break
+        return {'P': P_history, 'L': L_history, 't_run': T_run, 'convergence_check': convergence_check}
+
+    def iteration_estimation_cost(self, P):
+        L_mat = self.iteration_estimation_feedback(P)
+        P_mat = np.zeros_like(self.dynamics['A'])
+        P_mat += self.architecture['C']['cost']['Q'] + self.dynamics['A'] @ P @ self.dynamics['A'].T
+        if self.dynamics['covariances'] is not None:
+            P_mat += self.dynamics_mpl(P, 'C')
+        P_mat -= self.dynamics['A'] @ L_mat @ self.architecture['C']['matrix'] @ P @ self.dynamics['A'].T
+        return P_mat, L_mat
+
+    def iteration_estimation_feedback(self, P):
+        L_mat = self.architecture['C']['matrix'] @ P @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1']
+        if self.architecture['C']['covariances'] is not None:
+            for j in range(0, len(self.architecture['C']['covariances'])):
+                L_mat += self.architecture['C']['covariances'][j] * (self.architecture['C']['matrices'][j] @ P @ self.architecture['C']['matrices'][j].T)
+        L_mat = P @ self.architecture['C']['matrix'].T @ np.linalg.inv(L_mat)
+        return L_mat
+
+    def dynamics_mpl(self, P, architecture_type):
+        Mat = np.zeros((self.dynamics['number'], self.dynamics['number']))
+        for i in range(0, len(self.dynamics['covariances'])):
+            if architecture_type == 'B':
+                Mat += self.dynamics['covariances'][i] * (self.dynamics['matrices'][i].T @ P @ self.dynamics['matrices'][i])
+            elif architecture_type == 'C':
+                Mat += self.dynamics['covariances'][i] * (self.dynamics['matrices'][i] @ P @ self.dynamics['matrices'][i].T)
+        return Mat
+
 
 
 def animate_architecture(S, architecture_history):
-    # fig = plt.figure(figsize=(6, 4))
-    # gs = GridSpec(1, 1, figure=fig)
-    # ax1 = fig.add_subplot(gs[0, 0])
     fig, ax1 = plt.subplots(1, 1, figsize=(6, 4))
     ax1.axis('off')
-    ax1.set_xlim(-2, 2)
-    ax1.set_ylim(-2, 2)
+    min_lim = -1.7
+    max_lim = -1.7
+    ax1.set_xlim(min_lim, max_lim)
+    ax1.set_ylim(min_lim, max_lim)
     Sys_dummy = dc(S)
     Sys_dummy.architecture['B']['active'] = Sys_dummy.architecture['B']['available']
     Sys_dummy.architecture['C']['active'] = Sys_dummy.architecture['C']['available']
     Sys_dummy.architecture_active_to_matrix()
     pos_gen = Sys_dummy.display_graph_gen()['pos']
-    # print(pos_gen)
-
     node_pos = {i: pos_gen[i] for i in pos_gen if i.isnumeric()}
 
     def update(t):
@@ -227,12 +418,186 @@ def animate_architecture(S, architecture_history):
         sys_t.architecture_active_to_matrix()
         sys_t_plot = sys_t.display_graph_gen(node_pos)
         netx.draw_networkx(sys_t_plot['G'], ax=ax1, pos=sys_t_plot['pos'], node_color=sys_t_plot['node_color'])
-        ax1.set_title('t='+str(t))
-        ax1.set_xlim(-2, 2)
-        ax1.set_ylim(-2, 2)
-        # print(ax1.get_xlim())
-        # print(ax1.get_ylim())
+        ax1.set_title('t=' + str(t))
+        ax1.set_xlim(min_lim, max_lim)
+        ax1.set_ylim(min_lim, max_lim)
 
-    ani = matplotlib.animation.FuncAnimation(fig, update, frames=np.arange(0,len(architecture_history),1), interval=1000, repeat=False)
-    # plt.show()
+    ani = matplotlib.animation.FuncAnimation(fig, update, frames=np.arange(0, len(architecture_history), 1), interval=1000, repeat=False)
     ani.save("Test.mp4")
+    plt.show()
+
+
+def max_limit(work_set, architecture, algorithm):
+    correction = {'selection': 0, 'rejection': 1}
+    return len(work_set) < (architecture['max'] + correction[algorithm])
+
+
+def min_limit(work_set, architecture, algorithm):
+    correction = {'selection': 0, 'rejection': 1}
+    return len(work_set) >= (architecture['min'] + correction[algorithm])
+
+
+def compare_lists(array1, array2):
+    return {'a1only': [i for i in array1 if i not in array2], 'a2only': [i for i in array2 if i not in array1], 'common': [i for i in array1 if i in array2]}
+
+
+def item_index_from_policy(values, policy):
+    if policy == "max":
+        return values.index(max(values))
+    elif policy == "min":
+        return values.index(min(values))
+    else:
+        raise Exception('Check policy')
+
+
+def matrix_convergence_check(A, B, accuracy=10**(-3), check_type=None):
+    np_norm_methods = ['inf', 'fro', 2, None]
+    if check_type is None:
+        return np.allclose(A, B, atol=accuracy, rtol=accuracy)
+    elif check_type in np_norm_methods:
+        return np.norm(A-B, ord=check_type) < accuracy
+    else:
+        raise Exception('Check Matrix Convergence')
+
+
+def greedy_architecture_selection(sys_model, architecture_type, number_of_changes=None, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), no_select=False, status_check=False):
+    work_sys, available_set, work_iteration = initialize_greedy(sys_model, architecture_type, failure_set)
+    choice_history, work_history, value_history = [], [], []
+    count_of_changes = 0
+
+    while max_limit(work_iteration, work_sys.architecture[architecture_type], 'selection'):
+        work_history.append(dc(work_iteration))
+        choice_iteration = compare_lists(available_set, work_iteration)['a1only']
+        if fixed_set is not None:
+            choice_iteration = compare_lists(choice_iteration, fixed_set)['a1only']
+        choice_history.append(choice_iteration)
+        if len(choice_iteration) == 0:
+            if status_check:
+                print('No selections possible')
+            break
+        iteration_cases = []
+        values = []
+        if no_select and min_limit(work_iteration, work_sys.architecture[architecture_type], 'selection'):
+            iteration_cases.append(dc(work_iteration))
+            values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        for i in range(0, len(choice_iteration)):
+            iteration_cases.append(dc(work_iteration))
+            iteration_cases[-1].append(choice_iteration[i])
+            values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        value_history.append(values)
+        target_idx = item_index_from_policy(values, policy)
+        work_iteration = dc(iteration_cases[target_idx])
+        if len(compare_lists(work_iteration, work_history[-1])['a1only']) == 0:
+            if status_check:
+                print('No valuable selections')
+            break
+        count_of_changes += 1
+        if number_of_changes is not None and count_of_changes == number_of_changes:
+            if status_check:
+                print('Maximum number of changes done')
+            break
+    work_history.append(work_iteration)
+    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
+
+
+def greedy_architecture_rejection(sys_model, architecture_type, number_of_changes=None, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), no_reject=False, status_check=False):
+    work_sys, available_set, work_iteration = initialize_greedy(sys_model, architecture_type, failure_set)
+    choice_history, work_history, value_history = [], [], []
+    count_of_changes = 0
+
+    while min_limit(work_iteration, work_sys.architecture[architecture_type], 'rejection'):
+        work_history.append(dc(work_iteration))
+        choice_iteration = dc(work_iteration)
+        if fixed_set is not None:
+            choice_iteration = compare_lists(choice_iteration, fixed_set)['a1only']
+        choice_history.append(choice_iteration)
+        if len(choice_iteration) == 0:
+            if status_check:
+                print('No rejections possible')
+            break
+        iteration_cases = []
+        values = []
+        if no_reject and max_limit(work_iteration, work_sys.architecture[architecture_type], 'rejection'):
+            iteration_cases.append(dc(work_iteration))
+            values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        for i in range(0, len(choice_iteration)):
+            iteration_cases.append([k for k in work_iteration if k != choice_iteration[i]])
+            values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        value_history.append(values)
+        target_idx = item_index_from_policy(values, policy)
+        work_iteration = dc(iteration_cases[target_idx])
+        if len(compare_lists(work_iteration, work_history[-1])['a2only']) == 0:
+            if status_check:
+                print('No valuable rejections')
+            break
+        count_of_changes += 1
+        if number_of_changes is not None and count_of_changes == number_of_changes:
+            if status_check:
+                print('Maximum number of changes done')
+            break
+    work_history.append(work_iteration)
+    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
+
+
+def initialize_greedy(sys_model, architecture_type, failure_set):
+    if not isinstance(sys_model, System):
+        raise Exception('Incorrect data type')
+    work_sys = dc(sys_model)
+    available_set = dc(work_sys.architecture[architecture_type]['available'])
+    work_iteration = dc(work_sys.architecture[architecture_type]['active'])
+    if failure_set is not None:
+        work_iteration = compare_lists(work_iteration, failure_set)['a1only']
+        available_set = compare_lists(available_set, failure_set)['a1only']
+    return work_sys, available_set, work_iteration
+
+
+def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), status_check=False):
+
+    work_sys = dc(sys_model)
+    work_iteration = work_sys.architecture[architecture_type]['active']
+    work_history = [work_iteration]
+    value_history = []
+    for _ in range(0, iterations):
+        # Keep same
+        iteration_cases = [work_iteration]
+        values = [work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1])]
+        all_values = [values[-1]]
+
+        # Select one
+        select = greedy_architecture_selection(sys_model, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_select=True, status_check=status_check)
+        iteration_cases.append(select['work_set'])
+        values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        all_values += select['value_history']
+
+        # Reject one
+        reject = greedy_architecture_rejection(sys_model, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_reject=True, status_check=status_check)
+        iteration_cases.append(reject['work_set'])
+        values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        all_values += reject['value_history']
+
+        # Swap: add then drop
+        sys_select = dc(work_sys)
+        sys_select.architecture[architecture_type]['max'] += 1
+        swap_select1 = greedy_architecture_selection(sys_select, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_select=True, status_check=False)
+        swap_reject1 = greedy_architecture_rejection(work_sys, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, status_check=status_check)
+        iteration_cases.append(swap_reject1['work_set'])
+        values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1]))
+        all_values += swap_reject1['value_history']
+
+        # # Swap: drop then add
+        # swap_reject2 = greedy_rejection(total_set, work_iteration, limit-np.array([1, 0]), fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=False)
+        # swap_select2 = greedy_selection(total_set, swap_reject2['work_set'], limit, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=status_check)
+        # iteration_cases.append(swap_select2['work_set'])
+        # values.append(cost_metric(iteration_cases[-1]))
+
+        # print('Simultaneous iteration values', values)
+
+        target_idx = item_index_from_policy(values, policy)
+        work_iteration = iteration_cases[target_idx]
+        work_history.append(work_iteration)
+        value_history.append(all_values)
+        if len(compare_lists(work_history[-1], work_history[-2])['a1only']) == 0:
+            print('No changes to work_set')
+            break
+
+    return {'work_set': work_iteration, 'work_history': work_history, 'value_history': value_history, 'time': time.time()-t_start}
