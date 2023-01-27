@@ -30,9 +30,11 @@ if __name__ == '__main__':
     # #     architecture_choices[-1][i, 0] = 1
     # # print(architecture_choices)
 
-    Sys = ga.System(graph_model={'type': 'ER'}, rho=0.8, architecture={'rand': True, 'B': {'min': 2, 'max': 7}, 'C': {'min': 2, 'max': 7}})
-    # results = ga.greedy_architecture_selection(Sys, 'C', status_check=True, no_select=True)
-    results = ga.greedy_architecture_rejection(Sys, 'C', status_check=True, no_reject=True)
+    # Sys = ga.System(graph_model={'type': 'ER'}, rho=0.8, architecture={'rand': True, 'B': {'min': 2, 'max': 7}, 'C': {'min': 2, 'max': 7}})
+    Sys = ga.System(graph_model={'type': 'ER'}, rho=2, architecture={'rand': True, 'B': {'min': 2, 'max': 7}, 'C': {'min': 2, 'max': 7}})
+    # results = ga.greedy_architecture_selection(Sys, 'B', status_check=True, no_select=True)
+    # results = ga.greedy_architecture_rejection(Sys, 'C', status_check=True, no_reject=True)
+    results = ga.greedy_simultaneous(Sys, 'B', iterations=1, changes_per_iteration=1, status_check=True)
     for i in results:
         print(i, ' : ', results[i])
 
