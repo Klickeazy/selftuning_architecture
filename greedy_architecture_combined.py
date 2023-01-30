@@ -45,11 +45,14 @@ class System:
         self.architecture['C']['cost']['R1'] = self.architecture['C']['cost']['R1'] @ self.additive['V']
         self.architecture['C']['cost']['Q'] = self.architecture['C']['cost']['Q'] @ self.additive['W']
 
-        self.trajectory = {'X0': np.identity(self.dynamics['number_of_nodes']), 'x': [], 'x_estimate': [], 'y': [], 'u': []}
+        self.trajectory = {'X0': np.identity(self.dynamics['number_of_nodes']),
+                           'x': [], 'x_estimate': [], 'y': [], 'u': [],
+                           'cost': {'running': [], 'switching': [], 'control': [], 'total': []},
+                           'P': [], 'E': []}
         self.metric_model = {'type1': 'x', 'type2': 'scalar', 'type3': 'scalar'}
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
-        self.history = {}
+        # self.history = {}
 
     def graph_initialize(self, graph_model):
         connected_network_check = False
@@ -112,18 +115,16 @@ class System:
         if len(self.architecture['C']['set']) == 0:
             self.architecture['C']['set'] = [b.T for b in basis]
 
-    # def active_architecture_update_wrapper(self, parameters):
-    #     self.active_architecture_update(new_architecture, parameters['architecture_type'])
-
     def active_architecture_update(self, parameters):
-        self.architecture[parameters['architecture_type']]['history'].append(self.architecture[parameters['architecture_type']]['active'])
-        if parameters['algorithm'] == "select":
-            self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'] + [parameters['id']]
-        elif parameters['algorithm'] == "reject":
-            self.architecture[parameters['architecture_type']]['active'] = [i for i in self.architecture[parameters['architecture_type']]['active'] if i != parameters['id']]
-        else:
-            raise Exception('Check algorithm')
-        self.architecture_active_to_matrix(parameters['architecture_type'])
+        if parameters['architecture_type'] is not None:
+            self.architecture[parameters['architecture_type']]['history'].append(self.architecture[parameters['architecture_type']]['active'])
+            if parameters['algorithm'] == "select":
+                self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'] + [parameters['id']]
+            elif parameters['algorithm'] == "reject":
+                self.architecture[parameters['architecture_type']]['active'] = [i for i in self.architecture[parameters['architecture_type']]['active'] if i != parameters['id']]
+            else:
+                raise Exception('Check algorithm')
+            self.architecture_active_to_matrix(parameters['architecture_type'])
 
     def architecture_active_to_matrix(self, architecture_type=None):
         if architecture_type is None:
@@ -164,6 +165,17 @@ class System:
         self.noise['w'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['W'])
         self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['V'])
         self.noise['enhanced'] = np.block([self.noise['w'], self.noise['v']])
+
+    def available_selections(self, fixed_architecture=None):
+        choices = []
+        for a in ['B', 'C']:
+            if max_limit(self.architecture[a], 'selection'):
+                choice_a = compare_lists(self.architecture[a]['available'], self.architecture[a]['active'])['a1only']
+                if fixed_architecture is not None and a in fixed_architecture:
+                    choice_a = compare_lists(choice_a, fixed_architecture[a])['a1only']
+                for i in choice_a:
+                    choices.append({'architecture_type': a, 'id': i})
+        return choices
 
     def display_system(self):
         sys_plot = self.display_graph_gen()
@@ -217,22 +229,22 @@ class System:
         self.noise['enhanced'] = np.diag(np.identity(self.dynamics['number_of_nodes']), self.dynamics['A'] @ self.architecture['C']['gain'])
 
     def optimal_feedback_initializer(self):
-        self.history['P'] = [self.architecture['B']['cost']['Q']]
-        self.history['E'] = [self.additive['V']]
+        self.trajectory['P'] = [self.architecture['B']['cost']['Q']]
+        self.trajectory['E'] = [self.additive['V']]
 
     def optimal_feedback_control_cost_matrix(self):
         self.optimal_feedback_control_cost_gain()
-        self.history['P'].append((self.dynamics['A'].T @ self.history['P'][-1] @ self.dynamics['A']) - (self.dynamics['A'].T @ self.history['P'][-1] @ self.architecture['B']['matrix'] @ self.architecture['B']['gain']) + self.architecture['B']['cost']['Q'])
+        self.trajectory['P'].append((self.dynamics['A'].T @ self.trajectory['P'][-1] @ self.dynamics['A']) - (self.dynamics['A'].T @ self.trajectory['P'][-1] @ self.architecture['B']['matrix'] @ self.architecture['B']['gain']) + self.architecture['B']['cost']['Q'])
 
     def optimal_feedback_control_cost_gain(self):
-        self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.history['P'][-1] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1']) @ self.architecture['B']['matrix'].T @ self.history['P'][-1] @ self.dynamics['A']
+        self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'][-1] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'][-1] @ self.dynamics['A']
 
     def optimal_feedback_estimation_covariance_matrix(self):
         self.optimal_feedback_estimation_gain()
-        self.history['E'].append(self.dynamics['A'] @ (self.history['E'][-1] - self.architecture['C']['gain'] @ self.architecture['C']['matrix'] @ self.history['E'][-1]) @ self.dynamics['A'].T + self.architecture['C']['cost']['Q'])
+        self.trajectory['E'].append(self.dynamics['A'] @ (self.trajectory['E'][-1] - self.architecture['C']['gain'] @ self.architecture['C']['matrix'] @ self.trajectory['E'][-1]) @ self.dynamics['A'].T + self.architecture['C']['cost']['Q'])
 
     def optimal_feedback_estimation_gain(self):
-        self.architecture['C']['gain'] = self.history['E'][-1] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.history['E'][-1] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'])
+        self.architecture['C']['gain'] = self.trajectory['E'][-1] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'][-1] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'])
 
     def system_one_step_update_enhanced(self):
         self.enhanced_system_matrix()
@@ -265,7 +277,86 @@ class System:
             raise Exception('Check Metric for Type 2 - Running Costs')
 
     def total_cost(self):
-        self.trajectory['cost'].append(0)
-        self.trajectory['cost'][-1] += self.architecture_switching_cost('B') + self.architecture_switching_cost('C')
-        self.trajectory['cost'][-1] += self.architecture_running_cost('B') + self.architecture_running_cost('C')
-        self.trajectory['cost'][-1] += self.trajectory['enhanced'].T @ self.trajectory['enhanced']
+        self.trajectory['cost']['switching'].append(self.architecture_switching_cost('B') + self.architecture_switching_cost('C'))
+        self.trajectory['cost']['running'].append(self.architecture_running_cost('B') + self.architecture_running_cost('C'))
+        self.trajectory['cost']['control'].append(self.trajectory['enhanced'].T @ self.trajectory['enhanced'])
+        self.trajectory['cost']['total'].append(sum([i[-1] for i in self.trajectory['cost'] if i != 'total']))
+
+    def architecture_update_check(self):
+        check = False
+        for i in ['B', 'C']:
+            architecture_compare = compare_lists(self.architecture[i]['active'], self.architecture[i]['history'][-1])
+            if len(architecture_compare['a1only']) != 0 or len(architecture_compare['a2only']) != 0:
+                check = True
+                break
+        return check
+
+def matrix_convergence_check(A, B, accuracy=10**(-3), check_type=None):
+    np_norm_methods = ['inf', 'fro', 2, None]
+    if check_type is None:
+        return np.allclose(A, B, atol=accuracy, rtol=accuracy)
+    elif check_type in np_norm_methods:
+        return np.norm(A-B, ord=check_type) < accuracy
+    else:
+        raise Exception('Check Matrix Convergence')
+
+def max_limit(architecture, algorithm):
+    correction = {'selection': 0, 'rejection': 1}
+    return len(architecture['active']) < (architecture['max'] + correction[algorithm])
+
+
+def min_limit(architecture, algorithm):
+    correction = {'selection': 0, 'rejection': 1}
+    return len(architecture['active']) >= (architecture['min'] + correction[algorithm])
+
+
+def compare_lists(array1, array2):
+    return {'a1only': [i for i in array1 if i not in array2], 'a2only': [i for i in array2 if i not in array1], 'common': [i for i in array1 if i in array2]}
+
+
+def item_index_from_policy(values, policy):
+    if policy == "max":
+        return values.index(max(values))
+    elif policy == "min":
+        return values.index(min(values))
+    else:
+        raise Exception('Check policy')
+
+
+def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_select=False, status_check=False, t_start=time.time()):
+    if not isinstance(sys, System):
+        raise Exception('Check data type')
+
+    work_iteration = dc(sys)
+    work_history, choice_history, value_history = [], [], []
+    selection_check = max_limit(work_iteration.architecture['B'], 'selection') or max_limit(work_iteration.architecture['C'], 'selection')
+    count_of_changes = 0
+    while selection_check:
+        work_history.append(work_iteration)
+        choices = work_iteration.available_selections()
+        if len(choices) == 0:
+            if status_check:
+                print('No selections available')
+            selection_check = False
+            break
+        if no_select and min_limit(work_iteration.architecture['B'], 'selection') and min_limit(work_iteration.architecture['C'], 'selection'):
+            choices.append({'architecture_type': None})
+        choice_history.append(choices)
+        for i in choices:
+            test_sys = dc(work_iteration)
+            test_sys.active_architecture_update(i)
+            test_sys.evaluate_cost()
+            i['value'] = test_sys.trajectory['cost']['total'][-1]
+        target_idx = item_index_from_policy([i['value'] for i in choices], policy)
+        value_history.append([i['value'] for i in choices])
+        work_iteration.active_architecture_update(choices[target_idx])
+        if not work_iteration.architecture_update_check():
+            print('No valuable architecture updates')
+            break
+        count_of_changes += 1
+        if number_of_changes is not None and count_of_changes == number_of_changes:
+            if status_check:
+                print('Maximum number of changes done')
+            break
+    work_history.append(work_iteration)
+    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
