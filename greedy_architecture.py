@@ -1,4 +1,3 @@
-import networkx as nx
 import numpy as np
 import networkx as netx
 import random
@@ -263,8 +262,8 @@ class System:
         if node_pos is None:
             G_base = netx.from_numpy_matrix(self.dynamics['A'])
             netx.relabel_nodes(G_base, node_labels, copy=False)
-            node_pos = nx.circular_layout(G_base)
-        node_pos = nx.spring_layout(G, pos=node_pos, fixed=[str(i + 1) for i in range(0, self.dynamics['number'])])
+            node_pos = netx.circular_layout(G_base)
+        node_pos = netx.spring_layout(G, pos=node_pos, fixed=[str(i + 1) for i in range(0, self.dynamics['number'])])
         return {'G': G, 'pos': node_pos, 'node_color': nc}
 
     def evaluate_control_cost_matrix(self, P):
@@ -619,11 +618,9 @@ def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_
     return {'work_set': work_iteration, 'work_history': work_history, 'value_history': value_history, 'time': time.time()-t_start}
 
 
-def simulate_system_fixed_architecture(S, T_sim=100):
-    if not isinstance(S, System):
-        raise Exception('Incorrect data type')
-
-    actuator_update = greedy_simultaneous(S, 'B', status_check=True)
-    S.active_architecture_update(actuator_update['work_'], 'B')
-
-    
+# def simulate_system_fixed_architecture(S, T_sim=100):
+#     if not isinstance(S, System):
+#         raise Exception('Incorrect data type')
+#
+#     actuator_update = greedy_simultaneous(S, 'B', status_check=True)
+#     S.active_architecture_update(actuator_update['work_'], 'B')

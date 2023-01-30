@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-import greedyalgorithm_knapsackproblem as gkp
+from knapsack_model import greedyalgorithm_knapsackproblem as gkp
 
 
 class MyTestCase(unittest.TestCase):
