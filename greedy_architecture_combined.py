@@ -47,7 +47,7 @@ class System:
 
         self.trajectory = {'X0': np.identity(self.dynamics['number_of_nodes']),
                            'x': [], 'x_estimate': [], 'y': [], 'u': [],
-                           'cost': {'running': [], 'switching': [], 'control': [], 'total': []},
+                           'cost': {'running': [], 'switching': [], 'control': [], 'true_state': [], 'estimate_state': [], 'estimate_total': [], 'true_total': []},
                            'P': [], 'E': []}
         self.metric_model = {'type1': 'x', 'type2': 'scalar', 'type3': 'scalar'}
         self.initialize_initial_conditions(initial_conditions)
@@ -164,7 +164,7 @@ class System:
     def noise_gen(self):
         self.noise['w'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['W'])
         self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['V'])
-        self.noise['enhanced'] = np.block([self.noise['w'], self.noise['v']])
+        self.noise['enhanced_vector'] = np.block([self.noise['w'], self.noise['v']])
 
     def available_selections(self, fixed_architecture=None):
         choices = []
@@ -223,14 +223,32 @@ class System:
         return {'G': G, 'pos': node_pos, 'node_color': nc}
 
     def enhanced_system_matrix(self):
+        BK = self.architecture['B']['matrix']@self.architecture['B']['gain']
+        LC = self.architecture['C']['gain'] @ self.architecture['C']['matrix']
         self.dynamics['enhanced'] = np.block([
             [self.dynamics['A'], -self.architecture['B']['matrix'] @ self.architecture['B']['gain']],
-            [self.dynamics['A'] @ self.architecture['C']['gain'] @ self.architecture['C']['matrix'], self.dynamics['A']-self.dynamics['A'] @ self.architecture['C']['gain'] @ self.architecture['C']['matrix']-self.architecture['B']['matrix'] @ self.architecture['B']['gain']]])
-        self.noise['enhanced'] = np.diag(np.identity(self.dynamics['number_of_nodes']), self.dynamics['A'] @ self.architecture['C']['gain'])
+            [self.architecture['C']['gain'] @ self.architecture['C']['matrix'] @ self.dynamics['A'], self.dynamics['A'] -BK-(LC@self.dynamics['A'])]])
+        self.noise['enhanced_matrix'] = np.block([
+            [np.identity(self.dynamics['number_of_nodes']), np.zeros((self.dynamics['number_of_nodes'],self.dynamics['number_of_nodes']))],
+            [LC, self.architecture['C']['gain']]])
 
     def optimal_feedback_initializer(self):
         self.trajectory['P'] = [self.architecture['B']['cost']['Q']]
         self.trajectory['E'] = [self.additive['V']]
+
+    def optimal_control_feedback_wrapper(self, T_steps=None):
+        loop_check = False
+        t = 0
+        while not loop_check:
+            self.optimal_feedback_control_cost_matrix()
+            if len(self.trajectory['P']) > 1:
+                if matrix_convergence_check(self.trajectory['P'][-1], self.trajectory['P'][-2]):
+                    loop_check = True
+            t += 1
+            if T_steps is not None and (T_steps - t) <= 0:
+                break
+            if np.min(np.linalg.eigvals(self.trajectory['P'][-1])) <= 0:
+                raise Exception('Non-positive cost matrix')
 
     def optimal_feedback_control_cost_matrix(self):
         self.optimal_feedback_control_cost_gain()
@@ -238,6 +256,20 @@ class System:
 
     def optimal_feedback_control_cost_gain(self):
         self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'][-1] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'][-1] @ self.dynamics['A']
+
+    def optimal_estimation_feedback_wrapper(self, T_steps=None):
+        loop_check = False
+        t = 0
+        while not loop_check:
+            self.optimal_feedback_estimation_covariance_matrix()
+            if len(self.trajectory['E']) > 1:
+                if matrix_convergence_check(self.trajectory['E'][-1], self.trajectory['E'][-2]):
+                    loop_check = True
+            t += 1
+            if T_steps is not None and t >= T_steps:
+                break
+            if np.min(np.linalg.eigvals(self.trajectory['E'][-1])) <= 0:
+                raise Exception('Non-positive error covariance matrix')
 
     def optimal_feedback_estimation_covariance_matrix(self):
         self.optimal_feedback_estimation_gain()
@@ -248,39 +280,61 @@ class System:
 
     def system_one_step_update_enhanced(self):
         self.enhanced_system_matrix()
-        vector = np.block([self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]])
+        self.noise_gen()
+        self.trajectory['u'].append(-self.architecture['B']['gain']@self.trajectory['x_estimate'][-1])
+        self.trajectory['y'].append(self.architecture['C']['matrix']@self.trajectory['x'] + self.noise['v'])
+        vector = self.dynamics['enhanced']@np.block([self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]]) + self.noise['enhanced_matrix']@self.noise['enhanced_vector']
+        self.trajectory['x'].append(vector[0:self.dynamics['number_of_nodes']])
+        self.trajectory['x_estimate'].append(vector[self.dynamics['number_of_nodes']:])
 
-    def architecture_running_cost(self, architecture_type):
-        active_vector = np.zeros(self.dynamics['number'])
-        for i in self.architecture[architecture_type]['active']:
-            active_vector[i] = 1
-        if self.metric_model['type2'] == 'matrix':
-            return active_vector.T @ self.architecture[architecture_type]['cost']['R2'] @ active_vector
-        elif self.metric_model['type2'] == 'scalar':
-            return self.architecture[architecture_type]['cost']['R2'] * (active_vector.T @ active_vector)
-        else:
-            raise Exception('Check Metric for Type 2 - Running Costs')
-
-    def architecture_switching_cost(self, architecture_type):
+    def architecture_costs(self, architecture_type):
         active_vector = np.zeros(self.dynamics['number'])
         history_vector = np.zeros(self.dynamics['number'])
         for i in self.architecture[architecture_type]['active']:
             active_vector[i] = 1
         for i in self.architecture[architecture_type]['history'][-1]:
             history_vector[i] = 1
-
-        if self.metric_model['type3'] == 'matrix':
-            return (active_vector - history_vector).T @ self.architecture[architecture_type]['cost']['R3'] @ (active_vector - history_vector)
-        elif self.metric_model['type3'] == 'scalar':
-            return self.architecture[architecture_type]['cost']['R3']*((active_vector - history_vector).T @ (active_vector - history_vector))
+        if self.metric_model['type2'] == 'matrix':
+            self.trajectory['cost']['running'] = active_vector.T @ self.architecture[architecture_type]['cost']['R2'] @ active_vector
+        elif self.metric_model['type2'] == 'scalar':
+            self.trajectory['cost']['running'] = self.architecture[architecture_type]['cost']['R2'] * (active_vector.T @ active_vector)
         else:
             raise Exception('Check Metric for Type 2 - Running Costs')
+        if self.metric_model['type3'] == 'matrix':
+            self.trajectory['cost']['switching'] = (active_vector - history_vector).T @ self.architecture[architecture_type]['cost']['R3'] @ (active_vector - history_vector)
+        elif self.metric_model['type3'] == 'scalar':
+            self.trajectory['cost']['switching'] = self.architecture[architecture_type]['cost']['R3']*((active_vector - history_vector).T @ (active_vector - history_vector))
+        else:
+            raise Exception('Check Metric for Type 2 - Running Costs')
+    #
+    # def architecture_switching_cost(self, architecture_type):
+    #     active_vector = np.zeros(self.dynamics['number'])
+    #
+    #     for i in self.architecture[architecture_type]['active']:
+    #         active_vector[i] = 1
 
-    def total_cost(self):
-        self.trajectory['cost']['switching'].append(self.architecture_switching_cost('B') + self.architecture_switching_cost('C'))
-        self.trajectory['cost']['running'].append(self.architecture_running_cost('B') + self.architecture_running_cost('C'))
-        self.trajectory['cost']['control'].append(self.trajectory['enhanced'].T @ self.trajectory['enhanced'])
-        self.trajectory['cost']['total'].append(sum([i[-1] for i in self.trajectory['cost'] if i != 'total']))
+    def true_state_costs(self):
+        self.trajectory['cost']['true_state'].append(0)
+        self.trajectory['cost']['true_state'][-1] += self.trajectory['x'][-1].T @ self.architecture['B']['cost']['Q'] @ self.trajectory['x'][-1]
+        self.trajectory['cost']['true_state'][-1] += self.trajectory['u'][-1].T @ self.architecture['B']['cost']['R1'] @ self.trajectory['u'][-1]
+        self.trajectory['cost']['true_state'][-1] += (self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1]).T @ self.architecture['C']['cost']['Q'] @ (self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1])
+
+    def estimate_state_costs(self):
+        self.trajectory['cost']['estimate_state'].append(0)
+        self.trajectory['cost']['estimate_state'][-1] += self.trajectory['x_estimate'][-1].T @ self.trajectory['P'][-1] @ self.trajectory['x_estimate'][-1]
+        self.trajectory['cost']['estimate_state'][-1] += self.trajectory['u'][-1].T @ self.architecture['B']['cost']['R1'] @ self.trajectory['u'][-1]
+        self.trajectory['cost']['estimate_state'][-1] += np.trace(self.trajectory['E'][-1] @ self.architecture['C']['cost']['Q'])
+
+    # def architecture_cost(self):
+    #     self.trajectory['cost']['switching'].append(self.architecture_switching_cost('B') + self.architecture_switching_cost('C'))
+    #     self.trajectory['cost']['running'].append(self.architecture_running_cost('B') + self.architecture_running_cost('C'))
+    #     self.trajectory['cost']['control'].append(self.trajectory['enhanced'].T @ self.trajectory['enhanced'])
+
+    def true_total_cost(self):
+        self.trajectory['cost']['true_total'].append(sum([i[-1] for i in self.trajectory['cost'] if i == ['switching', 'running', 'control', 'true_state']]))
+
+    def estimate_total_cost(self):
+        self.trajectory['cost']['estimate_total'].append(sum([i[-1] for i in self.trajectory['cost'] if i == ['switching', 'running', 'control', 'estimate_state']]))
 
     def architecture_update_check(self):
         check = False
@@ -291,6 +345,7 @@ class System:
                 break
         return check
 
+
 def matrix_convergence_check(A, B, accuracy=10**(-3), check_type=None):
     np_norm_methods = ['inf', 'fro', 2, None]
     if check_type is None:
@@ -299,6 +354,7 @@ def matrix_convergence_check(A, B, accuracy=10**(-3), check_type=None):
         return np.norm(A-B, ord=check_type) < accuracy
     else:
         raise Exception('Check Matrix Convergence')
+
 
 def max_limit(architecture, algorithm):
     correction = {'selection': 0, 'rejection': 1}
@@ -345,7 +401,7 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
         for i in choices:
             test_sys = dc(work_iteration)
             test_sys.active_architecture_update(i)
-            test_sys.evaluate_cost()
+            test_sys.estimate_state_costs()
             i['value'] = test_sys.trajectory['cost']['total'][-1]
         target_idx = item_index_from_policy([i['value'] for i in choices], policy)
         value_history.append([i['value'] for i in choices])
