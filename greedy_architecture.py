@@ -369,8 +369,8 @@ class System:
         feedback_costs = self.estimation_feedback(T_horizon=T_horizon)
         cost = 0
         cost += self.evaluate_estimation_cost_matrix(feedback_costs['P'][-1])
-        cost += self.architecture_running_cost('B')
-        cost += self.architecture_switching_cost('B')
+        cost += self.architecture_running_cost('C')
+        cost += self.architecture_switching_cost('C')
         return {'cost': cost, 'gain': feedback_costs['L'][-1]}
 
     def estimation_feedback(self, T_horizon=30, converge_accuracy=10 ** (-3)):
