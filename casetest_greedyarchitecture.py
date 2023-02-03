@@ -34,7 +34,7 @@ if __name__ == '__main__':
     Sys = ga.System(graph_model={'type': 'ER'}, rho=2, architecture={'rand': True, 'B': {'min': 2, 'max': 7}, 'C': {'min': 2, 'max': 7}})
     # results = ga.greedy_architecture_selection(Sys, 'B', status_check=True, no_select=True)
     # results = ga.greedy_architecture_rejection(Sys, 'C', status_check=True, no_reject=True)
-    results = ga.greedy_simultaneous(Sys, 'B', iterations=1, changes_per_iteration=1, status_check=True)
+    results = ga.greedy_simultaneous(Sys, 'B', iterations=5, changes_per_iteration=1, status_check=True)
     for i in results:
         print(i, ' : ', results[i])
 
