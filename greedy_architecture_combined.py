@@ -32,7 +32,7 @@ matplotlib.rcParams['savefig.format'] = 'pdf'
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None):
         self.dynamics = {}
-        default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1.1}
+        default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1}
         if graph_model is None:
             graph_model = {}
         for key in default_graph_model:
@@ -42,11 +42,11 @@ class System:
         self.architecture = {'B': {}, 'C': {}}
         self.metric_model = {'type1': 'x', 'type2': 'scalar', 'type3': 'scalar'}
         self.trajectory = {'X0': np.identity(self.dynamics['number_of_nodes']),
-                           'x': [], 'x_estimate': [], 'enhanced': [],
-                           'cost': {'running': 0, 'switching': 0, 'control': 0, 'predicted': [], 'true': []},
+                           'x': [], 'x_estimate': [], 'enhanced': [], 'u': [],
+                           'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
                            'P': [], 'E': [], 'P_enhanced': []}
-        self.additive = {'W': np.identity(self.dynamics['number_of_nodes']),
-                         'V': np.identity(self.dynamics['number_of_nodes'])}
+        self.additive = {'W': 0.5*np.identity(self.dynamics['number_of_nodes']),
+                         'V': 0.5*np.identity(self.dynamics['number_of_nodes'])}
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
         self.initialize_architecture(architecture)
@@ -79,8 +79,8 @@ class System:
         self.dynamics['Adj'] = netx.to_numpy_array(G)
         if 'self_loop' not in graph_model or graph_model['self_loop']:
             self.dynamics['Adj'] += np.identity(self.dynamics['number_of_nodes'])
-        self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(
-            np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
+        self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
+        self.dynamics['rho'] = graph_model['rho']
 
     def initialize_architecture(self, architecture):
         architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
@@ -104,7 +104,7 @@ class System:
                     self.architecture[architecture_type][k] = dc(architecture_model[k])
         self.initialize_architecture_set_as_basis_vectors()
         if architecture['rand']:
-            self.random_architecture()
+            self.random_architecture(n_select=architecture['rand'])
 
     def initialize_architecture_set_as_basis_vectors(self):
         basis = []
@@ -129,6 +129,13 @@ class System:
         self.architecture_active_to_matrix(parameters['architecture_type'])
         # self.architecture_costs()
 
+    def active_architecture_duplicate(self, S):
+        for a in ['B', 'C']:
+            self.architecture[a]['active'] = S.architecture[a]['active']
+        for a in ['B', 'C']:
+            self.architecture[a]['history'].append(dc(self.architecture[a]['active']))
+        self.architecture_active_to_matrix()
+
     def architecture_active_to_matrix(self, architecture_type=None):
         if architecture_type is None:
             architecture_type = ['B', 'C']
@@ -141,13 +148,18 @@ class System:
                 elif i == 'C':
                     self.architecture[i]['matrix'][k, :] = self.architecture[i]['set'][self.architecture[i]['active'][k]]
 
-    def random_architecture(self, architecture_type=None):
+    def random_architecture(self, architecture_type=None, n_select=None):
         if architecture_type is None:
             architecture_type = ['B', 'C']
         for i in architecture_type:
-            sample_ids = random.sample(self.architecture[i]['available'], k=max((self.architecture[i]['min'] + self.architecture[i]['max']) // 2, self.architecture[i]['min']))
+            if n_select is not None:
+                n_arch = n_select
+            else:
+                n_arch = max((self.architecture[i]['min'] + self.architecture[i]['max']) // 2, self.architecture[i]['min'])
+            sample_ids = random.sample(self.architecture[i]['available'], k=n_arch)
             for j in sample_ids:
                 self.active_architecture_update({'id': j, 'architecture_type': i, 'algorithm': 'select'})
+        for i in architecture_type:
             self.architecture[i]['history'] = [self.architecture[i]['active']]
 
     def initialize_additive_noise(self, additive):
@@ -166,13 +178,13 @@ class System:
             if initial_conditions is not None and key in initial_conditions:
                 self.trajectory[key].append(initial_conditions[key])
             else:
-                self.trajectory[key].append(np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.trajectory['X0']).reshape(self.dynamics['number_of_nodes'], 1))
-        self.trajectory['enhanced'] = [np.block([[self.trajectory['x'][-1]], [self.trajectory['x_estimate'][-1]]])]
+                self.trajectory[key].append(np.squeeze(np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.trajectory['X0'], 1).T))
+        self.trajectory['enhanced'].append(np.squeeze(np.concatenate((self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]))))
 
     def noise_gen(self):
         self.noise['w'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['W'])
         self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['V'])
-        self.noise['enhanced_vector'] = np.block([self.noise['w'], self.noise['v']])
+        self.noise['enhanced_vector'] = np.concatenate((self.noise['w'], self.noise['v']))
 
     def available_choices(self, algorithm, fixed_architecture=None):
         choices = []
@@ -197,8 +209,7 @@ class System:
         LC = self.architecture['C']['gain'] @ self.architecture['C']['matrix']
         self.dynamics['enhanced'] = np.block([
             [self.dynamics['A'], -BK],
-            [LC @ self.dynamics['A'],
-             self.dynamics['A'] - BK - (LC @ self.dynamics['A'])]])
+            [LC @ self.dynamics['A'], self.dynamics['A'] - BK - (LC @ self.dynamics['A'])]])
         self.noise['enhanced_noise_matrix'] = np.block([
             [np.identity(self.dynamics['number_of_nodes']), np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))],
             [LC, LC]])
@@ -227,21 +238,23 @@ class System:
         self.trajectory['E'].append(scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.additive['W'], self.additive['V']))
         self.optimal_feedback_estimation_gain()
 
-    def enhanced_lyapunov_cost(self, T_sim=30):
+    def enhanced_lyapunov_control_cost(self, T_sim=30):
         self.trajectory['cost']['control'] = 0
         self.trajectory['P_enhanced'] = [dc(self.dynamics['enhanced_terminal_cost'])]
         for t in range(0, T_sim):
             self.trajectory['cost']['control'] += np.trace(self.trajectory['P_enhanced'][-1] @ self.noise['enhanced_noise_expectation'])
             self.trajectory['P_enhanced'].append(self.dynamics['enhanced'].T @ self.trajectory['P_enhanced'][-1] @ self.dynamics['enhanced'] + self.dynamics['enhanced_stage_cost'])
         self.trajectory['cost']['control'] += np.trace(self.trajectory['P_enhanced'][-1] @ self.noise['enhanced_noise_expectation'])
-        self.trajectory['cost']['control'] += (self.trajectory['enhanced'][-1].T @ self.trajectory['P_enhanced'][-1] @ self.trajectory['enhanced'][-1])[0][0]
+        self.trajectory['cost']['control'] += np.squeeze(self.trajectory['enhanced'][-1].T @ self.trajectory['P_enhanced'][-1] @ self.trajectory['enhanced'][-1])
+
+    def enhanced_stage_control_cost(self):
+        self.trajectory['cost']['stage'] = np.squeeze(self.trajectory['enhanced'][-1].T @ self.dynamics['enhanced_stage_cost'] @ self.trajectory['enhanced'][-1])
 
     def system_one_step_update_enhanced(self):
-        self.enhanced_system_matrix()
         self.noise_gen()
-        vector = self.dynamics['enhanced'] @ np.block([self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]]) + self.noise['enhanced_matrix'] @ self.noise['enhanced_vector']
-        self.trajectory['x'].append(vector[0:self.dynamics['number_of_nodes']])
-        self.trajectory['x_estimate'].append(vector[self.dynamics['number_of_nodes']:])
+        self.trajectory['enhanced'].append((self.dynamics['enhanced'] @ self.trajectory['enhanced'][-1]) + (self.noise['enhanced_noise_matrix'] @ self.noise['enhanced_vector']))
+        self.trajectory['x'].append(self.trajectory['enhanced'][-1][0:self.dynamics['number_of_nodes']])
+        self.trajectory['x_estimate'].append(self.trajectory['enhanced'][-1][self.dynamics['number_of_nodes']:])
 
     def architecture_costs(self):
         self.trajectory['cost']['running'] = 0
@@ -258,13 +271,13 @@ class System:
             if self.metric_model['type2'] == 'matrix':
                 self.trajectory['cost']['running'] += active_vector.T @ self.architecture[a]['cost']['R2'] @ active_vector
             elif self.metric_model['type2'] == 'scalar':
-                self.trajectory['cost']['running'] += self.architecture[a]['cost']['R2'] * (active_vector.T @ active_vector)
+                self.trajectory['cost']['running'] += self.architecture[a]['cost']['R2'] * np.inner(active_vector, active_vector)
             else:
                 raise Exception('Check Metric for Type 2 - Running Costs')
             if self.metric_model['type3'] == 'matrix':
                 self.trajectory['cost']['switching'] += (active_vector - history_vector).T @ self.architecture[a]['cost']['R3'] @ (active_vector - history_vector)
             elif self.metric_model['type3'] == 'scalar':
-                self.trajectory['cost']['switching'] += self.architecture[a]['cost']['R3'] * ((active_vector - history_vector).T @ (active_vector - history_vector))
+                self.trajectory['cost']['switching'] += self.architecture[a]['cost']['R3'] * np.inner(active_vector - history_vector, active_vector - history_vector)
             else:
                 raise Exception('Check Metric for Type 2 - Running Costs')
 
@@ -273,11 +286,24 @@ class System:
         self.optimal_control_feedback_wrapper()
         self.architecture_costs()
         self.enhanced_system_matrix()
-        self.enhanced_lyapunov_cost()
+        self.enhanced_lyapunov_control_cost()
         self.trajectory['cost']['predicted'].append(0)
         for i in ['running', 'switching', 'control']:
-            # print(i, type(self.trajectory['cost'][i]), self.trajectory['cost'][i])
+            if self.trajectory['cost'][i] < 0:
+                raise Exception('Negative cost: ', i)
             self.trajectory['cost']['predicted'][-1] += self.trajectory['cost'][i]
+
+    def cost_wrapper_enhanced_true(self):
+        self.optimal_estimation_feedback_wrapper()
+        self.optimal_control_feedback_wrapper()
+        self.architecture_costs()
+        self.enhanced_system_matrix()
+        self.enhanced_stage_control_cost()
+        self.trajectory['cost']['true'].append(0)
+        for i in ['running', 'switching', 'stage']:
+            if self.trajectory['cost'][i] < 0:
+                raise Exception('Negative cost: ', i)
+            self.trajectory['cost']['true'][-1] += self.trajectory['cost'][i]
 
     def architecture_update_check(self):
         check = False
@@ -346,52 +372,52 @@ class System:
         node_pos = netx.spring_layout(G, pos=node_pos, fixed=[str(i + 1) for i in range(0, self.dynamics['number_of_nodes'])])
         return {'G': G, 'pos': node_pos, 'node_color': nc}
 
-    def animate_architecture(self):
-        fig = plt.figure(figsize=(6, 4))
-        # fig = plt.subplots(2, 3, figsize=(6, 4))
-        grid = fig.add_gridspec(2, 3)
-        ax_network = fig.add_subplot(grid[0:2, 0:2])
-        ax_trajectory = fig.add_subplot(grid[0, 2])
-        ax_cost = fig.add_subplot(grid[1, 2], sharex=ax_trajectory)
-
-        ax_network.axis('off')
-        min_lim = -1.7
-        max_lim = 1.7
-        ax_network.set_xlim(min_lim, max_lim)
-        ax_network.set_ylim(min_lim, max_lim)
-        Sys_dummy = dc(self)
-        Sys_dummy.architecture['B']['active'] = Sys_dummy.architecture['B']['available']
-        Sys_dummy.architecture['C']['active'] = Sys_dummy.architecture['C']['available']
-        Sys_dummy.architecture_active_to_matrix()
-        pos_gen = Sys_dummy.display_graph_gen()['pos']
-        node_pos = {i: pos_gen[i] for i in pos_gen if i.isnumeric()}
-        t_range = np.arange(0, len(self.architecture['B']['history']), 1)
-
-        for i in range(0, self.dynamics['number_of_nodes']):
-            ax_trajectory.plot(range(0, len(self.trajectory['x'])), [x_t[i] for x_t in self.trajectory['x']])
-            ax_trajectory.plot(range(0, len(self.trajectory['x_estimate'])), [x_t[i] for x_t in self.trajectory['x_estimate']])
-        ax_trajectory.set_ylabel('x-trajectory')
-
-        ax_cost.plot(range(0, len(self.trajectory['cost']['estimate_total'])), self.trajectory['cost']['estimate_total'])
-        ax_cost.plot(range(0, len(self.trajectory['cost']['true_total'])), self.trajectory['cost']['true_total'])
-        ax_cost.set_xlabel('time')
-        ax_cost.set_ylabel('cost')
-
-        def update(t):
-            ax_network.clear()
-            sys_t = dc(self)
-            for a in ['B', 'C']:
-                sys_t.architecture[a]['active'] = self.architecture[a]['history'][t]
-            sys_t.architecture_active_to_matrix()
-            sys_t_plot = sys_t.display_graph_gen(node_pos)
-            netx.draw_networkx(sys_t_plot['G'], ax=ax_network, pos=sys_t_plot['pos'], node_color=sys_t_plot['node_color'])
-            ax_network.set_title('t=' + str(t))
-            ax_network.set_xlim(min_lim, max_lim)
-            ax_network.set_ylim(min_lim, max_lim)
-
-        ani = matplotlib.animation.FuncAnimation(fig, update, frames=t_range, interval=1000, repeat=False)
-        ani.save("Test.mp4")
-        plt.show()
+    # def animate_architecture(self):
+    #     fig = plt.figure(figsize=(6, 4))
+    #     # fig = plt.subplots(2, 3, figsize=(6, 4))
+    #     grid = fig.add_gridspec(2, 3)
+    #     ax_network = fig.add_subplot(grid[0:2, 0:2])
+    #     ax_trajectory = fig.add_subplot(grid[0, 2])
+    #     ax_cost = fig.add_subplot(grid[1, 2], sharex=ax_trajectory)
+    #
+    #     ax_network.axis('off')
+    #     min_lim = -1.7
+    #     max_lim = 1.7
+    #     ax_network.set_xlim(min_lim, max_lim)
+    #     ax_network.set_ylim(min_lim, max_lim)
+    #     Sys_dummy = dc(self)
+    #     Sys_dummy.architecture['B']['active'] = Sys_dummy.architecture['B']['available']
+    #     Sys_dummy.architecture['C']['active'] = Sys_dummy.architecture['C']['available']
+    #     Sys_dummy.architecture_active_to_matrix()
+    #     pos_gen = Sys_dummy.display_graph_gen()['pos']
+    #     node_pos = {i: pos_gen[i] for i in pos_gen if i.isnumeric()}
+    #     t_range = np.arange(0, len(self.architecture['B']['history']), 1)
+    #
+    #     for i in range(0, self.dynamics['number_of_nodes']):
+    #         ax_trajectory.plot(range(0, len(self.trajectory['x'])), [x_t[i] for x_t in self.trajectory['x']])
+    #         ax_trajectory.plot(range(0, len(self.trajectory['x_estimate'])), [x_t[i] for x_t in self.trajectory['x_estimate']])
+    #     ax_trajectory.set_ylabel('x-trajectory')
+    #
+    #     ax_cost.plot(range(0, len(self.trajectory['cost']['estimate_total'])), self.trajectory['cost']['estimate_total'])
+    #     ax_cost.plot(range(0, len(self.trajectory['cost']['true_total'])), self.trajectory['cost']['true_total'])
+    #     ax_cost.set_xlabel('time')
+    #     ax_cost.set_ylabel('cost')
+    #
+    #     def update(t):
+    #         ax_network.clear()
+    #         sys_t = dc(self)
+    #         for a in ['B', 'C']:
+    #             sys_t.architecture[a]['active'] = self.architecture[a]['history'][t]
+    #         sys_t.architecture_active_to_matrix()
+    #         sys_t_plot = sys_t.display_graph_gen(node_pos)
+    #         netx.draw_networkx(sys_t_plot['G'], ax=ax_network, pos=sys_t_plot['pos'], node_color=sys_t_plot['node_color'])
+    #         ax_network.set_title('t=' + str(t))
+    #         ax_network.set_xlim(min_lim, max_lim)
+    #         ax_network.set_ylim(min_lim, max_lim)
+    #
+    #     ani = matplotlib.animation.FuncAnimation(fig, update, frames=t_range, interval=1000, repeat=False)
+    #     ani.save("Test.mp4")
+    #     plt.show()
 
     def cost_plot(self, ax=None):
         if ax is None:
@@ -411,6 +437,59 @@ class System:
         ax_cost.plot(range(0, len(self.trajectory['cost']['estimate_total'])), self.trajectory['cost']['estimate_total'])
         ax_cost.set_xlabel('time')
         ax_cost.set_ylabel('cost')
+        plt.show()
+
+    def cost_plot_history(self):
+        # for i in range(0, self.dynamics['number_of_nodes']):
+        #     print([x_t[i] for x_t in self.trajectory['x']])
+        cumulative_cost = [self.trajectory['cost']['true'][0]]
+        for i in range(1, len(self.trajectory['cost']['true'])):
+            cumulative_cost.append(self.trajectory['cost']['true'][i]+cumulative_cost[-1])
+        fig = plt.figure(figsize=(6, 4))
+        grid = fig.add_gridspec(2, 1)
+        ax_trajectory = fig.add_subplot(grid[0, 0])
+        ax_cost = fig.add_subplot(grid[1, 0], sharex=ax_trajectory)
+        for i in range(0, self.dynamics['number_of_nodes']):
+            ax_trajectory.plot(range(0, len(self.trajectory['x'])), [x_t[i] for x_t in self.trajectory['x']])
+            # ax_trajectory.plot(range(0, len(self.trajectory['x_estimate'])), [x_t[i] for x_t in self.trajectory['x_estimate']])
+        ax_trajectory.set_ylabel('x-trajectory')
+        ax_cost.plot(range(0, len(cumulative_cost)), cumulative_cost)
+        ax_cost.set_xlabel('time')
+        ax_cost.set_ylabel('cost')
+        ax_cost.set_yscale('log')
+        plt.show()
+
+    def architecture_history_plot(self, f_name=None):
+        fig = plt.figure(figsize=(6, 4))
+        grid = fig.add_gridspec(2, 2)
+        ax_B = fig.add_subplot(grid[0, 0])
+        ax_C = fig.add_subplot(grid[1, 0], sharex=ax_B)
+        ax_Bhist = fig.add_subplot(grid[0, 1], sharey=ax_B)
+        ax_Chist = fig.add_subplot(grid[1, 1], sharex=ax_Bhist, sharey=ax_C)
+        B_hist = np.zeros(self.dynamics['number_of_nodes'])
+        C_hist = np.zeros(self.dynamics['number_of_nodes'])
+        B_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['B']['history'])))
+        C_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['history'])))
+        for t in range(0, len(self.architecture['B']['history'])):
+            for i in self.architecture['B']['history'][t]:
+                B_list[i, t] = 1
+                B_hist[i] += 1
+            for i in self.architecture['C']['history'][t]:
+                C_list[i, t] = 1
+                C_hist[i] += 1
+        ax_B.imshow(B_list)
+        ax_C.imshow(C_list)
+        ax_Bhist.hist(B_hist, bins=self.dynamics['number_of_nodes'], orientation="horizontal")
+        ax_Chist.hist(C_hist, bins=self.dynamics['number_of_nodes'], orientation="horizontal")
+        ax_B.set_ylabel('Sensor ID/Node')
+        ax_C.set_ylabel('Sensor ID/Node')
+        ax_C.set_xlabel('Time')
+        ax_B.set_title('B')
+        ax_C.set_title('C')
+        ax_Chist.set_xlabel('Number of uses')
+        if f_name is None:
+            f_name = "images/architecture_history_rho" + str(self.dynamics['rho']) + ".png"
+        plt.savefig(f_name)
         plt.show()
 
 
@@ -500,10 +579,13 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
         selection_check = (max_limit(work_iteration.architecture['B'], 'select') or max_limit(work_iteration.architecture['C'], 'select'))
         if status_check:
             print('Selection check: B: ', max_limit(work_iteration.architecture['B'], 'select'), ' |C: ', max_limit(work_iteration.architecture['C'], 'select'))
+    return_set = dc(sys)
+    return_set.active_architecture_duplicate(work_iteration)
+    return_set.cost_wrapper_enhanced_prediction()
     if status_check:
-        work_iteration.display_active_architecture()
-    work_history.append(work_iteration)
-    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
+        return_set.display_active_architecture()
+    work_history.append(return_set)
+    return {'work_set': return_set, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': count_of_changes}
 
 
 def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_reject=False, status_check=False, t_start=time.time()):
@@ -553,10 +635,13 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
         rejection_check = min_limit(work_iteration.architecture['B'], 'reject') or min_limit(work_iteration.architecture['C'], 'reject')
         if status_check:
             print('Selection check: B: ', min_limit(work_iteration.architecture['B'], 'select'), ' |C: ', min_limit(work_iteration.architecture['C'], 'select'))
+    return_set = dc(sys)
+    return_set.active_architecture_duplicate(work_iteration)
+    return_set.cost_wrapper_enhanced_prediction()
     if status_check:
-        work_iteration.display_active_architecture()
-    work_history.append(work_iteration)
-    return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
+        return_set.display_active_architecture()
+    work_history.append(return_set)
+    return {'work_set': return_set, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': count_of_changes}
 
 
 def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), status_check=False):
@@ -581,13 +666,15 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             work_iteration.display_active_architecture()
         # Keep same
         values = []
-        iteration_cases = [dc(work_iteration)]
-        iteration_cases[-1].active_architecture_update({'architecture_type': None})
-        iteration_cases[-1].cost_wrapper_enhanced_prediction()
-        values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
-        if status_check:
-            print('Maintain Value: ', values[-1])
-            iteration_cases[-1].display_active_architecture()
+        iteration_cases = []
+
+        # iteration_cases.append(dc(work_iteration))
+        # iteration_cases[-1].active_architecture_update({'architecture_type': None})
+        # iteration_cases[-1].cost_wrapper_enhanced_prediction()
+        # values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        # if status_check:
+        #     print('Maintain Value: ', values[-1])
+        #     iteration_cases[-1].display_active_architecture()
 
         # Select one
         select = greedy_architecture_selection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=True, status_check=status_check)
@@ -637,8 +724,48 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             if status_check:
                 print('Max iterations of simultaneous greedy')
             iteration_stop = True
+    return_set = dc(sys)
+    return_set.active_architecture_duplicate(work_iteration)
+    return_set.cost_wrapper_enhanced_prediction()
+    if status_check:
+        return_set.display_active_architecture()
+    work_history.append(return_set)
+    return {'work_set': return_set, 'work_history': work_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': iteration_count}
 
-    return {'work_set': work_iteration, 'work_history': work_history, 'value_history': value_history, 'time': time.time() - t_start}
+
+def simultaneous_cost_plot(value_history):
+    for i in value_history:
+        print(i)
+    fig = plt.figure(figsize=(6, 4))
+    grid = fig.add_gridspec(1, 1)
+    ax_cost = fig.add_subplot(grid[0, 0])
+    for i in range(0, len(value_history[0])):
+        ax_cost.scatter(range(0, len(value_history)), [v[i] for v in value_history])
+    ax_cost.legend(['select', 'reject', 'swap'])
+    ax_cost.set_yscale('log')
+    plt.show()
+
+
+def cost_plots(cost, f_name=None):
+    fig = plt.figure(figsize=(6, 4), )
+    grid = fig.add_gridspec(1, 1)
+    ax_cost = fig.add_subplot(grid[0, 0])
+    for i in cost:
+        cumulative_cost = [i[0]]
+        for t in range(1, len(i)):
+            cumulative_cost.append(cumulative_cost[-1] + i[t])
+        ax_cost.plot(range(0, len(cumulative_cost)), cumulative_cost)
+    ax_cost.set_xlabel('time')
+    ax_cost.set_ylabel('cost')
+    ax_cost.set_yscale('log')
+    ax_cost.legend(['fixed', 'optimal'])
+    ax_cost.set_title('Architecture comparison')
+    if f_name is None:
+        f_name = "images/cost_trajectory.png"
+    else:
+        f_name = "images/cost_trajectory"+f_name+".png"
+    plt.savefig(f_name)
+    plt.show()
 
 
 if __name__ == "__main__":
