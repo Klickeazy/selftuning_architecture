@@ -4,9 +4,12 @@ import numpy as np
 import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
-    S = gac.System(graph_model={'number_of_nodes': 5, 'rho': 1.1}, architecture={'rand': 1})
-    print(S.architecture['C']['active'])
-    print(S.architecture['C']['indicator'])
+    S = gac.System(graph_model={'number_of_nodes': 5, 'rho': 1.1}, architecture={'rand': 2})
+    # for a in ['B', 'C']:
+    #     print(a)
+    #     print('Active:', S.architecture[a]['active'])
+    #     print('Indicator:', S.architecture[a]['indicator'])
+    #     print('Matrix:', S.architecture[a]['matrix'])
     # for i in range(0, 1000):
     # print(i)
     # S = gac.System(graph_model={'number_of_nodes': 5, 'rho': 1.1}, architecture={'rand': 1})

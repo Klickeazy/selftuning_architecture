@@ -51,7 +51,7 @@ class System:
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
         self.initialize_architecture(architecture)
-        self.architecture['C']['cost']['R1'] = self.additive['V']
+        # self.architecture['C']['cost']['R1'] = self.additive['V']
         self.architecture['C']['cost']['Q'] = self.additive['W']
         # if additive is not None:
         #     self.initialize_additive_noise(additive)
@@ -124,16 +124,16 @@ class System:
 
     def active_architecture_update(self, parameters):
         if parameters['architecture_type'] is not None:
+            print(parameters)
             if parameters['algorithm'] == "select":
                 self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'] + [parameters['id']]
             elif parameters['algorithm'] == "reject":
                 self.architecture[parameters['architecture_type']]['active'] = [i for i in self.architecture[parameters['architecture_type']]['active'] if i != parameters['id']]
             else:
                 raise Exception('Check algorithm')
+            self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'].sort()
         for a in ['B', 'C']:
             self.architecture[a]['history'].append(dc(self.architecture[a]['active']))
-        self.architecture_active_to_matrix(parameters['architecture_type'])
-        # self.architecture_costs()
 
     def active_architecture_duplicate(self, S):
         for a in ['B', 'C']:
@@ -158,6 +158,8 @@ class System:
                 self.architecture[i]['indicator'][self.architecture[i]['active'][k]] = 1
             if i == 'C':
                 self.architecture[i]['matrix'] = self.architecture[i]['matrix'].T
+                self.additive['V_active'] = self.additive['V'][self.architecture[i]['active'], :][:, self.architecture[i]['active']]
+                self.architecture['C']['cost']['R1'] = self.additive['V']
 
     def random_architecture(self, architecture_type=None, n_select=None):
         if architecture_type is None:
@@ -167,11 +169,10 @@ class System:
                 n_arch = n_select
             else:
                 n_arch = max((self.architecture[i]['min'] + self.architecture[i]['max']) // 2, self.architecture[i]['min'])
-            sample_ids = random.sample(self.architecture[i]['available'], k=n_arch)
-            for j in sample_ids:
-                self.active_architecture_update({'id': j, 'architecture_type': i, 'algorithm': 'select'})
+            self.architecture[i]['active'] = np.sort(random.sample(self.architecture[i]['available'], k=n_arch))[::-1]
         for i in architecture_type:
             self.architecture[i]['history'] = [self.architecture[i]['active']]
+        self.architecture_active_to_matrix()
 
     # def initialize_additive_noise(self, additive):
     #     if additive == "normal":
@@ -196,7 +197,7 @@ class System:
     def noise_gen(self):
         self.noise['w'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['W'])
         # self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), np.diag(self.architecture['C']['indicator']) @ self.additive['V'])
-        self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['V'])
+        self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['V_active'])
         self.noise['enhanced_vector'] = np.concatenate((self.noise['w'], self.noise['v']))
 
     def available_choices(self, algorithm, fixed_architecture=None):
@@ -228,7 +229,7 @@ class System:
             [LC, self.architecture['C']['gain']]])
         self.noise['enhanced_noise_expectation'] = self.noise['enhanced_noise_matrix'] @ np.block([
             [self.additive['W'], np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['active'])))],
-            [np.zeros((len(self.architecture['C']['active']), self.dynamics['number_of_nodes'])), self.additive['V'][self.architecture['C']['active'], :][:, self.architecture['C']['active']]]
+            [np.zeros((len(self.architecture['C']['active']), self.dynamics['number_of_nodes'])), self.additive['V_active']]
             ]) @ self.noise['enhanced_noise_matrix'].T
         self.dynamics['enhanced_stage_cost'] = np.block([
             [self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))],
