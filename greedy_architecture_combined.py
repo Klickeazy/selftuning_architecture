@@ -46,7 +46,7 @@ class System:
                            'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
                            'P': 0, 'E': 0, 'P_enhanced': []}
         self.additive = {'W': 0.5*np.identity(self.dynamics['number_of_nodes']),
-                         'V': 0.5*np.identity(self.dynamics['number_of_nodes'])}
+                         'V': np.identity(self.dynamics['number_of_nodes'])}
         self.simulation_parameters = {'T_sim': 100, 'T_predict': 30}
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
@@ -156,10 +156,14 @@ class System:
                 else:
                     raise Exception('Check architecture type')
                 self.architecture[i]['indicator'][self.architecture[i]['active'][k]] = 1
-            if i == 'C':
+            if i == 'B':
+                self.architecture['B']['cost']['R1_active'] = self.architecture['B']['cost']['R1'][self.architecture['B']['active'], :][:, self.architecture['B']['active']]
+            elif i == 'C':
                 self.architecture[i]['matrix'] = self.architecture[i]['matrix'].T
                 self.additive['V_active'] = self.additive['V'][self.architecture[i]['active'], :][:, self.architecture[i]['active']]
-                self.architecture['C']['cost']['R1'] = self.additive['V']
+                self.architecture['C']['cost']['R1'] = self.additive['V_active']
+            else:
+                raise Exception('Check architecture type')
 
     def random_architecture(self, architecture_type=None, n_select=None):
         if architecture_type is None:
@@ -221,44 +225,39 @@ class System:
     def enhanced_system_matrix(self):
         BK = self.architecture['B']['matrix'] @ self.architecture['B']['gain']
         LC = self.architecture['C']['gain'] @ self.architecture['C']['matrix']
+        LCA = LC @ self.dynamics['A']
         self.dynamics['enhanced'] = np.block([
             [self.dynamics['A'], -BK],
-            [LC @ self.dynamics['A'], self.dynamics['A'] - BK - (LC @ self.dynamics['A'])]])
+            [LCA, self.dynamics['A'] - BK - LCA]])
+
         self.noise['enhanced_noise_matrix'] = np.block([
-            [np.identity(self.dynamics['number_of_nodes']), np.zeros((len(self.architecture['C']['active']), self.dynamics['number_of_nodes']))],
+            [np.identity(self.dynamics['number_of_nodes']), np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['active'])))],
             [LC, self.architecture['C']['gain']]])
-        self.noise['enhanced_noise_expectation'] = self.noise['enhanced_noise_matrix'] @ np.block([
-            [self.additive['W'], np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['active'])))],
-            [np.zeros((len(self.architecture['C']['active']), self.dynamics['number_of_nodes'])), self.additive['V_active']]
-            ]) @ self.noise['enhanced_noise_matrix'].T
-        self.dynamics['enhanced_stage_cost'] = np.block([
-            [self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))],
-            [np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])), self.architecture['B']['gain'].T @ self.architecture['B']['cost']['R1'][self.architecture['B']['active'], :][:, self.architecture['B']['active']] @ self.architecture['B']['gain']]])
-        self.dynamics['enhanced_terminal_cost'] = np.block([
-            [self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))],
-            [np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])), np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))]])
-        # self.dynamics['enhanced_stage_cost'] = np.block([
-        #     [self.architecture['B']['cost']['Q'] + np.identity(self.dynamics['number_of_nodes']), -1*np.identity(self.dynamics['number_of_nodes'])],
-        #     [-1*np.identity(self.dynamics['number_of_nodes']), np.identity(self.dynamics['number_of_nodes']) + self.architecture['B']['gain'].T @ self.architecture['B']['cost']['R1'] @ self.architecture['B']['gain']]])
-        # self.dynamics['enhanced_terminal_cost'] = np.block([
-        #     [self.architecture['B']['cost']['Q'] + np.identity(self.dynamics['number_of_nodes']), -1*np.identity(self.dynamics['number_of_nodes'])],
-        #     [-1*np.identity(self.dynamics['number_of_nodes']), np.identity(self.dynamics['number_of_nodes'])]])
+
+        self.noise['enhanced_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V_active'])
+
+        self.noise['enhanced_noise_expectation'] = self.noise['enhanced_noise_matrix'] @ self.noise['enhanced_noise_covariance'] @ self.noise['enhanced_noise_matrix'].T
+
+        self.dynamics['enhanced_stage_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], self.architecture['B']['gain'].T @ self.architecture['B']['cost']['R1_active'] @ self.architecture['B']['gain'])
+
+        self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
 
     def optimal_feedback_control_gain(self):
-        self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1'][self.architecture['B']['active'], :][:, self.architecture['B']['active']]) @ self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.dynamics['A']
+        self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.dynamics['A']
 
     def optimal_feedback_estimation_gain(self):
-        self.architecture['C']['gain'] = self.trajectory['E'] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'][self.architecture['C']['active'], :][:, self.architecture['C']['active']])
+        self.architecture['C']['gain'] = self.trajectory['E'] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'])
 
     def optimal_control_feedback_wrapper(self):
-        self.trajectory['P'] = scp.linalg.solve_discrete_are(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1'][self.architecture['B']['active'], :][:, self.architecture['B']['active']])
+        self.trajectory['P'] = scp.linalg.solve_discrete_are(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
+        if np.min(np.linalg.eigvals(self.trajectory['P'])) < 0:
+            raise Exception('Invalid P')
         self.optimal_feedback_control_gain()
 
-    # def filter_cost_matrix(self, architecture_type):
-    #     R = for i in self.architecture[architecture_type]['active']:
-
     def optimal_estimation_feedback_wrapper(self):
-        self.trajectory['E'] = scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1'][self.architecture['C']['active'], :][:, self.architecture['C']['active']])
+        self.trajectory['E'] = scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1'])
+        if np.min(np.linalg.eigvals(self.trajectory['E'])) < 0:
+            raise Exception('Invalid E')
         self.optimal_feedback_estimation_gain()
 
     def enhanced_lyapunov_control_cost(self):
@@ -368,10 +367,8 @@ class System:
         B_mat = self.architecture['B']['matrix']
         C_mat = self.architecture['C']['matrix']
         net_matrix = np.block([[A_mat, B_mat, C_mat.T],
-                               [B_mat.T, np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])),
-                                np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))],
-                               [C_mat, np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])),
-                                np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes']))]])
+                               [B_mat.T, np.zeros((len(self.architecture['B']['active']), len(self.architecture['B']['active']))), np.zeros((len(self.architecture['B']['active']), len(self.architecture['C']['active'])))],
+                               [C_mat, np.zeros((len(self.architecture['C']['active']), len(self.architecture['B']['active']))), np.zeros((len(self.architecture['C']['active']), len(self.architecture['C']['active'])))]])
         return net_matrix
 
     def display_graph_gen(self, node_pos=None):
@@ -380,8 +377,10 @@ class System:
         node_labels = {}
         for i in range(0, self.dynamics['number_of_nodes']):
             node_labels[i] = str(i + 1)
+        for i in range(0, len(self.architecture['B']['active'])):
             node_labels[i + self.dynamics['number_of_nodes']] = "B" + str(i + 1)
-            node_labels[i + (2 * self.dynamics['number_of_nodes'])] = "C" + str(i + 1)
+        for i in range(0, len(self.architecture['C']['active'])):
+            node_labels[i + self.dynamics['number_of_nodes'] + len(self.architecture['B']['active'])] = "C" + str(i + 1)
         netx.relabel_nodes(G, node_labels, copy=False)
         G_degree = dc(G.degree())
         for n, d in G_degree:
