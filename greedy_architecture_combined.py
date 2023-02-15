@@ -40,6 +40,7 @@ class System:
             if key not in graph_model:
                 graph_model[key] = default_graph_model[key]
         self.graph_initialize(graph_model)
+        self.model_name = "model_n"+str(self.dynamics['number_of_nodes'])+"_rho"+str(np.round(self.dynamics['rho'], decimals=3))
         self.architecture = {'B': {}, 'C': {}}
         self.metric_model = {'type1': 'x', 'type2': 'scalar', 'type3': 'scalar'}
         self.trajectory = {'X0': 10*np.identity(self.dynamics['number_of_nodes']),
@@ -57,7 +58,6 @@ class System:
         # if additive is not None:
         #     self.initialize_additive_noise(additive)
         # self.enhanced_system_matrix()
-        self.model_name = "model_n"+str(self.dynamics['number_of_nodes'])+"_rho"+str(np.round(self.dynamics['rho'], decimals=3))
 
     def graph_initialize(self, graph_model):
         connected_network_check = False
@@ -86,7 +86,8 @@ class System:
             self.dynamics['Adj'] += np.identity(self.dynamics['number_of_nodes'])
         self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
         self.dynamics['rho'] = graph_model['rho']
-        self.dynamics['n_unstable'] = sum([1 for i in np.linalg.eigvals(self.dynamics['A']) if i >= 1])
+        self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
+        self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
 
     def initialize_architecture(self, architecture):
         architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
@@ -95,12 +96,13 @@ class System:
                                        'R2': 0,
                                        'R3': 0},
                               'active': [],
-                              'matrix': np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])),
+                              'matrix': np.zeros_like(self.dynamics['A']),
                               'indicator': np.zeros(self.dynamics['number_of_nodes']),
                               'available': range(0, self.dynamics['number_of_nodes']),
                               'set': [],
                               'history': [],
-                              'gain': np.identity(self.dynamics['number_of_nodes'])}
+                              'gain': np.zeros_like(self.dynamics['A']),
+                              'gram': np.zeros_like(self.dynamics['A'])}
         for architecture_type in self.architecture:
             if architecture is not None:
                 if architecture_type in architecture:
@@ -125,14 +127,13 @@ class System:
 
     def active_architecture_update(self, parameters):
         if parameters['architecture_type'] is not None:
-            print(parameters)
             if parameters['algorithm'] == "select":
                 self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'] + [parameters['id']]
             elif parameters['algorithm'] == "reject":
                 self.architecture[parameters['architecture_type']]['active'] = [i for i in self.architecture[parameters['architecture_type']]['active'] if i != parameters['id']]
             else:
                 raise Exception('Check algorithm')
-            self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'].sort()
+            self.architecture[parameters['architecture_type']]['active'] = np.sort(np.array(self.architecture[parameters['architecture_type']]['active'])).tolist()
         for a in ['B', 'C']:
             self.architecture[a]['history'].append(dc(self.architecture[a]['active']))
         self.architecture_active_to_matrix()
@@ -163,7 +164,7 @@ class System:
             elif i == 'C':
                 self.architecture[i]['matrix'] = self.architecture[i]['matrix'].T
                 self.additive['V_active'] = self.additive['V'][self.architecture[i]['active'], :][:, self.architecture[i]['active']]
-                self.architecture['C']['cost']['R1'] = self.additive['V_active']
+                self.architecture['C']['cost']['R1_active'] = self.additive['V_active']
             else:
                 raise Exception('Check architecture type')
 
@@ -175,7 +176,7 @@ class System:
                 n_arch = n_select
             else:
                 n_arch = max((self.architecture[i]['min'] + self.architecture[i]['max']) // 2, self.architecture[i]['min'])
-            self.architecture[i]['active'] = np.sort(random.sample(self.architecture[i]['available'], k=n_arch))[::-1]
+            self.architecture[i]['active'] = np.sort(random.sample(self.architecture[i]['available'], k=n_arch)).tolist()
         for i in architecture_type:
             self.architecture[i]['history'] = [self.architecture[i]['active']]
         self.architecture_active_to_matrix()
@@ -215,14 +216,14 @@ class System:
     def enhanced_system_matrix(self):
         BK = self.architecture['B']['matrix'] @ self.architecture['B']['gain']
         LC = self.architecture['C']['gain'] @ self.architecture['C']['matrix']
-        LCA = LC @ self.dynamics['A']
+        ALC = LC @ self.dynamics['A']
         self.dynamics['enhanced'] = np.block([
             [self.dynamics['A'], -BK],
-            [LCA, self.dynamics['A'] - BK - LCA]])
+            [ALC, self.dynamics['A'] - BK - ALC]])
 
         self.noise['enhanced_noise_matrix'] = np.block([
             [np.identity(self.dynamics['number_of_nodes']), np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['active'])))],
-            [LC, self.architecture['C']['gain']]])
+            [np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])), self.dynamics['A'] @ self.architecture['C']['gain']]])
 
         self.noise['enhanced_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V_active'])
 
@@ -232,27 +233,48 @@ class System:
 
         self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
 
-    # def optimal_feedback_control_gain(self):
-    #     self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.dynamics['A']
+    def optimal_feedback_control_gain(self):
+        self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.dynamics['A']
+        closed_loop_evals = np.linalg.eigvals(self.dynamics['A'] - self.architecture['B']['matrix'] @ self.architecture['B']['gain'])
+        if np.max(np.abs(closed_loop_evals)) >= 1:
+            raise Exception('Closed loop unstable control')
 
-    # def optimal_feedback_estimation_gain(self):
-    #     self.architecture['C']['gain'] = self.trajectory['E'] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'])
+    def optimal_feedback_estimation_gain(self):
+        self.architecture['C']['gain'] = self.trajectory['E'] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1_active'])
+        closed_loop_evals = np.linalg.eigvals(self.dynamics['A'] - self.dynamics['A']@self.architecture['C']['gain']@self.architecture['C']['matrix'])
+        if np.max(np.abs(closed_loop_evals)) >= 1:
+            raise Exception('Closed loop unstable estimation')
 
     def optimal_control_feedback_wrapper(self):
         self.architecture['B']['gain'], self.trajectory['P'], eval = control.dlqr(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
+        # self.trajectory['P'], eval, self.architecture['B']['gain'] = control.dare(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
         # self.trajectory['P'] = scp.linalg.solve_discrete_are(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
-        print(eval)
         if np.min(np.linalg.eigvals(self.trajectory['P'])) < 0:
-            print(np.linalg.eigvals(self.trajectory['P']))
+            self.display_active_architecture()
+            print('Q', np.sort(np.linalg.eigvals(self.architecture['B']['cost']['Q'])))
+            print('R', np.sort(np.linalg.eigvals(self.architecture['B']['cost']['R1_active'])))
+            print('P', self.trajectory['P'])
+            print('P eig:', np.sort(np.linalg.eigvals(self.trajectory['P'])))
+            print('open-loop eig:', self.dynamics['ol_eig'])
+            print('n_unstable A:', self.dynamics['n_unstable'])
+            print('closed-loop eig:', np.sort(eval))
+            print('Gramian eig', np.sort(np.linalg.eigvals(self.architecture['B']['gram'])))
             raise Exception('Invalid P')
         # self.optimal_feedback_control_gain()
 
     def optimal_estimation_feedback_wrapper(self):
-        self.architecture['C']['gain'], self.trajectory['E'], eval = control.dlqe(self.dynamics['A'], np.identity(self.dynamics['number_of_nodes']), self.architecture['C']['matrix'], self.additive['W'], self.additive['V_active'])
-        # self.trajectory['E'] = scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1'])
-        print(eval)
+        self.trajectory['E'], eval, self.architecture['C']['gain'] = control.dare(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1_active'])
+        # self.trajectory['E'] = scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1_active'])
         if np.min(np.linalg.eigvals(self.trajectory['E'])) < 0:
-            print(np.linalg.eigvals(self.trajectory['E']))
+            self.display_active_architecture()
+            print('Q', np.linalg.eigvals(self.architecture['C']['cost']['Q']))
+            print('R', np.linalg.eigvals(self.architecture['C']['cost']['R1_active']))
+            print('E', self.trajectory['E'])
+            print('E eig:', np.linalg.eigvals(self.trajectory['E']))
+            print('open-loop eig:', self.dynamics['ol_eig'])
+            print('n_unstable A:', self.dynamics['n_unstable'])
+            print('closed-loop eig:', np.sort(eval))
+            print('Gramian eig', np.sort(np.linalg.eigvals(self.architecture['C']['gram'])))
             raise Exception('Invalid E')
         # self.optimal_feedback_estimation_gain()
 
@@ -302,7 +324,7 @@ class System:
                 raise Exception('Check Metric for Type 2 - Running Costs')
 
     def cost_wrapper_enhanced_prediction(self):
-        self.architecture_active_to_matrix()
+        # self.architecture_active_to_matrix()
         self.optimal_estimation_feedback_wrapper()
         self.optimal_control_feedback_wrapper()
         self.architecture_costs()
@@ -315,7 +337,7 @@ class System:
             self.trajectory['cost']['predicted'][-1] += self.trajectory['cost'][i]
 
     def cost_wrapper_enhanced_true(self):
-        self.architecture_active_to_matrix()
+        # self.architecture_active_to_matrix()
         self.optimal_estimation_feedback_wrapper()
         self.optimal_control_feedback_wrapper()
         self.architecture_costs()
@@ -326,6 +348,52 @@ class System:
             if self.trajectory['cost'][i] < 0:
                 raise Exception('Negative cost: ', i)
             self.trajectory['cost']['true'][-1] += self.trajectory['cost'][i]
+
+    def gramian_wrapper(self):
+        architecture_set = ['B', 'C']
+        for a in architecture_set:
+            self.gramian_calc(arch_type=a)
+
+    def gramian_calc(self, arch_type):
+        if arch_type not in ['B', 'C']:
+            raise Exception('Check architecture type')
+
+        g_mat = np.zeros_like(self.dynamics['A'])
+        for i in range(0, self.dynamics['number_of_nodes']):
+            A_pow = np.linalg.matrix_power(self.dynamics['A'], i)
+            AT_pow = np.linalg.matrix_power(self.dynamics['A'].T, i)
+            if arch_type == 'B':
+                g_mat += (A_pow @ self.architecture['B']['matrix'] @ self.architecture['B']['matrix'].T @ AT_pow)
+            elif arch_type == 'C':
+                g_mat += (AT_pow @ self.architecture['C']['matrix'].T @ self.architecture['C']['matrix'] @ A_pow)
+        if np.linalg.det(g_mat) == 0:
+            raise Exception('Gramian is singular')
+        if arch_type == 'B':
+            self.architecture['B']['gram'] = dc(g_mat)
+        elif arch_type == 'C':
+            self.architecture['C']['gram'] = dc(g_mat)
+
+        # c_g = np.zeros_like(self.dynamics['A'])
+        # c_gh = np.zeros_like(self.dynamics['A'])
+        # conv_check = False
+        # count = 0
+        # print('\n')
+        # while not conv_check:
+        #     print('\rcount:', count, end='')
+        #     A_pow = np.linalg.matrix_power(self.dynamics['A'], count)
+        #     AT_pow = np.linalg.matrix_power(self.dynamics['A'].T, count)
+        #     if arch_type == 'B':
+        #         c_g += (A_pow @ self.architecture['B']['matrix'] @ self.architecture['B']['matrix'].T @ AT_pow)
+        #     elif arch_type == 'C':
+        #         c_g += (AT_pow @ self.architecture['C']['matrix'].T @ self.architecture['C']['matrix'] @ A_pow)
+        #     conv_check = matrix_convergence_check(c_g, c_gh)
+        #     c_gh = dc(c_g)
+        #     count += 1
+        # print('\n')
+        # if arch_type == 'B':
+        #     self.architecture['B']['gram'] = dc(c_g)
+        # elif arch_type == 'C':
+        #     self.architecture['C']['gram'] = dc(c_g)
 
     def architecture_update_check(self):
         check = False
@@ -344,6 +412,7 @@ class System:
                 self.architecture[architecture_type]['max'] += max_mod
 
     def display_active_architecture(self):
+        print("Sys:", self.model_name)
         for a in ['B', 'C']:
             print(a, ':', self.architecture[a]['active'])
 
@@ -449,7 +518,7 @@ class System:
         plt.show()
 
 
-def matrix_convergence_check(A, B, accuracy=10 ** (-3), check_type=None):
+def matrix_convergence_check(A, B, accuracy=10 ** (-8), check_type=None):
     np_norm_methods = ['inf', 'fro', 2, None]
     if check_type is None:
         return np.allclose(A, B, atol=accuracy, rtol=accuracy)
@@ -513,6 +582,9 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
         for i in choices:
             i['algorithm'] = 'select'
             test_sys = dc(work_iteration)
+            if status_check:
+                test_sys.model_name = "test_model"
+                test_sys.display_active_architecture()
             test_sys.active_architecture_update(i)
             test_sys.cost_wrapper_enhanced_prediction()
             i['value'] = test_sys.trajectory['cost']['predicted'][-1]
@@ -569,7 +641,11 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
         for i in choices:
             i['algorithm'] = 'reject'
             test_sys = dc(work_iteration)
+            test_sys.model_name = "test_model"
             test_sys.active_architecture_update(i)
+            if status_check:
+                print('Choice i:', i)
+                test_sys.display_active_architecture()
             test_sys.cost_wrapper_enhanced_prediction()
             i['value'] = test_sys.trajectory['cost']['predicted'][-1]
         if status_check:
@@ -639,9 +715,12 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
         sys_swap = dc(work_iteration)
         sys_swap.architecture_limit_modifier(min_mod=1, max_mod=1)
         sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=False, status_check=status_check)['work_set']
+        sys_swap.cost_wrapper_enhanced_prediction()
+        print('1:', sys_swap.trajectory['cost']['predicted'][-1])
         sys_swap.architecture_limit_modifier(min_mod=-1, max_mod=-1)
         sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, status_check=status_check)['work_set']
-        sys_swap.trajectory['cost']['predicted'] = sys_swap.trajectory['cost']['predicted'][:-2] + [sys_swap.trajectory['cost']['predicted'][-1]]
+        sys_swap.cost_wrapper_enhanced_prediction()
+        print('2:', sys_swap.trajectory['cost']['predicted'][-1])
         iteration_cases.append(sys_swap)
         values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
         if status_check:
@@ -649,7 +728,8 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             iteration_cases[-1].display_active_architecture()
 
         target_idx = item_index_from_policy(values, policy)
-        work_iteration = dc(iteration_cases[target_idx])
+        work_iteration.active_architecture_duplicate(iteration_cases[target_idx])
+        work_iteration.cost_wrapper_enhanced_prediction()
         work_history.append(work_iteration)
         value_history.append(values)
         if status_check:
