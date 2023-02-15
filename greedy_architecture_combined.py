@@ -4,6 +4,7 @@ import random
 import time
 import scipy as scp
 from copy import deepcopy as dc
+import control
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -134,6 +135,7 @@ class System:
             self.architecture[parameters['architecture_type']]['active'] = self.architecture[parameters['architecture_type']]['active'].sort()
         for a in ['B', 'C']:
             self.architecture[a]['history'].append(dc(self.architecture[a]['active']))
+        self.architecture_active_to_matrix()
 
     def active_architecture_duplicate(self, S):
         for a in ['B', 'C']:
@@ -178,15 +180,6 @@ class System:
             self.architecture[i]['history'] = [self.architecture[i]['active']]
         self.architecture_active_to_matrix()
 
-    # def initialize_additive_noise(self, additive):
-    #     if additive == "normal":
-    #         self.additive = {'W': np.identity(self.dynamics['number_of_nodes']),
-    #                          'V': np.identity(self.dynamics['number_of_nodes'])}
-    #     else:
-    #         if additive is not None:
-    #             for i in additive:
-    #                 self.additive[i] = additive[i]
-
     def initialize_initial_conditions(self, initial_conditions=None):
         if initial_conditions is not None and 'X0' in initial_conditions:
             self.trajectory['X0'] = initial_conditions['X0']
@@ -199,10 +192,7 @@ class System:
         self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1], ord=1))
 
     def noise_gen(self):
-        self.noise['w'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['W'])
-        # self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), np.diag(self.architecture['C']['indicator']) @ self.additive['V'])
-        self.noise['v'] = np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.additive['V_active'])
-        self.noise['enhanced_vector'] = np.concatenate((self.noise['w'], self.noise['v']))
+        self.noise['enhanced_vector'] = np.random.default_rng().multivariate_normal(np.zeros(len(self.architecture['C']['active']) + self.dynamics['number_of_nodes']), self.noise['enhanced_noise_covariance'])
 
     def available_choices(self, algorithm, fixed_architecture=None):
         choices = []
@@ -242,23 +232,29 @@ class System:
 
         self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
 
-    def optimal_feedback_control_gain(self):
-        self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.dynamics['A']
+    # def optimal_feedback_control_gain(self):
+    #     self.architecture['B']['gain'] = np.linalg.inv(self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.architecture['B']['matrix'] + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'] @ self.dynamics['A']
 
-    def optimal_feedback_estimation_gain(self):
-        self.architecture['C']['gain'] = self.trajectory['E'] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'])
+    # def optimal_feedback_estimation_gain(self):
+    #     self.architecture['C']['gain'] = self.trajectory['E'] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1'])
 
     def optimal_control_feedback_wrapper(self):
-        self.trajectory['P'] = scp.linalg.solve_discrete_are(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
+        self.architecture['B']['gain'], self.trajectory['P'], eval = control.dlqr(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
+        # self.trajectory['P'] = scp.linalg.solve_discrete_are(self.dynamics['A'], self.architecture['B']['matrix'], self.architecture['B']['cost']['Q'], self.architecture['B']['cost']['R1_active'])
+        print(eval)
         if np.min(np.linalg.eigvals(self.trajectory['P'])) < 0:
+            print(np.linalg.eigvals(self.trajectory['P']))
             raise Exception('Invalid P')
-        self.optimal_feedback_control_gain()
+        # self.optimal_feedback_control_gain()
 
     def optimal_estimation_feedback_wrapper(self):
-        self.trajectory['E'] = scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1'])
+        self.architecture['C']['gain'], self.trajectory['E'], eval = control.dlqe(self.dynamics['A'], np.identity(self.dynamics['number_of_nodes']), self.architecture['C']['matrix'], self.additive['W'], self.additive['V_active'])
+        # self.trajectory['E'] = scp.linalg.solve_discrete_are(self.dynamics['A'].T, self.architecture['C']['matrix'].T, self.architecture['C']['cost']['Q'], self.architecture['C']['cost']['R1'])
+        print(eval)
         if np.min(np.linalg.eigvals(self.trajectory['E'])) < 0:
+            print(np.linalg.eigvals(self.trajectory['E']))
             raise Exception('Invalid E')
-        self.optimal_feedback_estimation_gain()
+        # self.optimal_feedback_estimation_gain()
 
     def enhanced_lyapunov_control_cost(self):
         self.trajectory['cost']['control'] = 0
