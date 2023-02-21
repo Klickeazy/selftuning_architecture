@@ -1,9 +1,22 @@
 import greedy_architecture_combined as gac
+import shelve
 import numpy as np
 from copy import deepcopy as dc
 import control
 
-# S = gac.System(graph_model={'number_of_nodes': 5, 'rho': 5}, architecture={'rand': 2})
+# S = gac.System(graph_model={'number_of_nodes': 5, 'rho': 1.05}, architecture={'rand': 2})
+# S.feedback_computations()
+# S.enhanced_system_matrix()
+# S.enhanced_lyapunov_control_cost()
+# print(S.trajectory['cost']['predicted'])
+# S.cost_wrapper_enhanced_prediction()
+# print(S.trajectory['cost']['predicted'])
+
+# for k in S.dynamics['enhanced']:
+#     print(k)
+# print(len(S.dynamics['enhanced_stage_cost']))
+# print(len(S.noise['enhanced_noise_matrix']))
+
 # S.gramian_wrapper()
 # S.optimal_control_feedback_wrapper()
 # S.optimal_estimation_feedback_wrapper()
@@ -69,18 +82,37 @@ import control
 #     #     raise Exception('Check exception')
 # print('Count:', count)
 
-n = 10
-rho = 5
-n_count = []
-for i in range(0, 1000):
-    print('i:', i)
-    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': 1})
-    S.gramian_wrapper()
-    # print(S.dynamics['A'])
-    n_count.append(S.dynamics['n_unstable'])
-    # print('n_unstable:', S.dynamics['n_unstable'])
-    S.optimal_control_feedback_wrapper()
-    S.optimal_estimation_feedback_wrapper()
-print(np.histogram(n_count, bins=np.arange(start=0, stop=n+1, step=1, dtype=int)))
+# n = 10
+# rho = 5
+# n_count = []
+# for i in range(0, 1000):
+#     print('i:', i)
+#     S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': 1})
+#     S.gramian_wrapper()
+#     # print(S.dynamics['A'])
+#     n_count.append(S.dynamics['n_unstable'])
+#     # print('n_unstable:', S.dynamics['n_unstable'])
+#     S.feedback_computations()
+# print(np.histogram(n_count, bins=np.arange(start=0, stop=n+1, step=1, dtype=int)))
 # print(n_edges)
+
+print('\n Data reading')
+try:
+    shelve_data = shelve.open('DataDumps/comparison_fixed_vs_selftuning_n50_rho1.1')
+except (FileNotFoundError, IOError):
+    raise Exception('test file not found')
+
+S_fixed = shelve_data['Fixed']
+S_tuning = shelve_data['SelfTuning']
+shelve_data.close()
+
+if not isinstance(S_tuning, gac.System) or not isinstance(S_fixed, gac.System):
+    raise Exception('Data type mismatch')
+
+print('\n Plotting')
+S_tuning.plot_architecture_history()
+S_fixed.plot_trajectory_history()
+S_tuning.plot_trajectory_history()
+gac.cost_plots([S_fixed.trajectory['cost']['true'], S_tuning.trajectory['cost']['true']], S_tuning.model_name)
+
 print('Done')
