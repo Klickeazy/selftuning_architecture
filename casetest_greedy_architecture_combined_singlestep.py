@@ -49,9 +49,9 @@ if __name__ == "__main__":
     # for k in greedy['value_history']:
     #     print(k)
 
-    greedy = gac.greedy_simultaneous(S, iterations=None, changes_per_iteration=1)#, status_check=True)
-    gac.simultaneous_cost_plot(greedy['value_history'])
-
-    # for i in greedy['value_history']:
-    #     print(i)
-    greedy['work_set'].display_active_architecture()
+    # greedy = gac.greedy_simultaneous(S, iterations=None, changes_per_iteration=1)#, status_check=True)
+    # gac.simultaneous_cost_plot(greedy['value_history'])
+    #
+    # # for i in greedy['value_history']:
+    # #     print(i)
+    # greedy['work_set'].display_active_architecture()

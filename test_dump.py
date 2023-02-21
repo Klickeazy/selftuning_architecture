@@ -5,6 +5,13 @@ from copy import deepcopy as dc
 import control
 
 # S = gac.System(graph_model={'number_of_nodes': 5, 'rho': 1.05}, architecture={'rand': 2})
+# print(S.architecture['B']['set'])
+# # print(S.architecture['C']['set'])
+#
+# S.architecture['C']['active'] = [0, 2, 4]
+# S.architecture_active_to_matrix()
+# print(S.architecture['C']['matrix'])
+
 # S.feedback_computations()
 # S.enhanced_system_matrix()
 # S.enhanced_lyapunov_control_cost()
@@ -96,6 +103,10 @@ import control
 # print(np.histogram(n_count, bins=np.arange(start=0, stop=n+1, step=1, dtype=int)))
 # print(n_edges)
 
+
+
+
+# Plot from data dump code
 print('\n Data reading')
 try:
     shelve_data = shelve.open('DataDumps/comparison_fixed_vs_selftuning_n50_rho1.1')
