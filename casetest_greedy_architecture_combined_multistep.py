@@ -6,8 +6,8 @@ import shelve
 if __name__ == "__main__":
     n = 50
     rho = 1.05
-    S = gac.System(graph_model={'type': 'ER', 'number_of_nodes': n, 'rho': rho}, architecture={'rand': 5})
-    S.simulation_parameters = {'T_sim': 200, 'T_predict': 10}
+    S = gac.System(graph_model={'type': 'ER', 'number_of_nodes': n, 'rho': rho}, architecture={'rand': 10})
+    S.simulation_parameters = {'T_sim': 200, 'T_predict': 20}
     S.architecture['B']['max'] = 20
     S.architecture['C']['max'] = 20
     T_sim = dc(S.simulation_parameters['T_sim'])
