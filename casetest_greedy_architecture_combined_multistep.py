@@ -7,7 +7,7 @@ if __name__ == "__main__":
     n = 50
     rho = 1.05
     S = gac.System(graph_model={'type': 'ER', 'number_of_nodes': n, 'rho': rho}, architecture={'rand': 10})
-    S.simulation_parameters = {'T_sim': 200, 'T_predict': 20}
+    S.simulation_parameters = {'T_sim': 200, 'T_predict': 30}
     S.architecture['B']['max'] = 20
     S.architecture['C']['max'] = 20
     T_sim = dc(S.simulation_parameters['T_sim'])
@@ -33,6 +33,9 @@ if __name__ == "__main__":
 
     print('\n\n Data shelving')
     shelve_data = shelve.open('DataDumps/comparison_fixed_vs_selftuning_n'+str(n)+'_rho'+str(rho))
+    for k in ['System', 'Fixed', 'SelfTuning']:
+        if k in shelve_data:
+            del shelve_data[k]
     shelve_data['System'] = S
     shelve_data['Fixed'] = S_fixed
     shelve_data['SelfTuning'] = S_tuning

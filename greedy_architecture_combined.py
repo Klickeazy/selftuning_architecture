@@ -268,9 +268,6 @@ class System:
         estimate_vector = np.concatenate((self.trajectory['x_estimate'][-1], self.trajectory['x_estimate'][-1]))
         self.trajectory['cost']['control'] += np.squeeze(estimate_vector.T @ self.trajectory['P_enhanced'][0] @ estimate_vector)
 
-    # def enhanced_scipylyapunov_wrapper(self):
-    #     self.trajectory['P_enhanced'] = scipy.linalg.solve_discrete_lyapunov(self.dynamics['enhanced'], self.dynamics['enhanced_stage_cost'])
-
     def enhanced_stage_control_cost(self):
         self.trajectory['cost']['stage'] = np.squeeze(self.trajectory['enhanced'][-1].T @ self.dynamics['enhanced_stage_cost'][0] @ self.trajectory['enhanced'][-1])
 
@@ -304,9 +301,6 @@ class System:
                 raise Exception('Check Metric for Type 2 - Running Costs')
 
     def cost_wrapper_enhanced_prediction(self):
-        # self.architecture_active_to_matrix()
-        # self.optimal_estimation_feedback_matrix()
-        # self.optimal_control_feedback_matrix()
         self.feedback_computations()
         self.architecture_costs()
         self.enhanced_system_matrix()
@@ -318,9 +312,6 @@ class System:
             self.trajectory['cost']['predicted'][-1] += self.trajectory['cost'][i]
 
     def cost_wrapper_enhanced_true(self):
-        # self.architecture_active_to_matrix()
-        # self.optimal_estimation_feedback_matrix()
-        # self.optimal_control_feedback_matrix()
         self.feedback_computations()
         self.architecture_costs()
         self.enhanced_system_matrix()
@@ -500,7 +491,7 @@ class System:
         fig.suptitle(self.model_name)
         # ax_Bhist.set_xticks(labels=None)
         if f_name is None:
-            f_name = "images/"+self.model_name+"_architecture_history.png"
+            f_name = "Images/"+self.model_name+"_architecture_history.png"
         plt.savefig(f_name)
         plt.show()
 
@@ -771,33 +762,32 @@ def cost_plots(cost, f_name=None):
     ax_cost.legend()
     ax_cost.set_title('Cost comparison')
     if f_name is None:
-        f_name = "images/cost_trajectory.png"
+        f_name = "Images/cost_trajectory.png"
     else:
-        f_name = "images/"+f_name+"_cost_trajectory.png"
+        f_name = "Images/"+f_name+"_cost_trajectory.png"
     plt.savefig(f_name)
     plt.show()
 
 
-def trajectory_plots(state_traj, error_traj, f_name=None):
+def trajectory_plots(state_trajectory, error_trajectory, f_name=None):
     fig = plt.figure(figsize=(6, 4), )
     grid = fig.add_gridspec(2, 1)
     clr = {'fixed': 'C0', 'tuning': 'C1'}
     ax_error = fig.add_subplot(grid[0, 0])
     ax_state = fig.add_subplot(grid[1, 0], sharex=ax_error)
-    for k in error_traj:
-        ax_error.plot(range(0, len(error_traj[k])), error_traj[k], label=k, color=clr[k])
-        for i in range(0, len(state_traj[k][0])):
-            x = [state_traj[k][t][i] for t in range(0, len(state_traj[k]))]
+    for k in error_trajectory:
+        ax_error.plot(range(0, len(error_trajectory[k])), error_trajectory[k], label=k, color=clr[k])
+        for i in range(0, len(state_trajectory[k][0])):
+            x = [state_trajectory[k][t][i] for t in range(0, len(state_trajectory[k]))]
             ax_state.plot(range(0, len(x)), x, color=clr[k], alpha=0.2)
     ax_state.set_ylabel('State')
-    ax_error.set_ylabel('Error Norm')
+    ax_error.set_ylabel('Norm Estimation Error')
     ax_error.set_xlabel('time')
     ax_error.legend()
-    ax_error.set_title('Error Trajectory')
+    # ax_error.set_title('Error Trajectory')
     fig.suptitle('Trajectory comparison: ' + f_name)
-    plt.savefig("images/" + f_name + "_trajectory.png")
+    plt.savefig("Images/" + f_name + "_state_error_trajectory.png")
     plt.show()
-
 
 
 if __name__ == "__main__":

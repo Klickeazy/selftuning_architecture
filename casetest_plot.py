@@ -8,6 +8,10 @@ try:
 except (FileNotFoundError, IOError):
     raise Exception('test file not found')
 
+for k in ['System', 'Fixed', 'SelfTuning']:
+    if k not in shelve_data:
+        raise Exception('Check data file')
+
 S = shelve_data['System']
 S_fixed = shelve_data['Fixed']
 S_tuning = shelve_data['SelfTuning']
