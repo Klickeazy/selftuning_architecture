@@ -53,10 +53,11 @@ class System:
                            'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
                            'P': {}, 'E': {}, 'P_hist': [], 'E_hist': [], 'Z': []}
         self.trajectory['E_hist'].append(self.trajectory['X0'])
-        self.additive = {'W': 2*np.identity(self.dynamics['number_of_nodes']),
-                         'V': 2*np.identity(self.dynamics['number_of_nodes'])}
+        self.additive = {'W': np.identity(self.dynamics['number_of_nodes']),
+                         'V': np.identity(self.dynamics['number_of_nodes'])}
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
+        self.noise_gen()
         self.initialize_architecture(architecture)
         # self.architecture['C']['cost']['R1'] = self.additive['V']
         self.architecture['C']['cost']['Q'] = self.additive['W']
@@ -98,8 +99,8 @@ class System:
         architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
                               'cost': {'Q': np.identity(self.dynamics['number_of_nodes']),
                                        'R1': np.identity(self.dynamics['number_of_nodes']),
-                                       'R2': 1,
-                                       'R3': 1},
+                                       'R2': 0,
+                                       'R3': 0},
                               'active': [],
                               'matrix': np.zeros_like(self.dynamics['A']),
                               'indicator': np.zeros(self.dynamics['number_of_nodes']),
@@ -198,7 +199,8 @@ class System:
         self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1], ord=1))
 
     def noise_gen(self):
-        self.noise['enhanced_vector'] = np.random.default_rng().multivariate_normal(np.zeros(len(self.architecture['C']['active']) + self.dynamics['number_of_nodes']), self.noise['enhanced_noise_covariance'])
+        self.noise['block_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V'])
+        self.noise['noise_sim'] = np.random.default_rng().multivariate_normal(np.zeros(2*self.dynamics['number_of_nodes']), self.noise['block_noise_covariance'], self.simulation_parameters['T_sim']+1)
 
     def available_choices(self, algorithm, fixed_architecture=None):
         choices = []
@@ -221,8 +223,9 @@ class System:
     def enhanced_system_matrix(self):
         self.dynamics['A_enhanced'] = {}
         self.dynamics['enhanced_stage_cost'] = {}
+        active = [self.dynamics['number_of_nodes'] + i for i in self.architecture['C']['active']] + [i for i in range(0,self.dynamics['number_of_nodes'])]
+        self.noise['enhanced_noise_covariance'] = self.noise['block_noise_covariance'][active, :][:, active]
         self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
-        self.noise['enhanced_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V_active'])
         self.noise['enhanced_noise_matrix'] = {}
         self.noise['enhanced_noise_expectation'] = {}
 
@@ -279,9 +282,10 @@ class System:
     def enhanced_stage_control_cost(self):
         self.trajectory['cost']['stage'] = np.squeeze(self.trajectory['X_enhanced'][-1].T @ self.dynamics['enhanced_stage_cost'][0] @ self.trajectory['X_enhanced'][-1])
 
-    def system_one_step_update_enhanced(self):
-        self.noise_gen()
-        self.trajectory['X_enhanced'].append((self.dynamics['A_enhanced'][0] @ self.trajectory['X_enhanced'][-1]) + (self.noise['enhanced_noise_matrix'][0] @ self.noise['enhanced_vector']))
+    def system_one_step_update_enhanced(self, t):
+        active = [self.dynamics['number_of_nodes']+i for i in self.architecture['C']['active']] + [i for i in range(0, self.dynamics['number_of_nodes'])]
+        noise = self.noise['noise_sim'][t][active]
+        self.trajectory['X_enhanced'].append((self.dynamics['A_enhanced'][0] @ self.trajectory['X_enhanced'][-1]) + (self.noise['enhanced_noise_matrix'][0] @ noise))
         self.trajectory['x'].append(self.trajectory['X_enhanced'][-1][0:self.dynamics['number_of_nodes']])
         self.trajectory['x_estimate'].append(self.trajectory['X_enhanced'][-1][self.dynamics['number_of_nodes']:])
         self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=1))
@@ -459,6 +463,7 @@ class System:
                 C_list[i, t] = 1
                 # C_hist[i] += 1
         ax_B.imshow(B_list)
+        # for i in B_list[:, 0]:
         ax_C.imshow(C_list)
         # ax_Bhist.barh(range(0, self.dynamics['number_of_nodes']), B_hist)
         # ax_Chist.barh(range(0, self.dynamics['number_of_nodes']), C_hist)

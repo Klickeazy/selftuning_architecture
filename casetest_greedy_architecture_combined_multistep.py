@@ -6,13 +6,19 @@ import shelve
 
 if __name__ == "__main__":
     n = 30
-    rho = 1.05
+    rho = 1.1
     Tp = 30
+    n_arch = 2
 
-    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': 3}, simulation_parameters={'T_sim': 50, 'T_predict': Tp})
-    S.architecture['B']['max'] = n
-    S.architecture['C']['max'] = n
+    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, simulation_parameters={'T_sim': 50, 'T_predict': Tp})
+    S.architecture['B']['max'] = n_arch
+    S.architecture['C']['max'] = n_arch
+    S.architecture['B']['min'] = n_arch
+    S.architecture['C']['min'] = n_arch
     T_sim = dc(S.simulation_parameters['T_sim'])+1
+
+    for i in range(0, T_sim, 5):
+        S.noise['noise_sim'][i][np.random.choice(2*n, 5)] = 20
 
     print('Model: ', S.model_name)
 
@@ -22,7 +28,7 @@ if __name__ == "__main__":
     for t in range(0, T_sim):
         print("\r t:" + str(t), end="")
         S_fixed.cost_wrapper_enhanced_true()
-        S_fixed.system_one_step_update_enhanced()
+        S_fixed.system_one_step_update_enhanced(t)
 
     print('\n Self-Tuning architecture')
     S_tuning = dc(S)
@@ -30,7 +36,7 @@ if __name__ == "__main__":
     for t in range(0, T_sim):
         print("\r t:" + str(t), end="")
         S_tuning.cost_wrapper_enhanced_true()
-        S_tuning.system_one_step_update_enhanced()
+        S_tuning.system_one_step_update_enhanced(t)
         S_tuning = dc(gac.greedy_simultaneous(S_tuning, iterations=1, changes_per_iteration=1)['work_set'])
 
     print('\n\n Data shelving')
