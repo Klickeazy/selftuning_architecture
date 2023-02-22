@@ -31,7 +31,7 @@ matplotlib.rcParams['savefig.format'] = 'pdf'
 
 
 class System:
-    def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None):
+    def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
         self.dynamics = {}
         default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1}
         if graph_model is None:
@@ -40,14 +40,18 @@ class System:
             if key not in graph_model:
                 graph_model[key] = default_graph_model[key]
         self.graph_initialize(graph_model)
-        self.model_name = "model_n"+str(self.dynamics['number_of_nodes'])+"_rho"+str(np.round(self.dynamics['rho'], decimals=3))
         self.architecture = {'B': {}, 'C': {}}
         self.metric_model = {'type1': 'x', 'type2': 'scalar', 'type3': 'scalar'}
         self.simulation_parameters = {'T_sim': 200, 'T_predict': 30}
+        if simulation_parameters is not None:
+            for k in self.simulation_parameters:
+                if k in simulation_parameters:
+                    self.simulation_parameters[k] = simulation_parameters[k]
+        self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho"+str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict'])
         self.trajectory = {'X0': 10*np.identity(self.dynamics['number_of_nodes']),
-                           'x': [], 'x_estimate': [], 'enhanced': [], 'u': [], 'error': [],
+                           'x': [], 'x_estimate': [], 'X_enhanced': [], 'u': [], 'error': [],
                            'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
-                           'P': {}, 'E': {}, 'P_hist': [], 'E_hist': [], 'P_enhanced': []}
+                           'P': {}, 'E': {}, 'P_hist': [], 'E_hist': [], 'Z': []}
         self.trajectory['E_hist'].append(self.trajectory['X0'])
         self.additive = {'W': 2*np.identity(self.dynamics['number_of_nodes']),
                          'V': 2*np.identity(self.dynamics['number_of_nodes'])}
@@ -190,7 +194,7 @@ class System:
                 self.trajectory[key].append(initial_conditions[key])
             else:
                 self.trajectory[key].append(np.squeeze(np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.trajectory['X0'], 1).T))
-        self.trajectory['enhanced'].append(np.squeeze(np.concatenate((self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]))))
+        self.trajectory['X_enhanced'].append(np.squeeze(np.concatenate((self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]))))
         self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1], ord=1))
 
     def noise_gen(self):
@@ -215,18 +219,19 @@ class System:
         return choices
 
     def enhanced_system_matrix(self):
-        self.dynamics['enhanced'] = {}
+        self.dynamics['A_enhanced'] = {}
         self.dynamics['enhanced_stage_cost'] = {}
         self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
         self.noise['enhanced_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V_active'])
         self.noise['enhanced_noise_matrix'] = {}
         self.noise['enhanced_noise_expectation'] = {}
 
-        for t in range(0, self.simulation_parameters['T_predict']):
+        T = self.simulation_parameters['T_predict']
+        for t in range(0, T+1):
             BK = self.architecture['B']['matrix'] @ self.architecture['B']['gain'][t]
             LC = self.architecture['C']['gain'][t] @ self.architecture['C']['matrix']
             ALC = LC @ self.dynamics['A']
-            self.dynamics['enhanced'][t] = np.block([
+            self.dynamics['A_enhanced'][t] = np.block([
                 [self.dynamics['A'], -BK],
                 [ALC, self.dynamics['A'] - BK - ALC]])
 
@@ -239,43 +244,46 @@ class System:
             self.dynamics['enhanced_stage_cost'][t] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], self.architecture['B']['gain'][t].T @ self.architecture['B']['cost']['R1_active'] @ self.architecture['B']['gain'][t])
 
     def feedback_computations(self):
-        self.trajectory['P'] = {self.simulation_parameters['T_predict']: self.architecture['B']['cost']['Q']}
+        T = self.simulation_parameters['T_predict']
+        self.trajectory['P'] = {T+1: self.architecture['B']['cost']['Q']}
         self.trajectory['E'] = {0: self.trajectory['E_hist'][-1]}
         self.architecture['B']['gain'] = {}
         self.architecture['C']['gain'] = {}
-        T = self.simulation_parameters['T_predict']
-        for t in range(0, T):
-            self.architecture['B']['gain'][T-t-1] = np.linalg.inv((self.architecture['B']['matrix'].T @ self.trajectory['P'][T-t] @ self.architecture['B']['matrix']) + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'][T-t] @ self.dynamics['A']
+        for t in range(T, -1, -1):
+            self.architecture['B']['gain'][t] = np.linalg.inv((self.architecture['B']['matrix'].T @ self.trajectory['P'][t+1] @ self.architecture['B']['matrix']) + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'][t+1] @ self.dynamics['A']
 
-            self.trajectory['P'][T-t-1] = (self.dynamics['A'].T @ self.trajectory['P'][T-t] @ self.dynamics['A']) - (self.dynamics['A'] @ self.trajectory['P'][T-t] @ self.architecture['B']['matrix'] @ self.architecture['B']['gain'][T-t-1]) + self.architecture['B']['cost']['Q']
-            if np.min(np.linalg.eigvals(self.trajectory['P'][T-t-1])) < 0:
+            self.trajectory['P'][t] = (self.dynamics['A'].T @ self.trajectory['P'][t+1] @ self.dynamics['A']) - (self.dynamics['A'] @ self.trajectory['P'][t+1] @ self.architecture['B']['matrix'] @ self.architecture['B']['gain'][t]) + self.architecture['B']['cost']['Q']
+
+            if np.min(np.linalg.eigvals(self.trajectory['P'][t])) < 0:
                 raise Exception('Negative control cost eigenvalues')
 
-            self.architecture['C']['gain'][t] = self.trajectory['E'][t] @ self.architecture['C']['matrix'].T @ np.linalg.inv(self.architecture['C']['matrix'] @ self.trajectory['E'][t] @ self.architecture['C']['matrix'].T + self.architecture['C']['cost']['R1_active'])
+        for t in range(0, T+1):
+            self.architecture['C']['gain'][t] = self.trajectory['E'][t] @ self.architecture['C']['matrix'].T @ np.linalg.inv((self.architecture['C']['matrix'] @ self.trajectory['E'][t] @ self.architecture['C']['matrix'].T) + self.architecture['C']['cost']['R1_active'])
 
             self.trajectory['E'][t+1] = (self.dynamics['A'] @ self.trajectory['E'][t] @ self.dynamics['A'].T) - (self.dynamics['A'] @ self.architecture['C']['gain'][t] @ self.architecture['C']['matrix'] @ self.trajectory['E'][t] @ self.dynamics['A'].T) + self.architecture['C']['cost']['Q']
+
             if np.min(np.linalg.eigvals(self.trajectory['E'][t+1])) < 0:
                 raise Exception('Negative covariance eigenvalues')
 
     def enhanced_lyapunov_control_cost(self):
         T = self.simulation_parameters['T_predict']
-        self.trajectory['P_enhanced'] = {T: self.dynamics['enhanced_terminal_cost']}
-        self.trajectory['cost']['control'] = 0  # np.trace(self.trajectory['P_enhanced'][T] @ self.noise['enhanced_noise_expectation'][T-1])
-        for t in np.linspace(T-1, 0, T, dtype=int):
+        self.trajectory['Z'] = {T+1: self.dynamics['enhanced_terminal_cost']}
+        self.trajectory['cost']['control'] = 0  # np.trace(self.trajectory['Z'][T] @ self.noise['enhanced_noise_expectation'][T-1])
+        for t in range(T, -1, -1):
             # print(t+1)
-            self.trajectory['cost']['control'] += np.trace(self.trajectory['P_enhanced'][t+1] @ self.noise['enhanced_noise_expectation'][t])
-            self.trajectory['P_enhanced'][t] = self.dynamics['enhanced'][t].T @ self.trajectory['P_enhanced'][t+1] @ self.dynamics['enhanced'][t] + self.dynamics['enhanced_stage_cost'][t]
+            self.trajectory['cost']['control'] += np.trace(self.trajectory['Z'][t+1] @ self.noise['enhanced_noise_expectation'][t])
+            self.trajectory['Z'][t] = self.dynamics['A_enhanced'][t].T @ self.trajectory['Z'][t+1] @ self.dynamics['A_enhanced'][t] + self.dynamics['enhanced_stage_cost'][t]
         estimate_vector = np.concatenate((self.trajectory['x_estimate'][-1], self.trajectory['x_estimate'][-1]))
-        self.trajectory['cost']['control'] += np.squeeze(estimate_vector.T @ self.trajectory['P_enhanced'][0] @ estimate_vector)
+        self.trajectory['cost']['control'] += np.squeeze(estimate_vector.T @ self.trajectory['Z'][0] @ estimate_vector)
 
     def enhanced_stage_control_cost(self):
-        self.trajectory['cost']['stage'] = np.squeeze(self.trajectory['enhanced'][-1].T @ self.dynamics['enhanced_stage_cost'][0] @ self.trajectory['enhanced'][-1])
+        self.trajectory['cost']['stage'] = np.squeeze(self.trajectory['X_enhanced'][-1].T @ self.dynamics['enhanced_stage_cost'][0] @ self.trajectory['X_enhanced'][-1])
 
     def system_one_step_update_enhanced(self):
         self.noise_gen()
-        self.trajectory['enhanced'].append((self.dynamics['enhanced'][0] @ self.trajectory['enhanced'][-1]) + (self.noise['enhanced_noise_matrix'][0] @ self.noise['enhanced_vector']))
-        self.trajectory['x'].append(self.trajectory['enhanced'][-1][0:self.dynamics['number_of_nodes']])
-        self.trajectory['x_estimate'].append(self.trajectory['enhanced'][-1][self.dynamics['number_of_nodes']:])
+        self.trajectory['X_enhanced'].append((self.dynamics['A_enhanced'][0] @ self.trajectory['X_enhanced'][-1]) + (self.noise['enhanced_noise_matrix'][0] @ self.noise['enhanced_vector']))
+        self.trajectory['x'].append(self.trajectory['X_enhanced'][-1][0:self.dynamics['number_of_nodes']])
+        self.trajectory['x_estimate'].append(self.trajectory['X_enhanced'][-1][self.dynamics['number_of_nodes']:])
         self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=1))
 
     def architecture_costs(self):
@@ -290,7 +298,7 @@ class System:
             if self.metric_model['type2'] == 'matrix':
                 self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*np.squeeze(self.architecture[a]['indicator'].T @ self.architecture[a]['cost']['R2'] @ self.architecture[a]['indicator'])
             elif self.metric_model['type2'] == 'scalar':
-                self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R2'] * np.inner(self.architecture[a]['indicator'], self.architecture[a]['indicator'])
+                self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R2'] * np.linalg.norm(self.architecture[a]['indicator'], ord=1)
             else:
                 raise Exception('Check Metric for Type 2 - Running Costs')
             if self.metric_model['type3'] == 'matrix':
@@ -322,7 +330,7 @@ class System:
                 raise Exception('Negative cost: ', i)
             self.trajectory['cost']['true'][-1] += self.trajectory['cost'][i]
         self.trajectory['P_hist'].append(self.trajectory['P'][0])
-        self.trajectory['E_hist'].append(self.trajectory['E'][0])
+        self.trajectory['E_hist'].append(self.trajectory['E'][1])
 
     def gramian_wrapper(self):
         architecture_set = ['B', 'C']
@@ -347,28 +355,6 @@ class System:
             self.architecture['B']['gram'] = dc(g_mat)
         elif arch_type == 'C':
             self.architecture['C']['gram'] = dc(g_mat)
-
-        # c_g = np.zeros_like(self.dynamics['A'])
-        # c_gh = np.zeros_like(self.dynamics['A'])
-        # conv_check = False
-        # count = 0
-        # print('\n')
-        # while not conv_check:
-        #     print('\rcount:', count, end='')
-        #     A_pow = np.linalg.matrix_power(self.dynamics['A'], count)
-        #     AT_pow = np.linalg.matrix_power(self.dynamics['A'].T, count)
-        #     if arch_type == 'B':
-        #         c_g += (A_pow @ self.architecture['B']['matrix'] @ self.architecture['B']['matrix'].T @ AT_pow)
-        #     elif arch_type == 'C':
-        #         c_g += (AT_pow @ self.architecture['C']['matrix'].T @ self.architecture['C']['matrix'] @ A_pow)
-        #     conv_check = matrix_convergence_check(c_g, c_gh)
-        #     c_gh = dc(c_g)
-        #     count += 1
-        # print('\n')
-        # if arch_type == 'B':
-        #     self.architecture['B']['gram'] = dc(c_g)
-        # elif arch_type == 'C':
-        #     self.architecture['C']['gram'] = dc(c_g)
 
     def architecture_update_check(self):
         check = False

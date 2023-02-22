@@ -3,8 +3,14 @@ import greedy_architecture_combined as gac
 
 # Plot from data dump code
 print('\n Data reading')
+
+n = 30
+rho = 1.05
+Tp = 30
+
+shelve_file = 'DataDumps/comparison_fixed_vs_selftuning_model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)
 try:
-    shelve_data = shelve.open('DataDumps/comparison_fixed_vs_selftuning_n50_rho1.05')
+    shelve_data = shelve.open(shelve_file)
 except (FileNotFoundError, IOError):
     raise Exception('test file not found')
 
