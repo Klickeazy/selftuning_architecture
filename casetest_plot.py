@@ -4,8 +4,8 @@ import greedy_architecture_combined as gac
 # Plot from data dump code
 print('\n Data reading')
 
-n = 30
-rho = 1.1
+n = 50
+rho = 1.5
 Tp = 30
 
 shelve_file = 'DataDumps/comparison_fixed_vs_selftuning_model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)

@@ -99,8 +99,8 @@ class System:
         architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
                               'cost': {'Q': np.identity(self.dynamics['number_of_nodes']),
                                        'R1': np.identity(self.dynamics['number_of_nodes']),
-                                       'R2': 0,
-                                       'R3': 0},
+                                       'R2': 1,
+                                       'R3': 1},
                               'active': [],
                               'matrix': np.zeros_like(self.dynamics['A']),
                               'indicator': np.zeros(self.dynamics['number_of_nodes']),
@@ -196,7 +196,7 @@ class System:
             else:
                 self.trajectory[key].append(np.squeeze(np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.trajectory['X0'], 1).T))
         self.trajectory['X_enhanced'].append(np.squeeze(np.concatenate((self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]))))
-        self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1], ord=1))
+        self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1], ord=2))
 
     def noise_gen(self):
         self.noise['block_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V'])
@@ -288,7 +288,7 @@ class System:
         self.trajectory['X_enhanced'].append((self.dynamics['A_enhanced'][0] @ self.trajectory['X_enhanced'][-1]) + (self.noise['enhanced_noise_matrix'][0] @ noise))
         self.trajectory['x'].append(self.trajectory['X_enhanced'][-1][0:self.dynamics['number_of_nodes']])
         self.trajectory['x_estimate'].append(self.trajectory['X_enhanced'][-1][self.dynamics['number_of_nodes']:])
-        self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=1))
+        self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=2))
 
     def architecture_costs(self):
         self.trajectory['cost']['running'] = 0
@@ -684,11 +684,11 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
         if status_check:
             print('\nSwap\n')
         sys_swap = dc(work_iteration)
-        sys_swap.architecture_limit_modifier(min_mod=1, max_mod=1)
+        sys_swap.architecture_limit_modifier(min_mod=changes_per_iteration, max_mod=changes_per_iteration)
         sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=False, status_check=status_check)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
         # print('1:', sys_swap.trajectory['cost']['predicted'][-1])
-        sys_swap.architecture_limit_modifier(min_mod=-1, max_mod=-1)
+        sys_swap.architecture_limit_modifier(min_mod=-changes_per_iteration, max_mod=-changes_per_iteration)
         sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, status_check=status_check)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
         # print('2:', sys_swap.trajectory['cost']['predicted'][-1])

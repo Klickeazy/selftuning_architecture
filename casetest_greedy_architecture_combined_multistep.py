@@ -5,18 +5,26 @@ from copy import deepcopy as dc
 import shelve
 
 if __name__ == "__main__":
-    n = 30
-    rho = 1.1
+    n = 50
+    rho = 1.5
     Tp = 30
     n_arch = 2
 
     S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, simulation_parameters={'T_sim': 50, 'T_predict': Tp})
+
     S.architecture['B']['max'] = n_arch
     S.architecture['C']['max'] = n_arch
     S.architecture['B']['min'] = n_arch
     S.architecture['C']['min'] = n_arch
+
+    S.architecture['B']['cost']['R2'] = 0
+    S.architecture['C']['cost']['R2'] = 0
+    S.architecture['B']['cost']['R3'] = 0
+    S.architecture['C']['cost']['R3'] = 0
+
     T_sim = dc(S.simulation_parameters['T_sim'])+1
 
+    # Simulating large disturbances at particular nodes
     for i in range(0, T_sim, 5):
         S.noise['noise_sim'][i][np.random.choice(2*n, 5)] = 20
 
