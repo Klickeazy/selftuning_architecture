@@ -449,51 +449,51 @@ class System:
     #     plt.savefig("images/"+self.model_name+"_trajectory.png")
     #     plt.show()
 
-    def plot_architecture_history(self, f_name=None):
-        # fig = plt.figure(figsize=(6, 4))
-        fig = plt.figure()
-        grid = fig.add_gridspec(2, 1)
-        # grid = fig.add_gridspec(2, 2)
-        ax_B = fig.add_subplot(grid[0, 0])
-        ax_C = fig.add_subplot(grid[1, 0], sharex=ax_B)
-        # ax_Bhist = fig.add_subplot(grid[0, 1], sharey=ax_B)
-        # ax_Chist = fig.add_subplot(grid[1, 1], sharex=ax_Bhist, sharey=ax_C)
-        # B_hist = np.zeros(self.dynamics['number_of_nodes'])
-        # C_hist = np.zeros(self.dynamics['number_of_nodes'])
-        B_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['B']['history'])))
-        C_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['history'])))
-        for t in range(0, len(self.architecture['B']['history'])):
-            for i in self.architecture['B']['history'][t]:
-                B_list[i, t] = 1
-                # B_hist[i] += 1
-            for i in self.architecture['C']['history'][t]:
-                C_list[i, t] = 1
-                # C_hist[i] += 1
-        ax_B.imshow(B_list)
-        # for i in B_list[:, 0]:
-        ax_C.imshow(C_list)
-        # ax_Bhist.barh(range(0, self.dynamics['number_of_nodes']), B_hist)
-        # ax_Chist.barh(range(0, self.dynamics['number_of_nodes']), C_hist)
-        ax_B.set_ylim(0, self.dynamics['number_of_nodes']+1)
-        ax_C.set_ylim(0, self.dynamics['number_of_nodes']+1)
-        ax_B.set_ylabel('Actuator ID/Node')
-        ax_C.set_ylabel('Sensor ID/Node')
-        ax_C.set_xlabel('Time')
-        ax_B.set_title('B')
-        ax_C.set_title('C')
-        # ax_Chist.set_xlabel('Number of uses')
-        ax_B.set_title('Actuator Architecture History')
-        ax_C.set_title('Sensor Architecture History')
-        ax_B.tick_params(axis="x", labelbottom=False)
-        # ax_Bhist.tick_params(axis="x", labelbottom=False)
-        fig.suptitle(self.model_name)
-        # ax_Bhist.set_xticks(labels=None)
-        if f_name is None:
-            f_name = "Images/"+self.model_name+"_architecture_history.png"
-        plt.savefig(f_name)
-        plt.show()
+    # def plot_architecture_history(self, f_name=None):
+    #     # fig = plt.figure(figsize=(6, 4))
+    #     fig = plt.figure()
+    #     grid = fig.add_gridspec(2, 1)
+    #     # grid = fig.add_gridspec(2, 2)
+    #     ax_B = fig.add_subplot(grid[0, 0])
+    #     ax_C = fig.add_subplot(grid[1, 0], sharex=ax_B)
+    #     # ax_Bhist = fig.add_subplot(grid[0, 1], sharey=ax_B)
+    #     # ax_Chist = fig.add_subplot(grid[1, 1], sharex=ax_Bhist, sharey=ax_C)
+    #     # B_hist = np.zeros(self.dynamics['number_of_nodes'])
+    #     # C_hist = np.zeros(self.dynamics['number_of_nodes'])
+    #     B_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['B']['history'])))
+    #     C_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['history'])))
+    #     for t in range(0, len(self.architecture['B']['history'])):
+    #         for i in self.architecture['B']['history'][t]:
+    #             B_list[i, t] = 1
+    #             # B_hist[i] += 1
+    #         for i in self.architecture['C']['history'][t]:
+    #             C_list[i, t] = 1
+    #             # C_hist[i] += 1
+    #     ax_B.imshow(B_list)
+    #     # for i in B_list[:, 0]:
+    #     ax_C.imshow(C_list)
+    #     # ax_Bhist.barh(range(0, self.dynamics['number_of_nodes']), B_hist)
+    #     # ax_Chist.barh(range(0, self.dynamics['number_of_nodes']), C_hist)
+    #     ax_B.set_ylim(0, self.dynamics['number_of_nodes']+1)
+    #     ax_C.set_ylim(0, self.dynamics['number_of_nodes']+1)
+    #     ax_B.set_ylabel('Actuator ID/Node')
+    #     ax_C.set_ylabel('Sensor ID/Node')
+    #     ax_C.set_xlabel('Time')
+    #     ax_B.set_title('B')
+    #     ax_C.set_title('C')
+    #     # ax_Chist.set_xlabel('Number of uses')
+    #     ax_B.set_title('Actuator Architecture History')
+    #     ax_C.set_title('Sensor Architecture History')
+    #     ax_B.tick_params(axis="x", labelbottom=False)
+    #     # ax_Bhist.tick_params(axis="x", labelbottom=False)
+    #     fig.suptitle(self.model_name)
+    #     # ax_Bhist.set_xticks(labels=None)
+    #     if f_name is None:
+    #         f_name = "Images/"+self.model_name+"_architecture_history.png"
+    #     plt.savefig(f_name)
+    #     plt.show()
 
-    def plot_architecture_history2(self, f_name=None):
+    def plot_architecture_history(self, f_name=None):
         fig = plt.figure()
         grid = fig.add_gridspec(2, 1)
         ax_B = fig.add_subplot(grid[0, 0])
@@ -509,16 +509,21 @@ class System:
                 C_list['active'].append(i)
                 C_list['time'].append(t)
 
-        ax_B.scatter(B_list['time'], B_list['active'])
-        ax_C.scatter(C_list['time'], C_list['active'])
+        for i in self.architecture['B']['history'][0]:
+            ax_B.axhline(i, c='C0', linewidth=2, alpha=0.5)
+        for i in self.architecture['C']['history'][0]:
+            ax_C.axhline(i, c='C0', linewidth=2, alpha=0.5)
+        ax_B.scatter(B_list['time'], B_list['active'], c='C1', alpha=0.5)
+        ax_C.scatter(C_list['time'], C_list['active'], c='C1', alpha=0.5)
 
+        ax_C.set_xlim(0, len(self.architecture['B']['history']))
         ax_B.set_title('Actuator Architecture History')
         ax_C.set_title('Sensor Architecture History')
         ax_B.tick_params(axis="x", labelbottom=False)
-        ax_C.set_xlabel('time')
+        ax_C.set_xlabel('Time')
         ax_B.set_ylabel('Node position')
         ax_C.set_ylabel('Node position')
-        fig.suptitle(self.model_name)
+        # fig.suptitle(self.model_name)
 
         if f_name is None:
             f_name = "Images/"+self.model_name+"_architecture_history.png"
@@ -786,10 +791,12 @@ def cost_plots(cost, f_name=None):
         for t in range(1, len(cost[i])):
             cumulative_cost.append(cumulative_cost[-1] + cost[i][t])
         ax_cost.plot(range(0, len(cumulative_cost)), cumulative_cost, label=i)
-    ax_cost.set_xlabel('time')
-    ax_cost.set_ylabel('cost')
+    ax_cost.set_xlabel('Time')
+    ax_cost.set_ylabel('Cost')
     ax_cost.set_yscale('log')
     ax_cost.legend()
+    # print([len(cost[i]) for i in cost])
+    ax_cost.set_xlim(0, max([len(cost[i]) for i in cost]))
     ax_cost.set_title('Cost comparison')
     if f_name is None:
         f_name = "Images/cost_trajectory.png"
@@ -814,8 +821,10 @@ def trajectory_plots(state_trajectory, error_trajectory, f_name=None):
     ax_error.set_ylabel('Norm Estimation Error')
     ax_error.set_xlabel('time')
     ax_error.legend()
+    ax_state.set_xlim(0, max([len(error_trajectory[k]) for k in error_trajectory]))
     # ax_error.set_title('Error Trajectory')
-    fig.suptitle('Trajectory comparison: ' + f_name)
+    # fig.suptitle('Trajectory comparison: ' + f_name)
+    fig.suptitle('Trajectory comparison')
     plt.savefig("Images/" + f_name + "_state_error_trajectory.png")
     plt.show()
 

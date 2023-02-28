@@ -21,13 +21,13 @@ if __name__ == "__main__":
     if not isinstance(S, gac.System):
         raise Exception('System model error')
 
-    print('Retrieved Model: ', S.model_name)
-
     # Optimal T_sim update:
     # S.simulation_parameters['T_predict'] = 30
     # S.model_rename()
 
+    print('Retrieved Model: ', S.model_name)
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
+
     # Simulating regular large disturbances at random nodes
     for i in range(0, T_sim, 10):
         S.noise['noise_sim'][i][np.random.choice(2*n, 5)] = 20

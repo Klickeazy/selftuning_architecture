@@ -10,7 +10,7 @@ if __name__ == "__main__":
     n = 50
     rho = 2
     Tp = 10
-    n_arch = 5
+    n_arch = 3
 
     S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
 
