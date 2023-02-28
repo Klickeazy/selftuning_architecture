@@ -47,7 +47,8 @@ class System:
             for k in self.simulation_parameters:
                 if k in simulation_parameters:
                     self.simulation_parameters[k] = simulation_parameters[k]
-        self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho"+str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict'])
+        self.model_name = ''
+        self.model_rename()
         self.trajectory = {'X0': 10*np.identity(self.dynamics['number_of_nodes']),
                            'x': [], 'x_estimate': [], 'X_enhanced': [], 'u': [], 'error': [],
                            'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
@@ -64,6 +65,12 @@ class System:
         # if additive is not None:
         #     self.initialize_additive_noise(additive)
         # self.enhanced_system_matrix()
+
+    def model_rename(self, new_name=None):
+        if new_name is None:
+            self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict'])
+        else:
+            self.model_name = new_name
 
     def graph_initialize(self, graph_model):
         connected_network_check = False
@@ -99,8 +106,8 @@ class System:
         architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
                               'cost': {'Q': np.identity(self.dynamics['number_of_nodes']),
                                        'R1': np.identity(self.dynamics['number_of_nodes']),
-                                       'R2': 1,
-                                       'R3': 1},
+                                       'R2': 0,
+                                       'R3': 0},
                               'active': [],
                               'matrix': np.zeros_like(self.dynamics['A']),
                               'indicator': np.zeros(self.dynamics['number_of_nodes']),
@@ -481,6 +488,38 @@ class System:
         # ax_Bhist.tick_params(axis="x", labelbottom=False)
         fig.suptitle(self.model_name)
         # ax_Bhist.set_xticks(labels=None)
+        if f_name is None:
+            f_name = "Images/"+self.model_name+"_architecture_history.png"
+        plt.savefig(f_name)
+        plt.show()
+
+    def plot_architecture_history2(self, f_name=None):
+        fig = plt.figure()
+        grid = fig.add_gridspec(2, 1)
+        ax_B = fig.add_subplot(grid[0, 0])
+        ax_C = fig.add_subplot(grid[1, 0], sharex=ax_B)
+
+        B_list = {'active': [], 'time': []}
+        C_list = {'active': [], 'time': []}
+        for t in range(0, len(self.architecture['B']['history'])):
+            for i in self.architecture['B']['history'][t]:
+                B_list['active'].append(i)
+                B_list['time'].append(t)
+            for i in self.architecture['C']['history'][t]:
+                C_list['active'].append(i)
+                C_list['time'].append(t)
+
+        ax_B.scatter(B_list['time'], B_list['active'])
+        ax_C.scatter(C_list['time'], C_list['active'])
+
+        ax_B.set_title('Actuator Architecture History')
+        ax_C.set_title('Sensor Architecture History')
+        ax_B.tick_params(axis="x", labelbottom=False)
+        ax_C.set_xlabel('time')
+        ax_B.set_ylabel('Node position')
+        ax_C.set_ylabel('Node position')
+        fig.suptitle(self.model_name)
+
         if f_name is None:
             f_name = "Images/"+self.model_name+"_architecture_history.png"
         plt.savefig(f_name)
