@@ -47,10 +47,8 @@ class System:
             for k in self.simulation_parameters:
                 if k in simulation_parameters:
                     self.simulation_parameters[k] = simulation_parameters[k]
-        self.model_name = ''
-        self.model_rename()
         self.trajectory = {'X0': 10*np.identity(self.dynamics['number_of_nodes']),
-                           'x': [], 'x_estimate': [], 'X_enhanced': [], 'u': [], 'error': [],
+                           'x': [], 'x_estimate': [], 'X_enhanced': [], 'u': [], 'error_2norm': [], 'error': [],
                            'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
                            'P': {}, 'E': {}, 'P_hist': [], 'E_hist': [], 'Z': []}
         self.trajectory['E_hist'].append(self.trajectory['X0'])
@@ -62,13 +60,15 @@ class System:
         self.initialize_architecture(architecture)
         # self.architecture['C']['cost']['R1'] = self.additive['V']
         self.architecture['C']['cost']['Q'] = self.additive['W']
+        self.model_name = ''
+        self.model_rename()
         # if additive is not None:
         #     self.initialize_additive_noise(additive)
         # self.enhanced_system_matrix()
 
     def model_rename(self, new_name=None):
         if new_name is None:
-            self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict'])
+            self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
         else:
             self.model_name = new_name
 
@@ -97,8 +97,14 @@ class System:
         self.dynamics['Adj'] = netx.to_numpy_array(G)
         if 'self_loop' not in graph_model or graph_model['self_loop']:
             self.dynamics['Adj'] += np.identity(self.dynamics['number_of_nodes'])
-        self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
-        self.dynamics['rho'] = graph_model['rho']
+        self.rescale_dynamics(graph_model['rho'])
+        # self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
+        # self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
+        # self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
+
+    def rescale_dynamics(self, rho):
+        self.dynamics['rho'] = rho
+        self.dynamics['A'] = self.dynamics['Adj'] * self.dynamics['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
         self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
         self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
 
@@ -203,7 +209,8 @@ class System:
             else:
                 self.trajectory[key].append(np.squeeze(np.random.default_rng().multivariate_normal(np.zeros(self.dynamics['number_of_nodes']), self.trajectory['X0'], 1).T))
         self.trajectory['X_enhanced'].append(np.squeeze(np.concatenate((self.trajectory['x'][-1], self.trajectory['x_estimate'][-1]))))
-        self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1], ord=2))
+        self.trajectory['error'].append(self.trajectory['x'][-1]-self.trajectory['x_estimate'][-1])
+        self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['error'][-1], ord=2))
 
     def noise_gen(self):
         self.noise['block_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V'])
@@ -295,7 +302,9 @@ class System:
         self.trajectory['X_enhanced'].append((self.dynamics['A_enhanced'][0] @ self.trajectory['X_enhanced'][-1]) + (self.noise['enhanced_noise_matrix'][0] @ noise))
         self.trajectory['x'].append(self.trajectory['X_enhanced'][-1][0:self.dynamics['number_of_nodes']])
         self.trajectory['x_estimate'].append(self.trajectory['X_enhanced'][-1][self.dynamics['number_of_nodes']:])
-        self.trajectory['error'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=2))
+        self.trajectory['error'].append(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1])
+        self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['error'][-1], ord=2))
+        # self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=2))
 
     def architecture_costs(self):
         self.trajectory['cost']['running'] = 0
@@ -437,98 +446,123 @@ class System:
         node_pos = netx.spring_layout(G, pos=node_pos, fixed=[str(i + 1) for i in range(0, self.dynamics['number_of_nodes'])])
         return {'G': G, 'pos': node_pos, 'node_color': nc}
 
-    # def plot_trajectory_history(self):
-    #     fig = plt.figure(figsize=(6, 4))
-    #     grid = fig.add_gridspec(1, 1)
-    #     ax_trajectory = fig.add_subplot(grid[0, 0])
-    #     ax_trajectory.plot(range(0, len(self.trajectory['error'])), self.trajectory['error'])
-    #     ax_trajectory.set_ylabel('Error Norm')
-    #     ax_trajectory.set_xlabel('time')
-    #     ax_trajectory.set_title('Error Trajectory')
-    #     fig.suptitle(self.model_name)
-    #     plt.savefig("images/"+self.model_name+"_trajectory.png")
-    #     plt.show()
+    def plot_architecture_history(self, f_name=None,  ax_in=None, plt_map=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(2, 1)
+            ax = {'B': fig.add_subplot(grid[0, 0])}
+            ax['C'] = fig.add_subplot(grid[1, 0], sharex=ax['B'])
+        else:
+            ax = ax_in
 
-    # def plot_architecture_history(self, f_name=None):
-    #     # fig = plt.figure(figsize=(6, 4))
-    #     fig = plt.figure()
-    #     grid = fig.add_gridspec(2, 1)
-    #     # grid = fig.add_gridspec(2, 2)
-    #     ax_B = fig.add_subplot(grid[0, 0])
-    #     ax_C = fig.add_subplot(grid[1, 0], sharex=ax_B)
-    #     # ax_Bhist = fig.add_subplot(grid[0, 1], sharey=ax_B)
-    #     # ax_Chist = fig.add_subplot(grid[1, 1], sharex=ax_Bhist, sharey=ax_C)
-    #     # B_hist = np.zeros(self.dynamics['number_of_nodes'])
-    #     # C_hist = np.zeros(self.dynamics['number_of_nodes'])
-    #     B_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['B']['history'])))
-    #     C_list = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['history'])))
-    #     for t in range(0, len(self.architecture['B']['history'])):
-    #         for i in self.architecture['B']['history'][t]:
-    #             B_list[i, t] = 1
-    #             # B_hist[i] += 1
-    #         for i in self.architecture['C']['history'][t]:
-    #             C_list[i, t] = 1
-    #             # C_hist[i] += 1
-    #     ax_B.imshow(B_list)
-    #     # for i in B_list[:, 0]:
-    #     ax_C.imshow(C_list)
-    #     # ax_Bhist.barh(range(0, self.dynamics['number_of_nodes']), B_hist)
-    #     # ax_Chist.barh(range(0, self.dynamics['number_of_nodes']), C_hist)
-    #     ax_B.set_ylim(0, self.dynamics['number_of_nodes']+1)
-    #     ax_C.set_ylim(0, self.dynamics['number_of_nodes']+1)
-    #     ax_B.set_ylabel('Actuator ID/Node')
-    #     ax_C.set_ylabel('Sensor ID/Node')
-    #     ax_C.set_xlabel('Time')
-    #     ax_B.set_title('B')
-    #     ax_C.set_title('C')
-    #     # ax_Chist.set_xlabel('Number of uses')
-    #     ax_B.set_title('Actuator Architecture History')
-    #     ax_C.set_title('Sensor Architecture History')
-    #     ax_B.tick_params(axis="x", labelbottom=False)
-    #     # ax_Bhist.tick_params(axis="x", labelbottom=False)
-    #     fig.suptitle(self.model_name)
-    #     # ax_Bhist.set_xticks(labels=None)
-    #     if f_name is None:
-    #         f_name = "Images/"+self.model_name+"_architecture_history.png"
-    #     plt.savefig(f_name)
-    #     plt.show()
+        if plt_map is None:
+            plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+                       'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+                       'marker': {'B': "+", 'C': "+"}}
 
-    def plot_architecture_history(self, f_name=None):
-        fig = plt.figure()
-        grid = fig.add_gridspec(2, 1)
-        ax_B = fig.add_subplot(grid[0, 0])
-        ax_C = fig.add_subplot(grid[1, 0], sharex=ax_B)
+        architecture_map = {'B': {'active': [], 'time': []}, 'C': {'active': [], 'time': []}}
+        T = len(self.architecture['B']['history'])
+        for a in ['B', 'C']:
+            for t in range(0, T):
+                for i in self.architecture[a]['history'][t]:
+                    architecture_map[a]['active'].append(i)
+                    architecture_map[a]['time'].append(t)
 
-        B_list = {'active': [], 'time': []}
-        C_list = {'active': [], 'time': []}
-        for t in range(0, len(self.architecture['B']['history'])):
-            for i in self.architecture['B']['history'][t]:
-                B_list['active'].append(i)
-                B_list['time'].append(t)
-            for i in self.architecture['C']['history'][t]:
-                C_list['active'].append(i)
-                C_list['time'].append(t)
+        for a in ['B', 'C']:
+            for i in self.architecture[a]['history'][0]:
+                ax[a].axhline(i, marker=plt_map['marker'][a], c=plt_map['fixed']['c'], linewidth=2, alpha=0.5, zorder=plt_map['fixed']['zorder'])
+            ax[a].scatter(architecture_map[a]['time'], architecture_map[a]['active'], marker=plt_map['marker'][a], s=3, c=plt_map['tuning']['c'], label=a, zorder=plt_map['fixed']['zorder'])
 
-        for i in self.architecture['B']['history'][0]:
-            ax_B.axhline(i, c='C0', linewidth=2, alpha=0.5)
-        for i in self.architecture['C']['history'][0]:
-            ax_C.axhline(i, c='C0', linewidth=2, alpha=0.5)
-        ax_B.scatter(B_list['time'], B_list['active'], c='C1', alpha=0.5)
-        ax_C.scatter(C_list['time'], C_list['active'], c='C1', alpha=0.5)
+        ax['B'].tick_params(axis="x", labelbottom=False)
+        ax['B'].set_ylabel('Nodes with \n Actuators ' + r'$(B_{S_t})$')
+        ax['C'].set_ylabel('Nodes with \n Sensors ' + r'$(C_{S_t})$')
 
-        ax_C.set_xlim(0, len(self.architecture['B']['history']))
-        ax_B.set_title('Actuator Architecture History')
-        ax_C.set_title('Sensor Architecture History')
-        ax_B.tick_params(axis="x", labelbottom=False)
-        ax_C.set_xlabel('Time')
-        ax_B.set_ylabel('Node position')
-        ax_C.set_ylabel('Node position')
-        # fig.suptitle(self.model_name)
+        if ax_in is None:
+            ax['C'].set_xlabel('Time')
+            if f_name is None:
+                f_name = "Images/"+self.model_name+"_architecture_history.png"
+            plt.savefig(f_name)
+            plt.show()
 
-        if f_name is None:
-            f_name = "Images/"+self.model_name+"_architecture_history.png"
-        plt.savefig(f_name)
-        plt.show()
+    # def plot_architecture_history(self, f_name=None, ax_in=None):
+    #     if ax_in is None:
+    #         fig = plt.figure()
+    #         grid = fig.add_gridspec(1, 1)
+    #         ax = fig.add_subplot(grid[0, 0])
+    #     else:
+    #         ax = ax_in
+    #
+    #     marker_map = {'B': "o", 'C': "s"}
+    #     clr_map = {'fix': "C0", 'tuning': "C1"}
+    #
+    #     architecture_map = {'B': {'active': [], 'time': []}, 'C': {'active': [], 'time': []}}
+    #     T = len(self.architecture['B']['history'])
+    #     for a in ['B', 'C']:
+    #         for t in range(0, T):
+    #             for i in self.architecture[a]['history'][t]:
+    #                 architecture_map[a]['active'].append(i)
+    #                 architecture_map[a]['time'].append(t)
+    #                 # B_list['active'].append(i)
+    #                 # B_list['time'].append(t)
+    #             # for i in self.architecture['C']['history'][t]:
+    #             #     C_list['active'].append(i)
+    #             #     C_list['time'].append(t)
+    #
+    #     for a in ['B', 'C']:
+    #         for i in self.architecture[a]['history'][0]:
+    #             ax.axhline(i, marker=marker_map[a], c=clr_map['fix'], linewidth=2, alpha=0.5)
+    #         ax.scatter(architecture_map[a]['time'], architecture_map[a]['active'], marker=marker_map[a], c=clr_map['tuning'], label=a)
+    #     ax.legend(loc='lower right')
+    #     ax.set_ylabel('Node position')
+    #
+    #     if ax_in is None:
+    #         ax.set_xlabel('Time')
+    #         if f_name is None:
+    #             f_name = "Images/"+self.model_name+"_architecture_history.png"
+    #         plt.savefig(f_name)
+    #         plt.show()
+
+    def plot_trajectory(self, f_name=None,  ax_in=None, plt_map=None, s_type='fixed', v_norm=2):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(2, 1)
+            ax = {'x': fig.add_subplot(grid[0, 0])}
+            ax['error'] = fig.add_subplot(grid[1, 0], sharex=ax['x'])
+        else:
+            ax = ax_in
+
+        if plt_map is None:
+            plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+                       'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+                       'marker': {'B': "+", 'C': "+"}}
+
+        T = len(self.trajectory['x'])
+        # ax['error'].plot(range(0, T), self.trajectory['error_2norm'], c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'], label=s_type, alpha=plt_map[s_type]['alpha'])
+
+        # for i in range(0, self.dynamics['number_of_nodes']):
+        #     x = [self.trajectory['error'][t][i] for t in range(0, T)]
+        #     ax['error'].plot(range(0, T), x, linewidth=2, alpha=0.2, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
+
+        error_vec = [np.linalg.norm(self.trajectory['error'][t], ord=v_norm) for t in range(0, T)]
+        ax['error'].plot(range(0, T), error_vec, linewidth=2, alpha=0.8, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
+
+        # for i in range(0, self.dynamics['number_of_nodes']):
+        #     x = [self.trajectory['x'][t][i] for t in range(0, T)]
+        #     ax['x'].plot(range(0, T), x, linewidth=2, alpha=0.2, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
+
+        state_vec = [np.linalg.norm(self.trajectory['x'][t], ord=v_norm) for t in range(0, T)]
+        ax['x'].plot(range(0, T), state_vec, linewidth=2, alpha=0.8, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
+
+        ax['x'].set_ylabel(r'$|x_t|_'+str(v_norm)+'$')
+        ax['error'].set_ylabel(r'$|x_t - \hat{x}_t|_'+str(v_norm)+'$')
+        ax['x'].tick_params(axis="x", labelbottom=False)
+
+        if ax_in is None:
+            ax['error'].set_xlabel('Time')
+            if f_name is None:
+                f_name = "Images/" + self.model_name + "_trajectory.png"
+            plt.savefig(f_name)
+            plt.show()
 
 
 def matrix_convergence_check(A, B, accuracy=10 ** (-8), check_type=None):
@@ -782,51 +816,136 @@ def simultaneous_cost_plot(value_history):
     plt.show()
 
 
-def cost_plots(cost, f_name=None):
-    fig = plt.figure(figsize=(6, 4), )
-    grid = fig.add_gridspec(1, 1)
-    ax_cost = fig.add_subplot(grid[0, 0])
+def cost_plots(cost, f_name=None, ax=None, plt_map=None):
+    if ax is None:
+        fig = plt.figure(figsize=(6, 4), )
+        grid = fig.add_gridspec(1, 1)
+        ax_cost = fig.add_subplot(grid[0, 0])
+    else:
+        ax_cost = ax
+    
+    if plt_map is None:
+        plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+                   'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+                   'marker': {'B': "+", 'C': "+"}}
+
     for i in cost:
         cumulative_cost = [cost[i][0]]
         for t in range(1, len(cost[i])):
             cumulative_cost.append(cumulative_cost[-1] + cost[i][t])
-        ax_cost.plot(range(0, len(cumulative_cost)), cumulative_cost, label=i)
-    ax_cost.set_xlabel('Time')
-    ax_cost.set_ylabel('Cost')
-    ax_cost.set_yscale('log')
-    ax_cost.legend()
+        ax_cost.plot(range(0, len(cumulative_cost)), cumulative_cost, label=i, c=plt_map[i]['c'], linestyle=plt_map[i]['line_style'], zorder=plt_map[i]['zorder'])
+    ax_cost.set_ylabel('Cumulative\nCost')
+    ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-2, 2))
+    # ax_cost.set_yscale('log')
+    ax_cost.legend(loc='upper left')
     # print([len(cost[i]) for i in cost])
     ax_cost.set_xlim(0, max([len(cost[i]) for i in cost]))
-    ax_cost.set_title('Cost comparison')
-    if f_name is None:
-        f_name = "Images/cost_trajectory.png"
-    else:
-        f_name = "Images/"+f_name+"_cost_trajectory.png"
-    plt.savefig(f_name)
+
+    if ax is None:
+        ax_cost.set_title('Cost comparison')
+        ax_cost.set_xlabel('Time')
+        if f_name is None:
+            f_name = "Images/cost_trajectory.png"
+        else:
+            f_name = "Images/"+f_name+"_cost_trajectory.png"
+        plt.savefig(f_name)
+        plt.show()
+
+
+# def trajectory_plots(state_trajectory, error_trajectory, f_name=None, ax=None, plt_map=None):
+#     if ax is None:
+#         fig = plt.figure(figsize=(6, 4), )
+#         grid = fig.add_gridspec(2, 1)
+#         ax_error = fig.add_subplot(grid[0, 0])
+#         ax_state = fig.add_subplot(grid[1, 0], sharex=ax_error)
+#     else:
+#         ax_error = ax[0]
+#         ax_state = ax[1]
+#
+#     if plt_map is None:
+#         plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5},
+#                    'tuning': {'c': 'C1', 'line_style': 'dotted', 'alpha': 0.5}}
+#     #
+#     # if clr is None:
+#     #     clr = {'fixed': 'C0', 'tuning': 'C1'}
+#     # line_style = {'fixed': 'solid', 'tuning': 'dashed'}
+#     for k in error_trajectory:
+#         ax_error.plot(range(0, len(error_trajectory[k])), error_trajectory[k], c=plt_map[k]['c'], linestyle=plt_map[k]['line_style'], label=k, alpha=plt_map[k]['alpha'])
+#         for i in range(0, len(state_trajectory[k][0])):
+#             x = [state_trajectory[k][t][i] for t in range(0, len(state_trajectory[k]))]
+#             ax_state.plot(range(0, len(x)), x, alpha=0.2, c=plt_map[k]['c'], linestyle=plt_map[k]['line_style'])
+#     ax_state.set_ylabel('State')
+#     ax_error.set_ylabel('Error')
+#     ax_state.set_xlim(0, max([len(error_trajectory[k]) for k in error_trajectory]))
+#     # ax_error.set_title('Error Trajectory')
+#     # fig.suptitle('Trajectory comparison: ' + f_name)
+#     if ax is None:
+#         ax_error.legend()
+#         ax_error.set_xlabel('time')
+#         fig.suptitle('Trajectory comparison')
+#         plt.savefig("Images/" + f_name + "_state_error_trajectory.png")
+#         plt.show()
+
+
+def combined_plot(S, S_fixed, S_tuning):
+    # state_trajectory, error_trajectory, cost, architecture, f_name=None):
+    fig = plt.figure(figsize=(5, 7), tight_layout=True)
+    grid = fig.add_gridspec(5, 1)
+    plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+               'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+               'marker': {'B': "o", 'C': "o"}}
+
+    ax_cost = fig.add_subplot(grid[0, 0])
+    ax_trajectory = fig.add_subplot(grid[1, 0], sharex=ax_cost)
+    ax_error = fig.add_subplot(grid[2, 0], sharex=ax_cost)
+    ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
+    ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
+
+    cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
+    S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
+    S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
+    # trajectory_plots({'fixed': S_fixed.trajectory['x'], 'tuning': S_tuning.trajectory['x']}, {'fixed': S_fixed.trajectory['error_2norm'], 'tuning': S_tuning.trajectory['error_2norm']}, S.model_name, [ax_error, ax_trajectory], plt_map=plt_map)
+    S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
+
+    ax_cost.tick_params(axis="x", labelbottom=False)
+    ax_error.tick_params(axis="x", labelbottom=False)
+    ax_trajectory.tick_params(axis="x", labelbottom=False)
+
+    ax_cost.set_title(S.model_name)
+    ax_architecture_C.set_xlabel('Time')
+
+    f_name = S.model_name+'_fixed_vs_tuning'
+    plt.savefig('Images/'+f_name+'.png')
     plt.show()
 
 
-def trajectory_plots(state_trajectory, error_trajectory, f_name=None):
-    fig = plt.figure(figsize=(6, 4), )
-    grid = fig.add_gridspec(2, 1)
-    clr = {'fixed': 'C0', 'tuning': 'C1'}
-    ax_error = fig.add_subplot(grid[0, 0])
-    ax_state = fig.add_subplot(grid[1, 0], sharex=ax_error)
-    for k in error_trajectory:
-        ax_error.plot(range(0, len(error_trajectory[k])), error_trajectory[k], label=k, color=clr[k])
-        for i in range(0, len(state_trajectory[k][0])):
-            x = [state_trajectory[k][t][i] for t in range(0, len(state_trajectory[k]))]
-            ax_state.plot(range(0, len(x)), x, color=clr[k], alpha=0.2)
-    ax_state.set_ylabel('State')
-    ax_error.set_ylabel('Norm Estimation Error')
-    ax_error.set_xlabel('time')
-    ax_error.legend()
-    ax_state.set_xlim(0, max([len(error_trajectory[k]) for k in error_trajectory]))
-    # ax_error.set_title('Error Trajectory')
-    # fig.suptitle('Trajectory comparison: ' + f_name)
-    fig.suptitle('Trajectory comparison')
-    plt.savefig("Images/" + f_name + "_state_error_trajectory.png")
-    plt.show()
+def simulate_fixed_architecture(S):
+    if not isinstance(S, System):
+        raise Exception('Check data type')
+    T_sim = dc(S.simulation_parameters['T_sim']) + 1
+    print('\n Fixed architecture simulation')
+    S_fixed = dc(S)
+    S_fixed.model_rename(S.model_name + "_fixed")
+    for t in range(0, T_sim):
+        print("\r t:" + str(t), end="")
+        S_fixed.cost_wrapper_enhanced_true()
+        S_fixed.system_one_step_update_enhanced(t)
+
+    return S_fixed
+
+
+def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_iteration=1):
+    print('\n Self-Tuning architecture simulation')
+    S_tuning = dc(S)
+    S_tuning.model_rename(S.model_name + "_selftuning")
+    T_sim = dc(S.simulation_parameters['T_sim']) + 1
+    for t in range(0, T_sim):
+        print("\r t:" + str(t), end="")
+        S_tuning.cost_wrapper_enhanced_true()
+        S_tuning.system_one_step_update_enhanced(t)
+        S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
+
+    return S_tuning
 
 
 if __name__ == "__main__":

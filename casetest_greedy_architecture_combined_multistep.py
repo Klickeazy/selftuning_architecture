@@ -12,8 +12,9 @@ if __name__ == "__main__":
     n = 50
     rho = 2
     Tp = 10
+    n_arch = 5
 
-    model_name = 'gen_model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)
+    model_name = 'gen_model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)+'_arch'+str(n_arch)
     shelve_file = datadump_folderpath + model_name
     shelve_data = shelve.open(shelve_file)
     S = shelve_data['System']
@@ -21,35 +22,15 @@ if __name__ == "__main__":
     if not isinstance(S, gac.System):
         raise Exception('System model error')
 
-    # Optimal T_sim update:
+    # # Update T_sim update:
     # S.simulation_parameters['T_predict'] = 30
-    # S.model_rename()
+    S.rescale_dynamics(1.5)
+    S.model_rename()
 
     print('Retrieved Model: ', S.model_name)
-    T_sim = dc(S.simulation_parameters['T_sim']) + 1
 
-    # Simulating regular large disturbances at random nodes
-    for i in range(0, T_sim, 10):
-        S.noise['noise_sim'][i][np.random.choice(2*n, 5)] = 20
-
-    # print('Model: ', S.model_name)
-
-    print('\n Fixed architecture simulation')
-    S_fixed = dc(S)
-    S_fixed.model_rename(S.model_name + "_fixed")
-    for t in range(0, T_sim):
-        print("\r t:" + str(t), end="")
-        S_fixed.cost_wrapper_enhanced_true()
-        S_fixed.system_one_step_update_enhanced(t)
-
-    print('\n Self-Tuning architecture simulation')
-    S_tuning = dc(S)
-    S_tuning.model_rename(S.model_name + "_selftuning")
-    for t in range(0, T_sim):
-        print("\r t:" + str(t), end="")
-        S_tuning.cost_wrapper_enhanced_true()
-        S_tuning.system_one_step_update_enhanced(t)
-        S_tuning = dc(gac.greedy_simultaneous(S_tuning, iterations=1, changes_per_iteration=1)['work_set'])
+    S_fixed = gac.simulate_fixed_architecture(S)
+    S_tuning = gac.simulate_selftuning_architecture(S)
 
     print('\n\n Trajectory data shelving')
 

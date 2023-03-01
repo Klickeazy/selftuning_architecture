@@ -7,10 +7,12 @@ datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGr
 print('\n Data reading')
 
 n = 50
-rho = 2
+rho = 1.5
 Tp = 10
+n_arch = 5
 
-shelve_file = datadump_folderpath+'model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)
+shelve_file = datadump_folderpath+'model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)+'_arch'+str(n_arch)
+# shelve_file = datadump_folderpath+'model_n'+str(n)+'_rho'+str(rho)+'_Tp'+str(Tp)
 try:
     shelve_data = shelve.open(shelve_file)
 except (FileNotFoundError, IOError):
@@ -29,6 +31,4 @@ if not isinstance(S, gac.System) or not isinstance(S_tuning, gac.System) or not 
     raise Exception('Data type mismatch')
 
 print('\n Plotting')
-S_tuning.plot_architecture_history()
-gac.trajectory_plots({'fixed': S_fixed.trajectory['x'], 'tuning': S_tuning.trajectory['x']}, {'fixed': S_fixed.trajectory['error'], 'tuning': S_tuning.trajectory['error']}, S.model_name)
-gac.cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name)
+gac.combined_plot(S, S_fixed, S_tuning)
