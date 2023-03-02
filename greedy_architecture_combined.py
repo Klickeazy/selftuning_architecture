@@ -4,8 +4,8 @@ import random
 import time
 import scipy as scp
 from copy import deepcopy as dc
-# import control
-
+import shelve
+import os
 import matplotlib
 import matplotlib.pyplot as plt
 import scipy.linalg
@@ -29,6 +29,8 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
+# datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump'
 
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
@@ -304,7 +306,6 @@ class System:
         self.trajectory['x_estimate'].append(self.trajectory['X_enhanced'][-1][self.dynamics['number_of_nodes']:])
         self.trajectory['error'].append(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1])
         self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['error'][-1], ord=2))
-        # self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1], ord=2))
 
     def architecture_costs(self):
         self.trajectory['cost']['running'] = 0
@@ -483,44 +484,6 @@ class System:
                 f_name = "Images/"+self.model_name+"_architecture_history.png"
             plt.savefig(f_name)
             plt.show()
-
-    # def plot_architecture_history(self, f_name=None, ax_in=None):
-    #     if ax_in is None:
-    #         fig = plt.figure()
-    #         grid = fig.add_gridspec(1, 1)
-    #         ax = fig.add_subplot(grid[0, 0])
-    #     else:
-    #         ax = ax_in
-    #
-    #     marker_map = {'B': "o", 'C': "s"}
-    #     clr_map = {'fix': "C0", 'tuning': "C1"}
-    #
-    #     architecture_map = {'B': {'active': [], 'time': []}, 'C': {'active': [], 'time': []}}
-    #     T = len(self.architecture['B']['history'])
-    #     for a in ['B', 'C']:
-    #         for t in range(0, T):
-    #             for i in self.architecture[a]['history'][t]:
-    #                 architecture_map[a]['active'].append(i)
-    #                 architecture_map[a]['time'].append(t)
-    #                 # B_list['active'].append(i)
-    #                 # B_list['time'].append(t)
-    #             # for i in self.architecture['C']['history'][t]:
-    #             #     C_list['active'].append(i)
-    #             #     C_list['time'].append(t)
-    #
-    #     for a in ['B', 'C']:
-    #         for i in self.architecture[a]['history'][0]:
-    #             ax.axhline(i, marker=marker_map[a], c=clr_map['fix'], linewidth=2, alpha=0.5)
-    #         ax.scatter(architecture_map[a]['time'], architecture_map[a]['active'], marker=marker_map[a], c=clr_map['tuning'], label=a)
-    #     ax.legend(loc='lower right')
-    #     ax.set_ylabel('Node position')
-    #
-    #     if ax_in is None:
-    #         ax.set_xlabel('Time')
-    #         if f_name is None:
-    #             f_name = "Images/"+self.model_name+"_architecture_history.png"
-    #         plt.savefig(f_name)
-    #         plt.show()
 
     def plot_trajectory(self, f_name=None,  ax_in=None, plt_map=None, s_type='fixed', v_norm=2):
         if ax_in is None:
@@ -829,17 +792,24 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
                    'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
                    'marker': {'B': "+", 'C': "+"}}
 
+    # font = {'family': 'serif', 'color': 'darkred', 'weight': 'normal', 'size': 16}
+
+    tstep_cost = {}
+    T = len(cost['fixed'])
     for i in cost:
         cumulative_cost = [cost[i][0]]
-        for t in range(1, len(cost[i])):
+        for t in range(1, T):
             cumulative_cost.append(cumulative_cost[-1] + cost[i][t])
-        ax_cost.plot(range(0, len(cumulative_cost)), cumulative_cost, label=i, c=plt_map[i]['c'], linestyle=plt_map[i]['line_style'], zorder=plt_map[i]['zorder'])
+        tstep_cost[i] = cumulative_cost[-1]
+        ax_cost.plot(range(0, T), cumulative_cost, label=i, c=plt_map[i]['c'], linestyle=plt_map[i]['line_style'], zorder=plt_map[i]['zorder'])
     ax_cost.set_ylabel('Cumulative\nCost')
     ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-2, 2))
-    # ax_cost.set_yscale('log')
     ax_cost.legend(loc='upper left')
-    # print([len(cost[i]) for i in cost])
-    ax_cost.set_xlim(0, max([len(cost[i]) for i in cost]))
+    improvement = 100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed']
+    improvement_str = str(np.round(improvement, 2)) + r'\% improvement'
+    print(improvement_str)
+    ax_cost.text(T-35, 0, improvement_str)
+    ax_cost.set_xlim(-1, 1+max([len(cost[i]) for i in cost]))
 
     if ax is None:
         ax_cost.set_title('Cost comparison')
@@ -852,43 +822,9 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         plt.show()
 
 
-# def trajectory_plots(state_trajectory, error_trajectory, f_name=None, ax=None, plt_map=None):
-#     if ax is None:
-#         fig = plt.figure(figsize=(6, 4), )
-#         grid = fig.add_gridspec(2, 1)
-#         ax_error = fig.add_subplot(grid[0, 0])
-#         ax_state = fig.add_subplot(grid[1, 0], sharex=ax_error)
-#     else:
-#         ax_error = ax[0]
-#         ax_state = ax[1]
-#
-#     if plt_map is None:
-#         plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5},
-#                    'tuning': {'c': 'C1', 'line_style': 'dotted', 'alpha': 0.5}}
-#     #
-#     # if clr is None:
-#     #     clr = {'fixed': 'C0', 'tuning': 'C1'}
-#     # line_style = {'fixed': 'solid', 'tuning': 'dashed'}
-#     for k in error_trajectory:
-#         ax_error.plot(range(0, len(error_trajectory[k])), error_trajectory[k], c=plt_map[k]['c'], linestyle=plt_map[k]['line_style'], label=k, alpha=plt_map[k]['alpha'])
-#         for i in range(0, len(state_trajectory[k][0])):
-#             x = [state_trajectory[k][t][i] for t in range(0, len(state_trajectory[k]))]
-#             ax_state.plot(range(0, len(x)), x, alpha=0.2, c=plt_map[k]['c'], linestyle=plt_map[k]['line_style'])
-#     ax_state.set_ylabel('State')
-#     ax_error.set_ylabel('Error')
-#     ax_state.set_xlim(0, max([len(error_trajectory[k]) for k in error_trajectory]))
-#     # ax_error.set_title('Error Trajectory')
-#     # fig.suptitle('Trajectory comparison: ' + f_name)
-#     if ax is None:
-#         ax_error.legend()
-#         ax_error.set_xlabel('time')
-#         fig.suptitle('Trajectory comparison')
-#         plt.savefig("Images/" + f_name + "_state_error_trajectory.png")
-#         plt.show()
-
-
 def combined_plot(S, S_fixed, S_tuning):
-    # state_trajectory, error_trajectory, cost, architecture, f_name=None):
+    print('\n Plotting')
+
     fig = plt.figure(figsize=(5, 7), tight_layout=True)
     grid = fig.add_gridspec(5, 1)
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
@@ -904,7 +840,6 @@ def combined_plot(S, S_fixed, S_tuning):
     cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
     S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
     S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
-    # trajectory_plots({'fixed': S_fixed.trajectory['x'], 'tuning': S_tuning.trajectory['x']}, {'fixed': S_fixed.trajectory['error_2norm'], 'tuning': S_tuning.trajectory['error_2norm']}, S.model_name, [ax_error, ax_trajectory], plt_map=plt_map)
     S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
 
     ax_cost.tick_params(axis="x", labelbottom=False)
@@ -914,8 +849,9 @@ def combined_plot(S, S_fixed, S_tuning):
     ax_cost.set_title(S.model_name)
     ax_architecture_C.set_xlabel('Time')
 
-    f_name = S.model_name+'_fixed_vs_tuning'
-    plt.savefig('Images/'+f_name+'.png')
+    save_file = 'Images/' + S.model_name+'_fixed_vs_tuning.png'
+    plt.savefig(save_file)
+    print('Figure saved:', save_file)
     plt.show()
 
 
@@ -930,7 +866,6 @@ def simulate_fixed_architecture(S):
         print("\r t:" + str(t), end="")
         S_fixed.cost_wrapper_enhanced_true()
         S_fixed.system_one_step_update_enhanced(t)
-
     return S_fixed
 
 
@@ -944,8 +879,66 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
         S_tuning.cost_wrapper_enhanced_true()
         S_tuning.system_one_step_update_enhanced(t)
         S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
-
     return S_tuning
+
+
+def data_shelving_gen_model(S):
+    shelve_filename = datadump_folderpath + 'gen_' + S.model_name
+    shelve_data = shelve.open(shelve_filename)
+    shelve_data['System'] = S
+    shelve_data.close()
+    print('Model shelve done: ', shelve_filename)
+
+
+def data_reading_gen_model(n, rho, Tp, n_arch):
+    print('\n Reading generated model...')
+    model_name = 'gen_model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
+    shelve_file = datadump_folderpath + model_name
+    shelve_data = shelve.open(shelve_file)
+    S = shelve_data['System']
+    shelve_data.close()
+    if not isinstance(S, System):
+        raise Exception('System model error')
+    return S
+
+
+def data_shelving_sim_model(S, S_fixed, S_tuning):
+    print('\nTrajectory data shelving')
+    shelve_file = datadump_folderpath + S.model_name
+    print('\nDeleting old data...')
+    for f_type in ['.bak', '.dat', '.dir']:
+        if os.path.exists(shelve_file + f_type):
+            os.remove(shelve_file + f_type)
+    print('\nShelving new data...')
+    shelve_data = shelve.open(shelve_file)
+    for k in ['System', 'Fixed', 'SelfTuning']:
+        if k in shelve_data:
+            del shelve_data[k]
+    shelve_data['System'] = S
+    shelve_data['Fixed'] = S_fixed
+    shelve_data['SelfTuning'] = S_tuning
+    shelve_data.close()
+    print('\nShelving done:', shelve_file)
+
+
+def data_reading_sim_model(n, rho, Tp, n_arch):
+    print('\n Data reading')
+    shelve_file = datadump_folderpath + 'model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
+    try:
+        shelve_data = shelve.open(shelve_file)
+    except (FileNotFoundError, IOError):
+        raise Exception('test file not found')
+    for k in ['System', 'Fixed', 'SelfTuning']:
+        if k not in shelve_data:
+            raise Exception('Check data file')
+    S = shelve_data['System']
+    S_fixed = shelve_data['Fixed']
+    S_tuning = shelve_data['SelfTuning']
+    shelve_data.close()
+    if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
+        raise Exception('Data type mismatch')
+    print('Model: ', S.model_name)
+    return S, S_fixed, S_tuning
 
 
 if __name__ == "__main__":
