@@ -5,13 +5,13 @@ if __name__ == "__main__":
 
     print('Model Generation Parameters')
 
-    n = 50
-    rho = 2
+    n = 10
+    rho = 1.05
     Tp = 10
-    n_arch = 5
+    n_arch = 2
 
     disturbance_step = 10
-    disturbance_number = 20
+    disturbance_number = 2*n
     disturbance_magnitude = 5
 
     # Model Gen

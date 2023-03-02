@@ -29,8 +29,9 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-# datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump'
+datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+imagesave_folderpath = 'Images/'
+# datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
 
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
@@ -64,6 +65,8 @@ class System:
         self.architecture['C']['cost']['Q'] = self.additive['W']
         self.model_name = ''
         self.model_rename()
+        self.network_plot_parameters = {}
+        self.full_network_position()
         # if additive is not None:
         #     self.initialize_additive_noise(additive)
         # self.enhanced_system_matrix()
@@ -398,19 +401,9 @@ class System:
         for a in ['B', 'C']:
             print(a, ':', self.architecture[a]['active'])
 
-    def display_system(self):
-        sys_plot = self.display_graph_gen()
-        fig = plt.figure()
-        gs = GridSpec(1, 1, figure=fig)
-        ax1 = fig.add_subplot(gs[0, 0])
-        netx.draw_networkx(sys_plot['G'], ax=ax1, pos=sys_plot['pos'], node_color=sys_plot['node_color'])
-        ax1.set_aspect('equal')
-        ax1.set_title(self.model_name)
-        plt.savefig("images/"+self.model_name+"_system.png")
-        plt.show()
 
     def network_matrix(self):
-        A_mat = self.dynamics['A']
+        A_mat = self.dynamics['Adj'] > 0
         B_mat = self.architecture['B']['matrix']
         C_mat = self.architecture['C']['matrix']
         net_matrix = np.block([[A_mat, B_mat, C_mat.T],
@@ -418,34 +411,82 @@ class System:
                                [C_mat, np.zeros((len(self.architecture['C']['active']), len(self.architecture['B']['active']))), np.zeros((len(self.architecture['C']['active']), len(self.architecture['C']['active'])))]])
         return net_matrix
 
-    def display_graph_gen(self, node_pos=None):
-        net_matrix = self.network_matrix()
-        G = netx.from_numpy_array(net_matrix)
+    def architecture_at_t(self, time_step):
+        self.architecture['B']['active'] = self.architecture['B']['history'][time_step]
+        self.architecture['C']['active'] = self.architecture['C']['history'][time_step]
+        self.architecture_active_to_matrix()
+
+    def network_node_relabel(self, G):
         node_labels = {}
+        color_map = []
+        node_color = {'node': 'C0', 'actuator': 'C1', 'sensor': 'C2'}
         for i in range(0, self.dynamics['number_of_nodes']):
             node_labels[i] = str(i + 1)
+            color_map.append(node_color['node'])
         for i in range(0, len(self.architecture['B']['active'])):
             node_labels[i + self.dynamics['number_of_nodes']] = "B" + str(i + 1)
+            color_map.append(node_color['actuator'])
         for i in range(0, len(self.architecture['C']['active'])):
             node_labels[i + self.dynamics['number_of_nodes'] + len(self.architecture['B']['active'])] = "C" + str(i + 1)
+            color_map.append(node_color['sensor'])
         netx.relabel_nodes(G, node_labels, copy=False)
-        G_degree = dc(G.degree())
-        for n, d in G_degree:
-            if d == 0:
-                G.remove_node(n)
-        node_color = {'B': 'C3', 'C': 'C1'}
-        nc = []
-        for i in G.nodes():
-            if i[0] in node_color:
-                nc.append(node_color[i[0]])
-            else:
-                nc.append('C2')
-        if node_pos is None:
-            G_base = netx.from_numpy_array(self.dynamics['A'])
-            netx.relabel_nodes(G_base, node_labels, copy=False)
-            node_pos = netx.circular_layout(G_base)
-        node_pos = netx.spring_layout(G, pos=node_pos, fixed=[str(i + 1) for i in range(0, self.dynamics['number_of_nodes'])])
-        return {'G': G, 'pos': node_pos, 'node_color': nc}
+        return {'G': G, 'c_map': color_map}
+
+    def full_network_position(self):
+        S_full = dc(self)
+        S_full.architecture['B']['active'] = self.architecture['B']['available']
+        S_full.architecture['C']['active'] = self.architecture['C']['available']
+        S_full.architecture_active_to_matrix()
+
+        G_full = netx.from_numpy_array(S_full.network_matrix())
+        G_R = S_full.network_node_relabel(G_full)
+        G_full = G_R['G']
+
+        G_A = netx.from_numpy_array(S_full.dynamics['A'])
+        G_A = S_full.network_node_relabel(G_A)['G']
+
+        core_circ_pos = netx.circular_layout(G_A)
+        node_pos = netx.spring_layout(G_full, pos=core_circ_pos, fixed=[str(i+1) for i in range(0, S_full.dynamics['number_of_nodes'])])
+        x = [node_pos[k][0] for k in node_pos]
+        y = [node_pos[k][1] for k in node_pos]
+
+        # node_pos = {}
+        # for n in network_plot_parameters:
+        #     node_pos[n] = network_plot_parameters[n]
+
+        self.network_plot_parameters['node_pos'] = core_circ_pos
+        self.network_plot_parameters['lim'] = {'x': [np.floor(np.min(x)), np.ceil(np.max(x))], 'y': [np.floor(np.min(y)), np.ceil(np.max(y))]}
+
+    def plot_network(self, time_step=None, ax_in=None):
+        if ax_in is None:
+            fig, ax = plt.add_subplot()
+        else:
+            ax = ax_in
+
+        S_t = dc(self)
+        if time_step is not None:
+            S_t.architecture_at_t(time_step)
+        net_mat = S_t.network_matrix()
+        G = netx.from_numpy_array(net_mat)
+        Graph = S_t.network_node_relabel(G)
+        G = Graph['G']
+        c_map = Graph['c_map']
+
+        # network_plot_parameters, lim = S_t.full_network_position()
+        # node_pos = {}
+        # for n in network_plot_parameters:
+        #     node_pos[n] = network_plot_parameters[n]
+
+        netx.draw_networkx(G, ax=ax, node_size=100, pos=netx.spring_layout(G, pos=self.network_plot_parameters['node_pos'], fixed=[str(i+1) for i in range(0, S_t.dynamics['number_of_nodes'])]), node_color=c_map, with_labels=False)
+        # netx.draw_networkx(G, ax=ax, node_color=c_map, with_labels=False)
+        ax.set_xlim(S_t.network_plot_parameters['lim']['x'])
+        ax.set_ylim(S_t.network_plot_parameters['lim']['y'])
+        ax.set_aspect('equal')
+
+        if ax_in is None:
+            f_name = imagesave_folderpath + self.model_name + '_t' + str(time_step)
+            plt.savefig(f_name)
+            plt.show()
 
     def plot_architecture_history(self, f_name=None,  ax_in=None, plt_map=None):
         if ax_in is None:
@@ -481,7 +522,7 @@ class System:
         if ax_in is None:
             ax['C'].set_xlabel('Time')
             if f_name is None:
-                f_name = "Images/"+self.model_name+"_architecture_history.png"
+                f_name = imagesave_folderpath+self.model_name+'_architecture_history.png'
             plt.savefig(f_name)
             plt.show()
 
@@ -523,9 +564,12 @@ class System:
         if ax_in is None:
             ax['error'].set_xlabel('Time')
             if f_name is None:
-                f_name = "Images/" + self.model_name + "_trajectory.png"
+                f_name = imagesave_folderpath + self.model_name + '_trajectory.png'
             plt.savefig(f_name)
             plt.show()
+        else:
+            # ax['x'].tick_params(axis="x", labelbottom=False)
+            ax['error'].tick_params(axis="x", labelbottom=False)
 
 
 def matrix_convergence_check(A, B, accuracy=10 ** (-8), check_type=None):
@@ -815,11 +859,13 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         ax_cost.set_title('Cost comparison')
         ax_cost.set_xlabel('Time')
         if f_name is None:
-            f_name = "Images/cost_trajectory.png"
+            f_name = imagesave_folderpath + "cost_trajectory.png"
         else:
-            f_name = "Images/"+f_name+"_cost_trajectory.png"
+            f_name = imagesave_folderpath + f_name + "_cost_trajectory.png"
         plt.savefig(f_name)
         plt.show()
+    else:
+        ax_cost.tick_params(axis="x", labelbottom=False)
 
 
 def combined_plot(S, S_fixed, S_tuning):
@@ -842,14 +888,14 @@ def combined_plot(S, S_fixed, S_tuning):
     S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
     S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
 
-    ax_cost.tick_params(axis="x", labelbottom=False)
-    ax_error.tick_params(axis="x", labelbottom=False)
-    ax_trajectory.tick_params(axis="x", labelbottom=False)
+    # ax_cost.tick_params(axis="x", labelbottom=False)
+    # ax_error.tick_params(axis="x", labelbottom=False)
+    # ax_trajectory.tick_params(axis="x", labelbottom=False)
 
     ax_cost.set_title(S.model_name)
     ax_architecture_C.set_xlabel('Time')
 
-    save_file = 'Images/' + S.model_name+'_fixed_vs_tuning.png'
+    save_file = imagesave_folderpath + S.model_name+'_fixed_vs_tuning.png'
     plt.savefig(save_file)
     print('Figure saved:', save_file)
     plt.show()
