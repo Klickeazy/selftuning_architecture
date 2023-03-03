@@ -2,16 +2,16 @@ import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
 
-    n = 10
-    rho = 1.05
+    n = 20
+    rho = 2
     Tp = 10
-    n_arch = 2
+    n_arch = 5
 
     S = gac.data_reading_gen_model(n, rho, Tp, n_arch)
 
     # # Model update:
     # S.simulation_parameters['T_predict'] = 30
-    # S.rescale_dynamics(1.5)
+    # S.rescale_dynamics(0.95)
 
     S.model_rename()
     print('Retrieved Model: ', S.model_name)

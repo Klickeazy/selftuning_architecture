@@ -5,17 +5,17 @@ if __name__ == "__main__":
 
     print('Model Generation Parameters')
 
-    n = 10
-    rho = 1.05
+    n = 20
+    rho = 2
     Tp = 10
-    n_arch = 2
+    n_arch = 5
 
     disturbance_step = 10
     disturbance_number = 2*n
-    disturbance_magnitude = 5
+    disturbance_magnitude = 20
 
     # Model Gen
-    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
+    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho, 'type': 'ER'}, architecture={'rand': n_arch}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
 
     # Architecture selection parameters
     S.architecture['B']['max'] = n_arch

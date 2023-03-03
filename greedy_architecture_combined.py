@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import scipy.linalg
 # import matplotlib.ticker as ticker
 from matplotlib.gridspec import GridSpec
+from matplotlib.widgets import Slider, Button, TextBox
 # from matplotlib.ticker import MaxNLocator
 import matplotlib.animation
 
@@ -29,9 +30,10 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+# datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+
 imagesave_folderpath = 'Images/'
-# datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
 
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
@@ -455,9 +457,42 @@ class System:
         #     node_pos[n] = network_plot_parameters[n]
 
         self.network_plot_parameters['node_pos'] = core_circ_pos
-        self.network_plot_parameters['lim'] = {'x': [np.floor(np.min(x)), np.ceil(np.max(x))], 'y': [np.floor(np.min(y)), np.ceil(np.max(y))]}
+        # self.network_plot_parameters['lim'] = {'x': [np.min(1.1*np.min(x), 0.9*np.min(x)), np.max(1.1*np.max(x), 0.9*np.max(x))], 'y': [np.min(1.1*np.min(y), 0.9*np.min(y)), np.max(1.1*np.max(y), 0.9*np.max(y))]}
+        # self.network_plot_parameters['lim'] = {
+        #     'x': [np.floor(10*np.min(x))/10, np.ceil(10*np.max(x))/10],
+        #     'y': [np.floor(10*np.min(y))/10, np.ceil(10*np.max(y))/10]}
+        self.network_plot_parameters['lim'] = {
+            'x': [-1.5, 1.5],
+            'y': [-1.5, 1.5]}
+        # print(self.network_plot_parameters['lim'])
 
-    def plot_network(self, time_step=None, ax_in=None):
+    def plot_dynamics(self, ax_in=None):
+        if ax_in is None:
+            fig, ax = plt.add_subplot()
+        else:
+            ax = ax_in
+
+        S_0 = dc(self)
+        S_0.architecture['B']['active'] = []
+        S_0.architecture['C']['active'] = []
+        S_0.architecture_active_to_matrix()
+        G = netx.from_numpy_array(S_0.dynamics['Adj'] > 0)
+        relabel = S_0.network_node_relabel(G)
+        G = relabel['G']
+        c_map = relabel['c_map']
+
+        netx.draw_networkx(G, ax=ax, node_size=100, pos=S_0.network_plot_parameters['node_pos'], node_color=c_map, with_labels=True, font_size=8)
+
+        ax.set_xlim(self.network_plot_parameters['lim']['x'])
+        ax.set_ylim(self.network_plot_parameters['lim']['y'])
+        ax.set_aspect('equal')
+
+        if ax_in is None:
+            f_name = imagesave_folderpath + self.model_name + '_t0'
+            plt.savefig(f_name)
+            plt.show()
+
+    def plot_network(self, time_step=None, ax_in=None, node_filter=None):
         if ax_in is None:
             fig, ax = plt.add_subplot()
         else:
@@ -476,11 +511,28 @@ class System:
         # node_pos = {}
         # for n in network_plot_parameters:
         #     node_pos[n] = network_plot_parameters[n]
+        if node_filter is None:
+            node_list = list(G)
+        elif node_filter == 'dynamics':
+            node_list = list(G)[0:self.dynamics['number_of_nodes']]
+            for n in list(G):
+                if n not in node_list:
+                    G.remove_node(n)
+            c_map = c_map[0:self.dynamics['number_of_nodes']]
+        elif node_filter == 'architecture':
+            node_list = list(G)[self.dynamics['number_of_nodes']:]
+            for n in list(G):
+                if n not in node_list and n not in G.neighbors(n):
+                    G.remove_node(n)
+            c_map = c_map[self.dynamics['number_of_nodes']:]
+        else:
+            raise Exception('Check node filter')
 
-        netx.draw_networkx(G, ax=ax, node_size=100, pos=netx.spring_layout(G, pos=self.network_plot_parameters['node_pos'], fixed=[str(i+1) for i in range(0, S_t.dynamics['number_of_nodes'])]), node_color=c_map, with_labels=False)
+        # print('Node list:', node_list)
+        netx.draw_networkx(G, ax=ax, node_size=100, pos=netx.spring_layout(G, pos=self.network_plot_parameters['node_pos'], fixed=[str(i+1) for i in range(0, S_t.dynamics['number_of_nodes'])]), node_color=c_map, with_labels=True, font_size=8, nodelist=node_list, edgelist=netx.edges(G, node_list))
         # netx.draw_networkx(G, ax=ax, node_color=c_map, with_labels=False)
-        ax.set_xlim(S_t.network_plot_parameters['lim']['x'])
-        ax.set_ylim(S_t.network_plot_parameters['lim']['y'])
+        ax.set_xlim(self.network_plot_parameters['lim']['x'])
+        ax.set_ylim(self.network_plot_parameters['lim']['y'])
         ax.set_aspect('equal')
 
         if ax_in is None:
@@ -985,6 +1037,104 @@ def data_reading_sim_model(n, rho, Tp, n_arch):
         raise Exception('Data type mismatch')
     print('Model: ', S.model_name)
     return S, S_fixed, S_tuning
+
+
+def slider_plot(S, S_fixed, S_tuning):
+    plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+               'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+               'marker': {'B': "o", 'C': "o"}}
+
+    t_step = S.simulation_parameters['T_sim'] + 1
+
+    fig = plt.figure(figsize=(10, 7), constrained_layout=True)
+    grid = fig.add_gridspec(5, 2)
+
+    ax_cost = fig.add_subplot(grid[0, 0])
+    ax_trajectory = fig.add_subplot(grid[1, 0], sharex=ax_cost)
+    ax_error = fig.add_subplot(grid[2, 0], sharex=ax_cost)
+    ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
+    ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
+
+    ax_tstep_architecture = fig.add_subplot(grid[1:4, 1], frameon=False, zorder=1)
+    ax_tstep_architecture.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+    ax_tstep_architecture.patch.set_alpha(0.1)
+
+    ax_network_nodes = fig.add_subplot(grid[1:4, 1], zorder=0)
+    ax_network_nodes.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+
+    ax_timeline = fig.add_subplot(grid[:, 0], sharex=ax_cost, frameon=False)
+    ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+
+    cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
+    S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
+    S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
+    S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
+
+    S_tuning.plot_network(ax_in=ax_network_nodes, node_filter='dynamics')
+    ax_network_nodes.set_title(S.model_name)
+    # S_tuning.plot_dynamics(ax_in=ax_network_nodes)
+    S_tuning.plot_network(ax_in=ax_tstep_architecture, node_filter='architecture')
+
+    time_slider_dim = [0.3, 0.025]
+    reset_button_dim = [0.1, 0.05]
+    next_button_dim = [0.1, 0.05]
+    prev_button_dim = [0.1, 0.05]
+    text_box_dim = [0.1, 0.05]
+
+    ax_timeslide = fig.add_axes([((0.95 + 0.55 - time_slider_dim[0]) / 2), 0.1, time_slider_dim[0], time_slider_dim[1]])
+    timeslider = Slider(ax=ax_timeslide, label='', valmin=0, valmax=S.simulation_parameters['T_sim'] + 1, valinit=S.simulation_parameters['T_sim'] + 1, valstep=1)
+    timeslider.valtext.set_visible(False)
+
+    ax_reset_button = fig.add_axes([((0.95 + 0.55 - reset_button_dim[0]) / 2), 0.05, reset_button_dim[0], reset_button_dim[1]])
+    reset_button = Button(ax=ax_reset_button, label='Reset', hovercolor='0.975')
+
+    ax_prev_button = fig.add_axes([((0.95 + 0.55 - 3*prev_button_dim[0]) / 2), 0.15, prev_button_dim[0], prev_button_dim[1]])
+    prev_button = Button(ax=ax_prev_button, label='t-', hovercolor='0.975')
+
+    ax_next_button = fig.add_axes([((0.95 + 0.55 + next_button_dim[0]) / 2), 0.15, next_button_dim[0], next_button_dim[1]])
+    next_button = Button(ax=ax_next_button, label='t+', hovercolor='0.975')
+
+    ax_text_box = fig.add_axes([((0.95 + 0.55 - text_box_dim[0]) / 2), 0.15, text_box_dim[0], text_box_dim[1]])
+    time_text = TextBox(ax=ax_text_box, label='', textalignment='center', initial='t:'+str(S.simulation_parameters['T_sim'] + 1))
+
+    def slider_update(t):
+        nonlocal t_step
+        t_step = t
+        time_text.set_val(t_step)
+        ax_timeline.clear()
+        ax_tstep_architecture.clear()
+        ax_timeline.axvline(t, alpha=0.2, c='k', linestyle='dashed')
+        # ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+        S_tuning.plot_network(ax_in=ax_tstep_architecture, time_step=t, node_filter='architecture')
+
+    def reset_button_press(event):
+        nonlocal t_step
+        t_step = S.simulation_parameters['T_sim'] + 1
+        time_text.set_val(t_step)
+        timeslider.reset()
+
+    def next_button_press(event):
+        nonlocal t_step
+        t_step += 1
+        time_text.set_val(t_step)
+        timeslider.set_val(t_step)
+
+    def prev_button_press(event):
+        nonlocal t_step
+        t_step -= 1
+        time_text.set_val(t_step)
+        timeslider.set_val(t_step)
+
+    def text_box_update(event):
+        nonlocal t_step
+        time_text.set_val('t='+str(t_step))
+
+    timeslider.on_changed(slider_update)
+    reset_button.on_clicked(reset_button_press)
+    next_button.on_clicked(next_button_press)
+    prev_button.on_clicked(prev_button_press)
+    time_text.on_submit(text_box_update)
+    plt.show()
 
 
 if __name__ == "__main__":
