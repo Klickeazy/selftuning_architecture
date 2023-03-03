@@ -30,8 +30,8 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-# datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+# datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
 
 imagesave_folderpath = 'Images/'
 
@@ -73,11 +73,10 @@ class System:
         #     self.initialize_additive_noise(additive)
         # self.enhanced_system_matrix()
 
-    def model_rename(self, new_name=None):
-        if new_name is None:
-            self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
-        else:
-            self.model_name = new_name
+    def model_rename(self, name_append=None):
+        self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
+        if name_append is not None:
+            self.model_name = self.model_name + "_" + name_append
 
     def graph_initialize(self, graph_model):
         connected_network_check = False
@@ -86,7 +85,7 @@ class System:
         while not connected_network_check:
             if graph_model['type'] == 'ER':
                 if 'p' not in graph_model:
-                    graph_model['p'] = 0.4
+                    graph_model['p'] = 0.3
                 G = netx.generators.random_graphs.erdos_renyi_graph(self.dynamics['number_of_nodes'], graph_model['p'])
             elif graph_model['type'] == 'BA':
                 if 'p' not in graph_model:
@@ -421,7 +420,7 @@ class System:
     def network_node_relabel(self, G):
         node_labels = {}
         color_map = []
-        node_color = {'node': 'C0', 'actuator': 'C1', 'sensor': 'C2'}
+        node_color = {'node': 'C9', 'actuator': 'C1', 'sensor': 'C2'}
         for i in range(0, self.dynamics['number_of_nodes']):
             node_labels[i] = str(i + 1)
             color_map.append(node_color['node'])
@@ -988,10 +987,18 @@ def data_shelving_gen_model(S):
     print('Model shelve done: ', shelve_filename)
 
 
-def data_reading_gen_model(n, rho, Tp, n_arch):
+def model_name(n, rho, Tp, n_arch, test_model=None):
+    model = 'model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
+    if test_model is not None:
+        model = model + '_' + test_model
+    return model
+
+
+def data_reading_gen_model(model):
     print('\n Reading generated model...')
-    model_name = 'gen_model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
-    shelve_file = datadump_folderpath + model_name
+    modelname = 'gen_' + model
+    print(modelname)
+    shelve_file = datadump_folderpath + modelname
     shelve_data = shelve.open(shelve_file)
     S = shelve_data['System']
     shelve_data.close()
@@ -1002,7 +1009,7 @@ def data_reading_gen_model(n, rho, Tp, n_arch):
 
 def data_shelving_sim_model(S, S_fixed, S_tuning):
     print('\nTrajectory data shelving')
-    shelve_file = datadump_folderpath + S.model_name
+    shelve_file = datadump_folderpath + 'sim_' + S.model_name
     print('\nDeleting old data...')
     for f_type in ['.bak', '.dat', '.dir']:
         if os.path.exists(shelve_file + f_type):
@@ -1019,9 +1026,9 @@ def data_shelving_sim_model(S, S_fixed, S_tuning):
     print('\nShelving done:', shelve_file)
 
 
-def data_reading_sim_model(n, rho, Tp, n_arch):
+def data_reading_sim_model(model):
     print('\n Data reading')
-    shelve_file = datadump_folderpath + 'model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
+    shelve_file = datadump_folderpath + 'sim_' + model
     try:
         shelve_data = shelve.open(shelve_file)
     except (FileNotFoundError, IOError):
@@ -1039,7 +1046,8 @@ def data_reading_sim_model(n, rho, Tp, n_arch):
     return S, S_fixed, S_tuning
 
 
-def slider_plot(S, S_fixed, S_tuning):
+def slider_plot(model):
+    S, S_fixed, S_tuning = data_reading_sim_model(model)
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
                'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
@@ -1055,12 +1063,13 @@ def slider_plot(S, S_fixed, S_tuning):
     ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
     ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
 
-    ax_tstep_architecture = fig.add_subplot(grid[1:4, 1], frameon=False, zorder=1)
+    ax_tstep_architecture = fig.add_subplot(grid[0:4, 1], frameon=False, zorder=-1)
     ax_tstep_architecture.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
-    ax_tstep_architecture.patch.set_alpha(0.1)
+    # ax_tstep_architecture.patch.set_alpha(0.1)
 
-    ax_network_nodes = fig.add_subplot(grid[1:4, 1], zorder=0)
+    ax_network_nodes = fig.add_subplot(grid[0:4, 1], zorder=0)
     ax_network_nodes.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+    ax_network_nodes.patch.set_alpha(0.1)
 
     ax_timeline = fig.add_subplot(grid[:, 0], sharex=ax_cost, frameon=False)
     ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
@@ -1079,10 +1088,12 @@ def slider_plot(S, S_fixed, S_tuning):
     reset_button_dim = [0.1, 0.05]
     next_button_dim = [0.1, 0.05]
     prev_button_dim = [0.1, 0.05]
-    text_box_dim = [0.1, 0.05]
+    # text_box_dim = [0.1, 0.05]
 
     ax_timeslide = fig.add_axes([((0.95 + 0.55 - time_slider_dim[0]) / 2), 0.1, time_slider_dim[0], time_slider_dim[1]])
     timeslider = Slider(ax=ax_timeslide, label='', valmin=0, valmax=S.simulation_parameters['T_sim'] + 1, valinit=S.simulation_parameters['T_sim'] + 1, valstep=1)
+    t_text = ax_timeslide.text(0.38, 2.6, 'Time: '+str(t_step), transform=ax_timeslide.transAxes, fontsize='large')
+    # valfmt=' time: %d'
     timeslider.valtext.set_visible(False)
 
     ax_reset_button = fig.add_axes([((0.95 + 0.55 - reset_button_dim[0]) / 2), 0.05, reset_button_dim[0], reset_button_dim[1]])
@@ -1094,13 +1105,15 @@ def slider_plot(S, S_fixed, S_tuning):
     ax_next_button = fig.add_axes([((0.95 + 0.55 + next_button_dim[0]) / 2), 0.15, next_button_dim[0], next_button_dim[1]])
     next_button = Button(ax=ax_next_button, label='t+', hovercolor='0.975')
 
-    ax_text_box = fig.add_axes([((0.95 + 0.55 - text_box_dim[0]) / 2), 0.15, text_box_dim[0], text_box_dim[1]])
-    time_text = TextBox(ax=ax_text_box, label='', textalignment='center', initial='t:'+str(S.simulation_parameters['T_sim'] + 1))
+    # ax_text_box = fig.add_axes([((0.95 + 0.55 - text_box_dim[0]) / 2), 0.15, text_box_dim[0], text_box_dim[1]])
+    # time_text = TextBox(ax=ax_text_box, label='', textalignment='center', initial='t:'+str(S.simulation_parameters['T_sim'] + 1))
 
     def slider_update(t):
         nonlocal t_step
         t_step = t
-        time_text.set_val(t_step)
+        # time_text.set_val(t_step)
+        ax_timeslide.text(time_slider_dim[0] / 2, time_slider_dim[1] + 0.05, 'time: ' + str(t_step))
+        t_text.set_text('time: ' + str(t_step))
         ax_timeline.clear()
         ax_tstep_architecture.clear()
         ax_timeline.axvline(t, alpha=0.2, c='k', linestyle='dashed')
@@ -1110,30 +1123,30 @@ def slider_plot(S, S_fixed, S_tuning):
     def reset_button_press(event):
         nonlocal t_step
         t_step = S.simulation_parameters['T_sim'] + 1
-        time_text.set_val(t_step)
+        # time_text.set_val(t_step)
         timeslider.reset()
 
     def next_button_press(event):
         nonlocal t_step
         t_step += 1
-        time_text.set_val(t_step)
+        # time_text.set_val(t_step)
         timeslider.set_val(t_step)
 
     def prev_button_press(event):
         nonlocal t_step
         t_step -= 1
-        time_text.set_val(t_step)
+        # time_text.set_val(t_step)
         timeslider.set_val(t_step)
 
-    def text_box_update(event):
-        nonlocal t_step
-        time_text.set_val('t='+str(t_step))
+    # def text_box_update(event):
+    #     nonlocal t_step
+    #     # time_text.set_val('t='+str(t_step))
 
     timeslider.on_changed(slider_update)
     reset_button.on_clicked(reset_button_press)
     next_button.on_clicked(next_button_press)
     prev_button.on_clicked(prev_button_press)
-    time_text.on_submit(text_box_update)
+    # time_text.on_submit(text_box_update)
     plt.show()
 
 
