@@ -5,10 +5,10 @@ if __name__ == "__main__":
 
     print('Model Generation Parameters')
 
-    n = 30
-    rho = 4
+    n = 50
+    rho = 2
     Tp = 10
-    n_arch = 6
+    n_arch = 5
     n_arch_B = n_arch
     n_arch_C = n_arch
 
@@ -16,36 +16,34 @@ if __name__ == "__main__":
     # test_model = None
 
     disturbance_step = 10
-    disturbance_number = int(np.floor(n/2))
+    disturbance_number = int(np.floor(n / 2))
     disturbance_magnitude = 20
+    disturbance = {'step': disturbance_step, 'number': disturbance_number, 'magnitude': disturbance_magnitude}
 
     # Model Gen
-    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
-    S.model_rename(test_model)
+    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
+    print(S.model_name)
+
+    # for k in ['B', 'C']:
+    #     for l in ['min', 'max']:
+    #         print('k: ', k, '|l: ', l, ' : ', S.architecture[k][l])
 
     # Architecture selection parameters
-    S.architecture['B']['max'] = n_arch_B
-    S.architecture['C']['max'] = n_arch_B
-    S.architecture['B']['min'] = n_arch_C
-    S.architecture['C']['min'] = n_arch_C
+    S.architecture_limit_modifier(min_mod=n_arch-1, max_mod=-n+n_arch)
+
+    S.architecture_cost_update({'R2': 0, 'R3': 0})
 
     # Architecture selection costs
-    S.architecture['B']['cost']['R2'] = 0
-    S.architecture['C']['cost']['R2'] = 0
-    S.architecture['B']['cost']['R3'] = 0
-    S.architecture['C']['cost']['R3'] = 0
+    # S.architecture['B']['cost']['R2'] = 0
+    # S.architecture['C']['cost']['R2'] = 0
+    # S.architecture['B']['cost']['R3'] = 0
+    # S.architecture['C']['cost']['R3'] = 0
 
-    # Noise reshaping
-    if test_model in ['process', 'sensor', 'combined']:
-        for i in range(0, S.simulation_parameters['T_sim'], disturbance_step):
-            if test_model in ['process', 'combined']:
-                S.noise['noise_sim'][i][np.random.choice(S.dynamics['number_of_nodes'], disturbance_number, replace=False)] = disturbance_magnitude
-            if test_model in ['sensor', 'combined']:
-                S.noise['noise_sim'][i][S.dynamics['number_of_nodes']:] = disturbance_magnitude
-    elif test_model is not None:
-        raise Exception('Check test_model')
+    S.model_rename()
 
-    S.model_rename(test_model)
+    # for k in ['B', 'C']:
+    #     for l in ['min', 'max']:
+    #         print('k: ', k, '|l: ', l, ' : ', S.architecture[k][l])
 
     print('Model: ', S.model_name)
 

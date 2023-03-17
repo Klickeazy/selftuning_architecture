@@ -7,4 +7,4 @@ if __name__ == "__main__":
     n_arch = 2
 
     S, S_fixed, S_tuning = gac.data_reading_sim_model(n, rho, Tp, n_arch)
-    gac.slider_plot(S, S_fixed, S_tuning)
+    gac.time_axis_plot(S, S_fixed, S_tuning)

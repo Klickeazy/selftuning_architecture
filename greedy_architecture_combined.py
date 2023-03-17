@@ -6,12 +6,15 @@ import scipy as scp
 from copy import deepcopy as dc
 import shelve
 import os
+from tqdm import tqdm
+from shutil import rmtree
 import matplotlib
 import matplotlib.pyplot as plt
 import scipy.linalg
-# import matplotlib.ticker as ticker
+import matplotlib.ticker as ticker
 from matplotlib.gridspec import GridSpec
 from matplotlib.widgets import Slider, Button, TextBox
+import matplotlib.patches as patches
 # from matplotlib.ticker import MaxNLocator
 import matplotlib.animation
 
@@ -30,10 +33,10 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-datadump_folderpath = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-# datadump_folderpath = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+# datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+image_save_folder_path = 'Images/'
 
-imagesave_folderpath = 'Images/'
 
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
@@ -59,9 +62,16 @@ class System:
         self.trajectory['E_hist'].append(self.trajectory['X0'])
         self.additive = {'W': np.identity(self.dynamics['number_of_nodes']),
                          'V': np.identity(self.dynamics['number_of_nodes'])}
+
+        if additive is not None:
+            for k in self.additive:
+                if k in additive:
+                    self.additive[k] = dc(additive[k])
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
         self.noise_gen()
+        if additive is not None and 'type' in additive:
+            self.noise_mod(additive['type'], additive['disturbance'])
         self.initialize_architecture(architecture)
         # self.architecture['C']['cost']['R1'] = self.additive['V']
         self.architecture['C']['cost']['Q'] = self.additive['W']
@@ -75,6 +85,8 @@ class System:
 
     def model_rename(self, name_append=None):
         self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
+        if 'mod' in self.noise:
+            self.model_name = self.model_name + "_" + self.noise['mod']
         if name_append is not None:
             self.model_name = self.model_name + "_" + name_append
 
@@ -112,7 +124,7 @@ class System:
         self.dynamics['rho'] = rho
         self.dynamics['A'] = self.dynamics['Adj'] * self.dynamics['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
         self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
-        self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
+        self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if np.abs(i) >= 1])
 
     def initialize_architecture(self, architecture):
         architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
@@ -222,6 +234,15 @@ class System:
         self.noise['block_noise_covariance'] = scp.linalg.block_diag(self.additive['W'], self.additive['V'])
         self.noise['noise_sim'] = np.random.default_rng().multivariate_normal(np.zeros(2*self.dynamics['number_of_nodes']), self.noise['block_noise_covariance'], self.simulation_parameters['T_sim']+1)
 
+    def noise_mod(self, noise_type, disturbance):
+        if noise_type in ['process', 'sensor', 'combined']:
+            for i in range(0, self.simulation_parameters['T_sim'], disturbance['step']):
+                if noise_type in ['process', 'combined']:
+                    self.noise['noise_sim'][i][np.random.choice(self.dynamics['number_of_nodes'], disturbance['number'], replace=False)] = disturbance['magnitude']
+                if noise_type in ['sensor', 'combined']:
+                    self.noise['noise_sim'][i][self.dynamics['number_of_nodes']:] = disturbance['magnitude']
+            self.noise['mod'] = noise_type
+
     def available_choices(self, algorithm, fixed_architecture=None):
         choices = []
         for a in ['B', 'C']:
@@ -243,7 +264,7 @@ class System:
     def enhanced_system_matrix(self):
         self.dynamics['A_enhanced'] = {}
         self.dynamics['enhanced_stage_cost'] = {}
-        active = [self.dynamics['number_of_nodes'] + i for i in self.architecture['C']['active']] + [i for i in range(0,self.dynamics['number_of_nodes'])]
+        active = [self.dynamics['number_of_nodes'] + i for i in self.architecture['C']['active']] + [i for i in range(0, self.dynamics['number_of_nodes'])]
         self.noise['enhanced_noise_covariance'] = self.noise['block_noise_covariance'][active, :][:, active]
         self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
         self.noise['enhanced_noise_matrix'] = {}
@@ -310,6 +331,11 @@ class System:
         self.trajectory['x_estimate'].append(self.trajectory['X_enhanced'][-1][self.dynamics['number_of_nodes']:])
         self.trajectory['error'].append(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1])
         self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['error'][-1], ord=2))
+
+    def architecture_cost_update(self, R_set):
+        for arch in ['B', 'C']:
+            for R in R_set:
+                self.architecture[arch]['cost'][R] = R_set[R]
 
     def architecture_costs(self):
         self.trajectory['cost']['running'] = 0
@@ -487,7 +513,7 @@ class System:
         ax.set_aspect('equal')
 
         if ax_in is None:
-            f_name = imagesave_folderpath + self.model_name + '_t0'
+            f_name = image_save_folder_path + self.model_name + '_t0'
             plt.savefig(f_name)
             plt.show()
 
@@ -535,7 +561,7 @@ class System:
         ax.set_aspect('equal')
 
         if ax_in is None:
-            f_name = imagesave_folderpath + self.model_name + '_t' + str(time_step)
+            f_name = image_save_folder_path + self.model_name + '_t' + str(time_step)
             plt.savefig(f_name)
             plt.show()
 
@@ -573,7 +599,7 @@ class System:
         if ax_in is None:
             ax['C'].set_xlabel('Time')
             if f_name is None:
-                f_name = imagesave_folderpath+self.model_name+'_architecture_history.png'
+                f_name = image_save_folder_path+self.model_name+'_architecture_history.png'
             plt.savefig(f_name)
             plt.show()
 
@@ -615,7 +641,7 @@ class System:
         if ax_in is None:
             ax['error'].set_xlabel('Time')
             if f_name is None:
-                f_name = imagesave_folderpath + self.model_name + '_trajectory.png'
+                f_name = image_save_folder_path + self.model_name + '_trajectory.png'
             plt.savefig(f_name)
             plt.show()
         else:
@@ -910,9 +936,9 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         ax_cost.set_title('Cost comparison')
         ax_cost.set_xlabel('Time')
         if f_name is None:
-            f_name = imagesave_folderpath + "cost_trajectory.png"
+            f_name = image_save_folder_path + "cost_trajectory.png"
         else:
-            f_name = imagesave_folderpath + f_name + "_cost_trajectory.png"
+            f_name = image_save_folder_path + f_name + "_cost_trajectory.png"
         plt.savefig(f_name)
         plt.show()
     else:
@@ -946,48 +972,104 @@ def combined_plot(S, S_fixed, S_tuning):
     ax_cost.set_title(S.model_name)
     ax_architecture_C.set_xlabel('Time')
 
-    save_file = imagesave_folderpath + S.model_name+'_fixed_vs_tuning.png'
+    save_file = image_save_folder_path + S.model_name+'_fixed_vs_tuning.png'
     plt.savefig(save_file)
     print('Figure saved:', save_file)
     plt.show()
 
 
-def simulate_fixed_architecture(S):
+def simulate_fixed_architecture(S, print_check=True, tqdm_check=False):
     if not isinstance(S, System):
         raise Exception('Check data type')
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
-    print('\n Fixed architecture simulation')
+    if print_check:
+        print('\n Fixed architecture simulation')
     S_fixed = dc(S)
     S_fixed.model_rename(S.model_name + "_fixed")
-    for t in range(0, T_sim):
-        print("\r t:" + str(t), end="")
-        S_fixed.cost_wrapper_enhanced_true()
-        S_fixed.system_one_step_update_enhanced(t)
+    if tqdm_check:
+        for t in tqdm(range(0, T_sim), ncols=100):
+            # if print_check:
+            #     print("\r t:" + str(t), end="")
+            S_fixed.cost_wrapper_enhanced_true()
+            S_fixed.system_one_step_update_enhanced(t)
+    else:
+        for t in range(0, T_sim):
+            S_fixed.cost_wrapper_enhanced_true()
+            S_fixed.system_one_step_update_enhanced(t)
     return S_fixed
 
 
-def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_iteration=1):
-    print('\n Self-Tuning architecture simulation')
+def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_iteration=1, print_check=True, tqdm_check=False):
+    if print_check:
+        print('\n Self-Tuning architecture simulation')
     S_tuning = dc(S)
     S_tuning.model_rename(S.model_name + "_selftuning")
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
-    for t in range(0, T_sim):
-        print("\r t:" + str(t), end="")
-        S_tuning.cost_wrapper_enhanced_true()
-        S_tuning.system_one_step_update_enhanced(t)
-        S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
+    if tqdm_check:
+        for t in tqdm(range(0, T_sim), ncols=100):
+            # if print_check:
+            #     print("\r t:" + str(t), end="")
+            S_tuning.cost_wrapper_enhanced_true()
+            S_tuning.system_one_step_update_enhanced(t)
+            S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
+    else:
+        for t in range(0, T_sim):
+            # if print_check:
+            #     print("\r t:" + str(t), end="")
+            S_tuning.cost_wrapper_enhanced_true()
+            S_tuning.system_one_step_update_enhanced(t)
+            S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
     return S_tuning
 
 
+def statistics_shelving_initialize(fname):
+    folder_path = datadump_folder_path + 'statistics/' + fname
+    if os.path.isdir(folder_path):
+        rmtree(folder_path)
+    os.makedirs(folder_path)
+
+
+def data_shelving_statistics(S, S_fixed, S_tuning, i, print_check=False):
+    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name + '/model_' + str(i)
+    shelve_data = shelve.open(shelve_filename)
+    if print_check:
+        print('\nShelving to:', shelve_filename)
+    shelve_data['System'] = S
+    shelve_data['Fixed'] = S_fixed
+    shelve_data['SelfTuning'] = S_tuning
+    shelve_data.close()
+    if print_check:
+        print('\nModel shelve done: ', shelve_filename)
+
+
+def data_reading_statistics(model_type, model_id, print_check=False):
+    shelve_filename = datadump_folder_path + 'statistics/' + model_type + '/model_' + str(model_id)
+    if print_check:
+        print('\nShelving from:', shelve_filename)
+    shelve_data = shelve.open(shelve_filename)
+    S = shelve_data['System']
+    S_fixed = shelve_data['Fixed']
+    S_tuning = shelve_data['SelfTuning']
+    shelve_data.close()
+    return S, S_fixed, S_tuning
+
+
 def data_shelving_gen_model(S):
-    shelve_filename = datadump_folderpath + 'gen_' + S.model_name
+    shelve_filename = datadump_folder_path + 'gen_' + S.model_name
+    del_check = False
+    for f_type in ['.bak', '.dat', '.dir']:
+        if os.path.exists(shelve_filename + f_type):
+            os.remove(shelve_filename + f_type)
+            del_check = True
+    if del_check:
+        print('\nOld data deleted for overwriting')
     shelve_data = shelve.open(shelve_filename)
     shelve_data['System'] = S
     shelve_data.close()
-    print('Model shelve done: ', shelve_filename)
+    print('\nModel shelve done: ', shelve_filename)
 
 
-def model_name(n, rho, Tp, n_arch, test_model=None):
+def model_namer(n, rho, Tp, n_arch, test_model=None):
     model = 'model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
     if test_model is not None:
         model = model + '_' + test_model
@@ -995,10 +1077,10 @@ def model_name(n, rho, Tp, n_arch, test_model=None):
 
 
 def data_reading_gen_model(model):
-    print('\n Reading generated model...')
+    print('\nReading generated model...')
     modelname = 'gen_' + model
     print(modelname)
-    shelve_file = datadump_folderpath + modelname
+    shelve_file = datadump_folder_path + modelname
     shelve_data = shelve.open(shelve_file)
     S = shelve_data['System']
     shelve_data.close()
@@ -1009,7 +1091,7 @@ def data_reading_gen_model(model):
 
 def data_shelving_sim_model(S, S_fixed, S_tuning):
     print('\nTrajectory data shelving')
-    shelve_file = datadump_folderpath + 'sim_' + S.model_name
+    shelve_file = datadump_folder_path + 'sim_' + S.model_name
     print('\nDeleting old data...')
     for f_type in ['.bak', '.dat', '.dir']:
         if os.path.exists(shelve_file + f_type):
@@ -1027,8 +1109,9 @@ def data_shelving_sim_model(S, S_fixed, S_tuning):
 
 
 def data_reading_sim_model(model):
-    print('\n Data reading')
-    shelve_file = datadump_folderpath + 'sim_' + model
+    print('\nData reading')
+    shelve_file = datadump_folder_path + 'sim_' + model
+    print(shelve_file)
     try:
         shelve_data = shelve.open(shelve_file)
     except (FileNotFoundError, IOError):
@@ -1042,11 +1125,11 @@ def data_reading_sim_model(model):
     shelve_data.close()
     if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
         raise Exception('Data type mismatch')
-    print('Model: ', S.model_name)
+    print('\nModel: ', S.model_name)
     return S, S_fixed, S_tuning
 
 
-def slider_plot(model):
+def time_axis_plot(model):
     S, S_fixed, S_tuning = data_reading_sim_model(model)
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
                'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
@@ -1147,6 +1230,80 @@ def slider_plot(model):
     next_button.on_clicked(next_button_press)
     prev_button.on_clicked(prev_button_press)
     # time_text.on_submit(text_box_update)
+    plt.show()
+
+
+def statistics_plot(test_model):
+    plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+               'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+               'marker': {'B': "o", 'C': "o"}}
+    S, _, _ = data_reading_statistics(test_model, 1)
+    if not isinstance(S, System):
+        raise Exception('Incorrect model')
+
+    unstable_modes = []
+    cost_min_fix = np.inf * np.ones(S.simulation_parameters['T_sim'] + 1)
+    cost_min_tuning = dc(cost_min_fix)
+    cost_max_fix = np.zeros(S.simulation_parameters['T_sim'] + 1)
+    cost_max_tuning = dc(cost_max_fix)
+
+    rand_model = np.random.choice(range(1, 101), 1)
+    cost_fix = []
+    cost_tuning = []
+
+    for model_id in tqdm(range(1, 101), ncols=100):
+        S_i, S_fixed_i, S_tuning_i = data_reading_statistics(S.model_name, model_id)
+
+        if not isinstance(S_i, System):
+            raise Exception('Incorrect system model')
+        if not isinstance(S_fixed_i, System):
+            raise Exception('Incorrect system model')
+        if not isinstance(S_tuning_i, System):
+            raise Exception('Incorrect system model')
+
+        cumulative_cost_fixed = [S_fixed_i.trajectory['cost']['true'][0]]
+        cumulative_cost_tuning = [S_tuning_i.trajectory['cost']['true'][0]]
+        for j in range(1, len(S_fixed_i.trajectory['cost']['true'])):
+            cumulative_cost_fixed.append(cumulative_cost_fixed[-1] + S_fixed_i.trajectory['cost']['true'][j])
+            cumulative_cost_tuning.append(cumulative_cost_tuning[-1] + S_tuning_i.trajectory['cost']['true'][j])
+
+        if model_id == rand_model:
+            cost_fix = cumulative_cost_fixed
+            cost_tuning = cumulative_cost_tuning
+
+        unstable_modes.append(S_i.dynamics['n_unstable'])
+        # print(model_id, ' : ', S_i.dynamics['n_unstable'])
+        cost_min_fix = [min(cost_min_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_min_fix))]
+        cost_min_tuning = [min(cost_min_tuning[i], cumulative_cost_tuning[i]) for i in range(0, len(cost_min_tuning))]
+        cost_max_fix = [max(cost_max_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_max_fix))]
+        cost_max_tuning = [max(cost_max_tuning[i], cumulative_cost_tuning[i]) for i in range(0, len(cost_max_tuning))]
+
+    # print('Min fix: ', cost_min_fix)
+    # print('Min tuning: ', cost_min_tuning)
+    # print('Max fix: ', cost_max_fix)
+    # print('Max tuning: ', cost_max_tuning)
+
+    fig = plt.figure(constrained_layout=True)
+    grid = fig.add_gridspec(2, 1)
+
+    unstable_plot = fig.add_subplot(grid[0, 0])
+    cost_plot = fig.add_subplot(grid[1, 0])
+
+    unstable_plot.hist(unstable_modes, bins=range(0, max(unstable_modes) + 1), align='right', density=True)
+    cost_plot.fill_between(range(0, len(cost_min_fix)), cost_min_fix, cost_max_fix, color=plt_map['fixed']['c'], alpha=plt_map['fixed']['alpha'])
+    cost_plot.fill_between(range(0, len(cost_min_tuning)), cost_min_tuning, cost_max_tuning, color=plt_map['tuning']['c'], alpha=plt_map['tuning']['alpha'])
+    cost_plot.plot(range(0, len(cost_fix)), cost_fix, color=plt_map['fixed']['c'])
+    cost_plot.plot(range(0, len(cost_tuning)), cost_tuning, color=plt_map['tuning']['c'])
+
+    unstable_plot.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    unstable_plot.set_xlabel('Number of unstable modes')
+    unstable_plot.set_ylabel('Number Count')
+    cost_plot.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+    cost_plot.set_xlabel('Time')
+    cost_plot.set_ylabel('Cost')
+    cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed'), patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')], loc='upper left')
+
+    plt.savefig(image_save_folder_path + test_model + '_statistics.png')
     plt.show()
 
 
