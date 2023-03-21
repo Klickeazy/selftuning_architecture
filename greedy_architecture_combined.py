@@ -34,8 +34,8 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-# datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+# datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
 image_save_folder_path = 'Images/'
 
 
@@ -1301,10 +1301,11 @@ def statistics_plot(test_model):
     unstable_plot.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     unstable_plot.set_xlabel('Number of unstable modes')
     unstable_plot.set_ylabel('Number Count')
-    cost_plot.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+    cost_plot.set_yscale('log')
+    # cost_plot.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
     cost_plot.set_xlabel('Time')
     cost_plot.set_ylabel('Cost')
-    cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed'), patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')], loc='upper left')
+    cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed Architecture'), patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')], loc='upper left')
 
     plt.savefig(image_save_folder_path + test_model + '_statistics.png')
     plt.show()

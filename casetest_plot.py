@@ -2,13 +2,13 @@ import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
 
-    n = 50
-    rho = 4
+    n = 30
+    rho = 7
     Tp = 10
     n_arch = 5
 
-    test_model = 'combined'
-    # test_model = None
+    # test_model = 'combined'
+    test_model = None
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model)
     print(model)
