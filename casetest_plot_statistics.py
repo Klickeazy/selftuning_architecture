@@ -10,7 +10,8 @@ if __name__ == "__main__":
     n_arch = 5
     n_arch_B = n_arch
     n_arch_C = n_arch
-    test_model = 'combined'
+    # test_model = 'combined'
+    test_model = None
     model_name = gac.model_namer(n, rho, Tp, n_arch, test_model)
     print(model_name)
     gac.statistics_plot(model_name)

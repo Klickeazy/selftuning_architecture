@@ -14,8 +14,8 @@ if __name__ == "__main__":
     n_arch_B = n_arch
     n_arch_C = n_arch
 
-    test_model = 'combined'
-    # test_model = None
+    # test_model = 'combined'
+    test_model = None
 
     disturbance_step = 10
     disturbance_number = int(np.floor(n/2))

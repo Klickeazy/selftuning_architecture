@@ -17,6 +17,7 @@ from matplotlib.widgets import Slider, Button, TextBox
 import matplotlib.patches as patches
 # from matplotlib.ticker import MaxNLocator
 import matplotlib.animation
+import multiprocessing
 
 matplotlib.rcParams['axes.titlesize'] = 12
 matplotlib.rcParams['xtick.labelsize'] = 12
@@ -987,7 +988,8 @@ def simulate_fixed_architecture(S, print_check=True, tqdm_check=False):
     S_fixed = dc(S)
     S_fixed.model_rename(S.model_name + "_fixed")
     if tqdm_check:
-        for t in tqdm(range(0, T_sim), ncols=100):
+        process_number = int(multiprocessing.current_process().name[-1])
+        for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
             # if print_check:
             #     print("\r t:" + str(t), end="")
             S_fixed.cost_wrapper_enhanced_true()
@@ -1006,7 +1008,8 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
     S_tuning.model_rename(S.model_name + "_selftuning")
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
     if tqdm_check:
-        for t in tqdm(range(0, T_sim), ncols=100):
+        process_number = int(multiprocessing.current_process().name[-1])
+        for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
             # if print_check:
             #     print("\r t:" + str(t), end="")
             S_tuning.cost_wrapper_enhanced_true()
