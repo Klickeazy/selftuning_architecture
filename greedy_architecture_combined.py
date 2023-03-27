@@ -6,6 +6,7 @@ import scipy as scp
 from copy import deepcopy as dc
 import shelve
 import os
+import socket
 from tqdm import tqdm
 from shutil import rmtree
 import matplotlib
@@ -34,8 +35,11 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-# datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+if socket.gethostname() == 'melap257805':
+    datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+else:
+    datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+
 image_save_folder_path = 'Images/'
 
 
@@ -668,6 +672,8 @@ class System:
         ax['x'].set_ylabel(r'$|x_t|_'+str(v_norm)+'$')
         ax['error'].set_ylabel(r'$|x_t - \hat{x}_t|_'+str(v_norm)+'$')
         ax['x'].tick_params(axis="x", labelbottom=False)
+        ax['x'].ticklabel_format(axis='y', style='sci', scilimits=(-3, 3))
+        ax['error'].ticklabel_format(axis='y', style='sci', scilimits=(-3, 3))
 
         if ax_in is None:
             ax['error'].set_xlabel('Time')

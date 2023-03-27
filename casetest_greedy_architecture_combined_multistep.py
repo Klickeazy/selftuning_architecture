@@ -4,7 +4,7 @@ from copy import deepcopy as dc
 if __name__ == "__main__":
 
     n = 50
-    rho = 3
+    rho = 6
     Tp = 10
     n_arch = 5
 
@@ -21,8 +21,8 @@ if __name__ == "__main__":
 
     # # Model update:
     # S.simulation_parameters['T_predict'] = 30
-    S.rescale_dynamics(7)
-    S.model_rename()
+    # S.rescale_dynamics(7)
+    # S.model_rename()
 
     print('Optimizing design-time architecture')
     S = dc(gac.greedy_simultaneous(S)['work_set'])

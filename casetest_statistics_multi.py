@@ -2,6 +2,7 @@ import os
 from time import sleep
 
 # import scipy.stats
+from copy import deepcopy as dc
 from tqdm import tqdm
 import greedy_architecture_combined as gac
 from multiprocessing import Pool
@@ -9,8 +10,8 @@ import numpy as np
 
 
 def sys_gen():
-    n = 30
-    rho = 5
+    n = 20
+    rho = 3
     Tp = 10
     n_arch = 5
     n_arch_B = n_arch
@@ -30,6 +31,7 @@ def sys_gen():
     # Architecture selection costs
     S.architecture_cost_update({'R2': 0, 'R3': 0})
     S.model_rename()
+    S = dc(gac.greedy_simultaneous(S)['work_set'])
     return S
 
 

@@ -7,7 +7,7 @@ if __name__ == "__main__":
     print('Model Generation Parameters')
 
     n = 50
-    rho = 3
+    rho = 6
     Tp = 10
     n_arch = 5
     n_arch_B = n_arch
