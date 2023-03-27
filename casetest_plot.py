@@ -2,7 +2,7 @@ import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
 
-    n = 30
+    n = 50
     rho = 7
     Tp = 10
     n_arch = 5
@@ -10,7 +10,10 @@ if __name__ == "__main__":
     # test_model = 'combined'
     test_model = None
 
-    model = gac.model_namer(n, rho, Tp, n_arch, test_model)
+    # second_order = False
+    second_order = True
+
+    model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order)
     print(model)
 
     # gac.combined_plot(S, S_fixed, S_tuning)

@@ -34,15 +34,15 @@ matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
 
-datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-# datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+# datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
 image_save_folder_path = 'Images/'
 
 
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
         self.dynamics = {}
-        default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1}
+        default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1, 'second_order': False}
         if graph_model is None:
             graph_model = {}
         for key in default_graph_model:
@@ -85,9 +85,11 @@ class System:
         # self.enhanced_system_matrix()
 
     def model_rename(self, name_append=None):
-        self.model_name = "model_n" + str(self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
+        self.model_name = "model_n" + str(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
         if 'mod' in self.noise:
             self.model_name = self.model_name + "_" + self.noise['mod']
+        if self.dynamics['second_order']:
+            self.model_name = self.model_name + "_secondorder"
         if name_append is not None:
             self.model_name = self.model_name + "_" + name_append
 
@@ -114,29 +116,49 @@ class System:
             connected_network_check = netx.algorithms.components.is_connected(G)
 
         self.dynamics['Adj'] = netx.to_numpy_array(G)
-        if 'self_loop' not in graph_model or graph_model['self_loop']:
+        if graph_model['self_loop']:
             self.dynamics['Adj'] += np.identity(self.dynamics['number_of_nodes'])
+
+        if graph_model['second_order']:
+            self.dynamics['second_order'] = True
+            # self.second_order_network()
+            self.dynamics['number_of_nodes'] *= 2
+            # self.open_loop_stability_eval()
+        else:
+            self.dynamics['second_order'] = False
         self.rescale_dynamics(graph_model['rho'])
+
         # self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
         # self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
         # self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
+    def second_order_network(self):
+        self.dynamics['A'] = np.block([[self.dynamics['Adj'], np.zeros_like(self.dynamics['Adj'])],
+                                       [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), 0.5*np.identity(int(self.dynamics['number_of_nodes']/2))]])
 
     def rescale_dynamics(self, rho):
         self.dynamics['rho'] = rho
-        self.dynamics['A'] = self.dynamics['Adj'] * self.dynamics['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
+        if self.dynamics['second_order']:
+            self.second_order_network()
+        else:
+            self.dynamics['A'] = self.dynamics['Adj']
+        self.dynamics['A'] = rho * self.dynamics['A']/(np.max(np.abs(np.linalg.eigvals(self.dynamics['A']))))
+        self.open_loop_stability_eval()
+
+    def open_loop_stability_eval(self):
         self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
         self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if np.abs(i) >= 1])
 
     def initialize_architecture(self, architecture):
-        architecture_model = {'min': 1, 'max': self.dynamics['number_of_nodes'],
+        n = int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes']
+        architecture_model = {'min': 1, 'max': n,
                               'cost': {'Q': np.identity(self.dynamics['number_of_nodes']),
-                                       'R1': np.identity(self.dynamics['number_of_nodes']),
+                                       'R1': np.identity(n),
                                        'R2': 0,
                                        'R3': 0},
                               'active': [],
-                              'matrix': np.zeros_like(self.dynamics['A']),
-                              'indicator': np.zeros(self.dynamics['number_of_nodes']),
-                              'available': range(0, self.dynamics['number_of_nodes']),
+                              'matrix': np.zeros((self.dynamics['number_of_nodes'], n)),
+                              'indicator': np.zeros(n),
+                              'available': range(0, n),
                               'set': [],
                               'history': [],
                               'gain': {},
@@ -154,8 +176,9 @@ class System:
             self.random_architecture(n_select=architecture['rand'])
 
     def initialize_architecture_set_as_basis_vectors(self):
+        n = int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes']
         basis = []
-        for i in range(0, self.dynamics['number_of_nodes']):
+        for i in range(0, n):
             basis.append(np.zeros(self.dynamics['number_of_nodes']))
             basis[-1][i] = 1
         if len(self.architecture['B']['set']) == 0:
@@ -188,7 +211,7 @@ class System:
             architecture_type = ['B', 'C']
         for i in architecture_type:
             self.architecture[i]['matrix'] = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture[i]['active'])))
-            self.architecture[i]['indicator'] = np.zeros(self.dynamics['number_of_nodes'])
+            self.architecture[i]['indicator'] = np.zeros(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes'])
             for k in range(0, len(self.architecture[i]['active'])):
                 if i == 'B':
                     self.architecture[i]['matrix'][:, k] = self.architecture[i]['set'][self.architecture[i]['active'][k]]
@@ -215,6 +238,7 @@ class System:
             else:
                 n_arch = max((self.architecture[i]['min'] + self.architecture[i]['max']) // 2, self.architecture[i]['min'])
             self.architecture[i]['active'] = np.sort(random.sample(self.architecture[i]['available'], k=n_arch)).tolist()
+            # print(i, ':', self.architecture[i]['active'])
         for i in architecture_type:
             self.architecture[i]['history'] = [self.architecture[i]['active']]
         self.architecture_active_to_matrix()
@@ -347,18 +371,24 @@ class System:
             if len(self.architecture[a]['history']) > 0:
                 for i in self.architecture[a]['history'][-1]:
                     history_vector[i] = 1
-            if self.metric_model['type2'] == 'matrix':
-                self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*np.squeeze(self.architecture[a]['indicator'].T @ self.architecture[a]['cost']['R2'] @ self.architecture[a]['indicator'])
-            elif self.metric_model['type2'] == 'scalar':
-                self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R2'] * np.linalg.norm(self.architecture[a]['indicator'], ord=1)
-            else:
-                raise Exception('Check Metric for Type 2 - Running Costs')
-            if self.metric_model['type3'] == 'matrix':
-                self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*np.squeeze((self.architecture[a]['indicator'] - history_vector).T @ self.architecture[a]['cost']['R3'] @ (self.architecture[a]['indicator'] - history_vector))
-            elif self.metric_model['type3'] == 'scalar':
-                self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R3'] * np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1)
-            else:
-                raise Exception('Check Metric for Type 2 - Running Costs')
+            if np.asarray((self.architecture[a]['cost']['R2'] > 0)).any():
+                if self.metric_model['type2'] == 'matrix':
+                    self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*np.squeeze(self.architecture[a]['indicator'].T @ self.architecture[a]['cost']['R2'] @ self.architecture[a]['indicator'])
+                elif self.metric_model['type2'] == 'scalar':
+                    self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R2'] * np.linalg.norm(self.architecture[a]['indicator'], ord=1)
+                else:
+                    raise Exception('Check Metric for Type 2 - Running Costs')
+
+            if np.asarray((self.architecture[a]['cost']['R3'] > 0)).any():
+                if self.metric_model['type3'] == 'matrix':
+                    self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*np.squeeze((self.architecture[a]['indicator'] - history_vector).T @ self.architecture[a]['cost']['R3'] @ (self.architecture[a]['indicator'] - history_vector))
+                elif self.metric_model['type3'] == 'scalar':
+                    print(np.shape(np.linalg.norm(self.architecture[a]['indicator'])))
+                    print(np.shape(history_vector))
+                    # print(np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1))
+                    self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R3'] * np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1)
+                else:
+                    raise Exception('Check Metric for Type 2 - Running Costs')
 
     def cost_wrapper_enhanced_prediction(self):
         self.feedback_computations()
@@ -431,7 +461,7 @@ class System:
 
 
     def network_matrix(self):
-        A_mat = self.dynamics['Adj'] > 0
+        A_mat = self.dynamics['A'] > 0
         B_mat = self.architecture['B']['matrix']
         C_mat = self.architecture['C']['matrix']
         net_matrix = np.block([[A_mat, B_mat, C_mat.T],
@@ -979,7 +1009,7 @@ def combined_plot(S, S_fixed, S_tuning):
     plt.show()
 
 
-def simulate_fixed_architecture(S, print_check=True, tqdm_check=False):
+def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
     if not isinstance(S, System):
         raise Exception('Check data type')
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
@@ -987,7 +1017,7 @@ def simulate_fixed_architecture(S, print_check=True, tqdm_check=False):
         print('\n Fixed architecture simulation')
     S_fixed = dc(S)
     S_fixed.model_rename(S.model_name + "_fixed")
-    if tqdm_check:
+    if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
         for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
             # if print_check:
@@ -995,19 +1025,19 @@ def simulate_fixed_architecture(S, print_check=True, tqdm_check=False):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
     else:
-        for t in range(0, T_sim):
+        for t in tqdm(range(0, T_sim), ncols=100):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
     return S_fixed
 
 
-def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_iteration=1, print_check=True, tqdm_check=False):
+def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_iteration=1, print_check=True, multiprocess_check=False):
     if print_check:
         print('\n Self-Tuning architecture simulation')
     S_tuning = dc(S)
     S_tuning.model_rename(S.model_name + "_selftuning")
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
-    if tqdm_check:
+    if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
         for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
             # if print_check:
@@ -1016,7 +1046,7 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
     else:
-        for t in range(0, T_sim):
+        for t in tqdm(range(0, T_sim), ncols=100):
             # if print_check:
             #     print("\r t:" + str(t), end="")
             S_tuning.cost_wrapper_enhanced_true()
@@ -1072,10 +1102,12 @@ def data_shelving_gen_model(S):
     print('\nModel shelve done: ', shelve_filename)
 
 
-def model_namer(n, rho, Tp, n_arch, test_model=None):
+def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False):
     model = 'model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
     if test_model is not None:
         model = model + '_' + test_model
+    if second_order:
+        model = model + '_secondorder'
     return model
 
 

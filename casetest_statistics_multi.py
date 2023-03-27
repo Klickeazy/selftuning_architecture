@@ -10,19 +10,21 @@ import numpy as np
 
 def sys_gen():
     n = 30
-    rho = 7
+    rho = 5
     Tp = 10
     n_arch = 5
     n_arch_B = n_arch
     n_arch_C = n_arch
     # test_model = 'combined'
     test_model = None
+    second_order = True
+    # second_order = False
     disturbance_step = 10
     disturbance_number = int(np.floor(n / 2))
     disturbance_magnitude = 20
     disturbance = {'step': disturbance_step, 'number': disturbance_number, 'magnitude': disturbance_magnitude}
 
-    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
+    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho, 'second_order': second_order}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
     # Architecture selection parameters
     S.architecture_limit_modifier(min_mod=n_arch - 1, max_mod=-n + n_arch)
     # Architecture selection costs
@@ -38,8 +40,8 @@ def sys_test(i):
     while fail_check:
         try:
             S = sys_gen()
-            S_fixed = gac.simulate_fixed_architecture(S, print_check=False, tqdm_check=True)
-            S_tuning = gac.simulate_selftuning_architecture(S, print_check=False, tqdm_check=True)
+            S_fixed = gac.simulate_fixed_architecture(S, print_check=False, multiprocess_check=True)
+            S_tuning = gac.simulate_selftuning_architecture(S, print_check=False, multiprocess_check=True)
             gac.data_shelving_statistics(S, S_fixed, S_tuning, i)
             fail_check = False
         except Exception as e:
