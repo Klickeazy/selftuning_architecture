@@ -10,8 +10,8 @@ import numpy as np
 
 
 def sys_gen():
-    n = 20
-    rho = 3
+    n = 50
+    rho = 5
     Tp = 10
     n_arch = 5
     n_arch_B = n_arch

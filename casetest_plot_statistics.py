@@ -4,7 +4,7 @@ if __name__ == "__main__":
 
     n_samples = 100
 
-    n = 30
+    n = 50
     rho = 5
     Tp = 10
     n_arch = 5
