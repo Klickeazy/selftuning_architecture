@@ -4,7 +4,7 @@ from copy import deepcopy as dc
 if __name__ == "__main__":
 
     n = 50
-    rho = 6
+    rho = 8
     Tp = 10
     n_arch = 5
 
@@ -21,14 +21,14 @@ if __name__ == "__main__":
 
     # # Model update:
     # S.simulation_parameters['T_predict'] = 30
-    # S.rescale_dynamics(7)
-    # S.model_rename()
+    S.rescale_dynamics(7)
+    S.model_rename()
 
+    print('Simulating Model: ', S.model_name)
+    print('Number of unstable modes: ', S.dynamics['n_unstable'])
     print('Optimizing design-time architecture')
     S = dc(gac.greedy_simultaneous(S)['work_set'])
 
-    print('Number of unstable modes: ', S.dynamics['n_unstable'])
-    print('Simulating Model: ', S.model_name)
 
     S_fixed = gac.simulate_fixed_architecture(S)
     if test_model == 'unlimited_arch_change':
