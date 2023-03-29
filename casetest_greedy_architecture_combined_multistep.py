@@ -16,6 +16,7 @@ if __name__ == "__main__":
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order)
     S = gac.data_reading_gen_model(model)
+    # S.display_active_architecture()
 
     print('Retrieved model: ', S.model_name)
 
@@ -28,7 +29,7 @@ if __name__ == "__main__":
     print('Number of unstable modes: ', S.dynamics['n_unstable'])
     print('Optimizing design-time architecture')
     S = dc(gac.greedy_simultaneous(S)['work_set'])
-
+    # S.display_active_architecture()
 
     S_fixed = gac.simulate_fixed_architecture(S)
     if test_model == 'unlimited_arch_change':

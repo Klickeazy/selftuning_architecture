@@ -4,10 +4,10 @@ if __name__ == "__main__":
 
     n_samples = 100
 
-    n = 20
-    rho = 3
+    n = 50
+    rho = 7
     Tp = 10
-    n_arch = 2
+    n_arch = 4
     n_arch_B = n_arch
     n_arch_C = n_arch
     # test_model = 'combined'

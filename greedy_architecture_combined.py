@@ -1031,7 +1031,7 @@ def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
     else:
-        for t in tqdm(range(0, T_sim), ncols=100):
+        for t in tqdm(range(0, T_sim), ncols=100, leave=False):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
     return S_fixed
@@ -1052,7 +1052,7 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
     else:
-        for t in tqdm(range(0, T_sim), ncols=100):
+        for t in tqdm(range(0, T_sim), ncols=100, leave=False):
             # if print_check:
             #     print("\r t:" + str(t), end="")
             S_tuning.cost_wrapper_enhanced_true()
