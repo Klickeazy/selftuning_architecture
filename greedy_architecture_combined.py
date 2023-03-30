@@ -71,7 +71,7 @@ class System:
         if additive is not None:
             for k in self.additive:
                 if k in additive:
-                    self.additive[k] = dc(additive[k])
+                    self.additive[k] *= additive[k]
         self.initialize_initial_conditions(initial_conditions)
         self.noise = {}
         self.noise_gen()
@@ -336,6 +336,8 @@ class System:
             self.trajectory['E'][t+1] = (self.dynamics['A'] @ self.trajectory['E'][t] @ self.dynamics['A'].T) - (self.dynamics['A'] @ self.architecture['C']['gain'][t] @ self.architecture['C']['matrix'] @ self.trajectory['E'][t] @ self.dynamics['A'].T) + self.architecture['C']['cost']['Q']
 
             if np.min(np.linalg.eigvals(self.trajectory['E'][t+1])) < 0:
+                for k in self.trajectory['E']:
+                    print(k, '- Eigenvalues: ', np.min(np.linalg.eigvals(self.trajectory['E'][k])))
                 raise Exception('Negative covariance eigenvalues')
 
     def enhanced_lyapunov_control_cost(self):
@@ -387,8 +389,8 @@ class System:
                 if self.metric_model['type3'] == 'matrix':
                     self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*np.squeeze((self.architecture[a]['indicator'] - history_vector).T @ self.architecture[a]['cost']['R3'] @ (self.architecture[a]['indicator'] - history_vector))
                 elif self.metric_model['type3'] == 'scalar':
-                    print(np.shape(np.linalg.norm(self.architecture[a]['indicator'])))
-                    print(np.shape(history_vector))
+                    # print(np.shape(np.linalg.norm(self.architecture[a]['indicator'])))
+                    # print(np.shape(history_vector))
                     # print(np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1))
                     self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R3'] * np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1)
                 else:
@@ -961,11 +963,15 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         tstep_cost[i] = cumulative_cost[-1]
         ax_cost.plot(range(0, T), cumulative_cost, label=i, c=plt_map[i]['c'], linestyle=plt_map[i]['line_style'], zorder=plt_map[i]['zorder'])
     ax_cost.set_ylabel('Cumulative\nCost')
-    ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-2, 2))
     ax_cost.legend(loc='upper left')
     improvement = 100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed']
     improvement_str = str(np.round(improvement, 2)) + r'\% improvement'
     print(improvement_str)
+    # if improvement > 95:
+    #     ax_cost.set_yscale('log')
+    # else:
+    # ax_cost.set_yscale('log')
+    ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-4, 4))
     ax_cost.text(T-35, 0, improvement_str)
     ax_cost.set_xlim(-1, 1+max([len(cost[i]) for i in cost]))
 
@@ -1020,7 +1026,7 @@ def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
         raise Exception('Check data type')
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
     if print_check:
-        print('\n Fixed architecture simulation')
+        print('\n     Fixed architecture simulation')
     S_fixed = dc(S)
     S_fixed.model_rename(S.model_name + "_fixed")
     if multiprocess_check:
@@ -1034,12 +1040,13 @@ def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
         for t in tqdm(range(0, T_sim), ncols=100, leave=False):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
+    print('     Simulation Done')
     return S_fixed
 
 
 def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_iteration=1, print_check=True, multiprocess_check=False):
     if print_check:
-        print('\n Self-Tuning architecture simulation')
+        print('\n     Self-Tuning architecture simulation')
     S_tuning = dc(S)
     S_tuning.model_rename(S.model_name + "_selftuning")
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
@@ -1058,7 +1065,27 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
             S_tuning.cost_wrapper_enhanced_true()
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
+    print('     Simulation Done')
     return S_tuning
+
+
+def greedy_architecture_initialization(S):
+    if not isinstance(S, System):
+        raise Exception('Data type check')
+    S_test = dc(S)
+    for a in ['B', 'C']:
+        S_test.architecture[a]['active'] = [S_test.architecture[a]['active'][0]]
+        S_test.architecture[a]['cost']['R3'] = 0
+    S_test.model_name = 'Test model'
+    S_test.display_active_architecture()
+    S_test = dc(greedy_architecture_selection(S_test)['work_set'])
+    S_test = dc(greedy_simultaneous(S_test)['work_set'])
+    print('Optimal architecture:')
+    S_test.display_active_architecture()
+    S_test.model_name = S.model_name
+    for a in ['B', 'C']:
+        S.architecture[a]['active'] = dc(S_test.architecture[a]['active'])
+    return S_test
 
 
 def statistics_shelving_initialize(fname):
