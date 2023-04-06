@@ -964,17 +964,21 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         ax_cost.plot(range(0, T), cumulative_cost, label=i, c=plt_map[i]['c'], linestyle=plt_map[i]['line_style'], zorder=plt_map[i]['zorder'])
     ax_cost.set_ylabel('Cumulative\nCost')
     ax_cost.legend(loc='upper left')
-    improvement = 100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed']
-    improvement_str = str(np.round(improvement, 2)) + r'\% improvement'
+    improvement = np.round(100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed'], 2)
+    improvement_str = ''
+    if improvement < 100:
+        improvement_str = str(improvement) + r'\% improvement' + '\n'
+    improvement_str = improvement_str + 'Cost:' + np.format_float_scientific(tstep_cost['fixed'], precision=3, trim='0') + ' vs ' + np.format_float_scientific(tstep_cost['tuning'], precision=3, trim='0')
     print(improvement_str)
     # if improvement > 95:
     #     ax_cost.set_yscale('log')
     # else:
     # ax_cost.set_yscale('log')
     ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-4, 4))
-    ax_cost.text(T-35, 0, improvement_str)
     ax_cost.set_xlim(-1, 1+max([len(cost[i]) for i in cost]))
-
+    x_lims = ax_cost.get_xlim()
+    y_lims = ax_cost.get_ylim()
+    ax_cost.text(x_lims[0]+(0.22*(x_lims[1]-x_lims[0])), y_lims[0]+(0.65*(y_lims[1]-y_lims[0])), improvement_str)
     if ax is None:
         ax_cost.set_title('Cost comparison')
         ax_cost.set_xlabel('Time')
@@ -1040,7 +1044,7 @@ def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
         for t in tqdm(range(0, T_sim), ncols=100, leave=False):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
-    print('     Simulation Done')
+        print('         Simulation Done')
     return S_fixed
 
 
@@ -1065,7 +1069,7 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
             S_tuning.cost_wrapper_enhanced_true()
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
-    print('     Simulation Done')
+        print('         Simulation Done')
     return S_tuning
 
 
@@ -1231,7 +1235,7 @@ def time_axis_plot(model):
     S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
 
     S_tuning.plot_network(ax_in=ax_network_nodes, node_filter='dynamics')
-    ax_network_nodes.set_title(S.model_name)
+    ax_network_nodes.set_title(S.model_name + '\nUnstable modes:' + str(S_tuning.dynamics['n_unstable']))
     # S_tuning.plot_dynamics(ax_in=ax_network_nodes)
     S_tuning.plot_network(ax_in=ax_tstep_architecture, node_filter='architecture')
 

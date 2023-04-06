@@ -3,8 +3,8 @@ from copy import deepcopy as dc
 
 if __name__ == "__main__":
 
-    n = 50
-    rho = 10
+    n = 30
+    rho = 3
     Tp = 10
     n_arch = 3
 
@@ -22,8 +22,8 @@ if __name__ == "__main__":
 
     # # Model update:
     # S.simulation_parameters['T_predict'] = 30
-    # S.rescale_dynamics(8)
-    # S.model_rename()
+    S.rescale_dynamics(5)
+    S.model_rename()
 
     print('Simulating Model: ', S.model_name)
     print('Number of unstable modes: ', S.dynamics['n_unstable'])

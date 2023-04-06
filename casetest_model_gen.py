@@ -6,8 +6,8 @@ if __name__ == "__main__":
 
     print('Generating Model')
 
-    n = 50
-    rho = 10
+    n = 30
+    rho = 3
     Tp = 10
     n_arch = 3
     n_arch_B = n_arch

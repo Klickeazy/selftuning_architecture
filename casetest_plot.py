@@ -2,8 +2,8 @@ import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
 
-    n = 50
-    rho = 10
+    n = 30
+    rho = 5
     Tp = 10
     n_arch = 3
 
