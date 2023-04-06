@@ -267,9 +267,9 @@ class System:
         if noise_type in ['process', 'sensor', 'combined']:
             for i in range(0, self.simulation_parameters['T_sim'], disturbance['step']):
                 if noise_type in ['process', 'combined']:
-                    self.noise['noise_sim'][i][np.random.choice(self.dynamics['number_of_nodes'], disturbance['number'], replace=False)] = disturbance['magnitude']
+                    self.noise['noise_sim'][i][np.random.choice(self.dynamics['number_of_nodes'], disturbance['number'], replace=False)] = disturbance['magnitude'] * np.random.choice([-1, 1], disturbance['number'])
                 if noise_type in ['sensor', 'combined']:
-                    self.noise['noise_sim'][i][self.dynamics['number_of_nodes']:] = disturbance['magnitude']
+                    self.noise['noise_sim'][i][self.dynamics['number_of_nodes']:] = disturbance['magnitude'] * np.random.choice([-1, 1], self.dynamics['number_of_nodes'])
             self.noise['mod'] = noise_type
 
     def available_choices(self, algorithm, fixed_architecture=None):

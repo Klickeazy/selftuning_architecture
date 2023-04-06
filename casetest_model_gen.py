@@ -13,15 +13,15 @@ if __name__ == "__main__":
     n_arch_B = n_arch
     n_arch_C = n_arch
 
-    # test_model = 'combined'
+    # test_model = 'combined'  #  'process', 'sensor', 'combined', None
     test_model = None
 
-    # second_order = True
-    second_order = False
+    second_order = True
+    # second_order = False
 
-    disturbance_step = 10
+    disturbance_step = 15
     disturbance_number = int(np.floor(n / 2))
-    disturbance_magnitude = 20
+    disturbance_magnitude = 10
     disturbance = {'step': disturbance_step, 'number': disturbance_number, 'magnitude': disturbance_magnitude}
 
     # Model Gen
@@ -39,11 +39,11 @@ if __name__ == "__main__":
     # print(S.additive['V'])
 
     # Architecture selection costs
-    # S.architecture_cost_update({'R2': 0, 'R3': 0})
-    S.architecture['B']['cost']['R2'] = 100
-    S.architecture['C']['cost']['R2'] = 0
-    S.architecture['B']['cost']['R3'] = 100
-    S.architecture['C']['cost']['R3'] = 0
+    S.architecture_cost_update({'R2': 0, 'R3': 0})
+    # S.architecture['B']['cost']['R2'] = 100
+    # S.architecture['C']['cost']['R2'] = 0
+    # S.architecture['B']['cost']['R3'] = 100
+    # S.architecture['C']['cost']['R3'] = 0
 
     S.model_rename()
 
