@@ -7,11 +7,11 @@ if __name__ == "__main__":
     Tp = 10
     n_arch = 3
 
-    test_model = 'combined'
-    # test_model = None
+    # test_model = 'combined'
+    test_model = None
 
-    second_order = False
     # second_order = True
+    second_order = False
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order)
     print(model)

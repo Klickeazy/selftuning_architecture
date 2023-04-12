@@ -16,8 +16,8 @@ if __name__ == "__main__":
     # test_model = 'combined'  #  'process', 'sensor', 'combined', None
     test_model = None
 
-    second_order = True
-    # second_order = False
+    # second_order = True
+    second_order = False
 
     disturbance_step = 15
     disturbance_number = int(np.floor(n / 2))

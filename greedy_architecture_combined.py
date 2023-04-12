@@ -165,6 +165,7 @@ class System:
                               'available': range(0, n),
                               'set': [],
                               'history': [],
+                              'change_count': 0,
                               'gain': {},
                               'gram': np.zeros_like(self.dynamics['A'])}
         for architecture_type in self.architecture:
@@ -389,9 +390,6 @@ class System:
                 if self.metric_model['type3'] == 'matrix':
                     self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*np.squeeze((self.architecture[a]['indicator'] - history_vector).T @ self.architecture[a]['cost']['R3'] @ (self.architecture[a]['indicator'] - history_vector))
                 elif self.metric_model['type3'] == 'scalar':
-                    # print(np.shape(np.linalg.norm(self.architecture[a]['indicator'])))
-                    # print(np.shape(history_vector))
-                    # print(np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1))
                     self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R3'] * np.linalg.norm(self.architecture[a]['indicator'] - history_vector, ord=1)
                 else:
                     raise Exception('Check Metric for Type 2 - Running Costs')
@@ -465,6 +463,13 @@ class System:
         for a in ['B', 'C']:
             print(a, ':', self.architecture[a]['active'])
 
+    def count_architecture_changes(self, print_check=False):
+        for a in ['B', 'C']:
+            self.architecture[a]['change_count'] = 0
+            for t in range(0, len(self.architecture[a]['history'])-1):
+                self.architecture[a]['change_count'] += compare_lists(self.architecture[a]['history'][t], self.architecture[a]['history'][t+1])['change_count']
+            if print_check:
+                print(a, ': ', self.architecture[a]['change_count'])
 
     def network_matrix(self):
         A_mat = self.dynamics['A'] > 0
@@ -631,7 +636,9 @@ class System:
 
         ax['B'].tick_params(axis="x", labelbottom=False)
         ax['B'].set_ylabel('Nodes with \n Actuators ' + r'$(B_{S_t})$')
+        ax['B'].set_title(str(self.architecture['B']['change_count']) + ' changes')
         ax['C'].set_ylabel('Nodes with \n Sensors ' + r'$(C_{S_t})$')
+        ax['C'].set_title(str(self.architecture['C']['change_count']) + ' changes')
 
         if ax_in is None:
             ax['C'].set_xlabel('Time')
@@ -709,7 +716,11 @@ def min_limit(architecture, algorithm):
 
 
 def compare_lists(array1, array2):
-    return {'a1only': [i for i in array1 if i not in array2], 'a2only': [i for i in array2 if i not in array1], 'common': [i for i in array1 if i in array2]}
+    a1 = [i for i in array1 if i not in array2]
+    a2 = [i for i in array2 if i not in array1]
+    c = [i for i in array1 if i in array2]
+    changes = np.max([len(a1), len(a2)])
+    return {'a1only': a1, 'a2only': a2, 'common': c, 'change_count': changes}
 
 
 def item_index_from_policy(values, policy):
@@ -1036,8 +1047,6 @@ def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
     if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
         for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
-            # if print_check:
-            #     print("\r t:" + str(t), end="")
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
     else:
@@ -1057,19 +1066,16 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
     if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
         for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
-            # if print_check:
-            #     print("\r t:" + str(t), end="")
             S_tuning.cost_wrapper_enhanced_true()
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
     else:
         for t in tqdm(range(0, T_sim), ncols=100, leave=False):
-            # if print_check:
-            #     print("\r t:" + str(t), end="")
             S_tuning.cost_wrapper_enhanced_true()
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
         print('         Simulation Done')
+    S_tuning.count_architecture_changes()
     return S_tuning
 
 
@@ -1314,6 +1320,8 @@ def statistics_plot(test_model):
         raise Exception('Incorrect model')
 
     unstable_modes = []
+    B_changes = []
+    C_changes = []
     cost_min_fix = np.inf * np.ones(S.simulation_parameters['T_sim'] + 1)
     cost_min_tuning = dc(cost_min_fix)
     cost_max_fix = np.zeros(S.simulation_parameters['T_sim'] + 1)
@@ -1344,6 +1352,8 @@ def statistics_plot(test_model):
             cost_tuning = cumulative_cost_tuning
 
         unstable_modes.append(S_i.dynamics['n_unstable'])
+        B_changes.append(S_tuning_i.architecture['B']['change_count'])
+        C_changes.append(S_tuning_i.architecture['C']['change_count'])
         # print(model_id, ' : ', S_i.dynamics['n_unstable'])
         cost_min_fix = [min(cost_min_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_min_fix))]
         cost_min_tuning = [min(cost_min_tuning[i], cumulative_cost_tuning[i]) for i in range(0, len(cost_min_tuning))]
@@ -1356,10 +1366,13 @@ def statistics_plot(test_model):
     # print('Max tuning: ', cost_max_tuning)
 
     fig = plt.figure(constrained_layout=True)
-    grid = fig.add_gridspec(2, 1)
+    grid = fig.add_gridspec(4, 2)
 
-    unstable_plot = fig.add_subplot(grid[0, 0])
-    cost_plot = fig.add_subplot(grid[1, 0])
+    unstable_plot = fig.add_subplot(grid[1, :])
+    cost_plot = fig.add_subplot(grid[0, :])
+    B_arch_plot = fig.add_subplot(grid[2, 0])
+    C_arch_plot = fig.add_subplot(grid[3, 0])
+    arch_scatter_plot = fig.add_subplot(grid[2:4, 1])
 
     unstable_plot.hist(unstable_modes, bins=range(0, max(unstable_modes) + 1), align='right', density=True)
     cost_plot.fill_between(range(0, len(cost_min_fix)), cost_min_fix, cost_max_fix, color=plt_map['fixed']['c'], alpha=plt_map['fixed']['alpha'])
@@ -1367,14 +1380,25 @@ def statistics_plot(test_model):
     cost_plot.plot(range(0, len(cost_fix)), cost_fix, color=plt_map['fixed']['c'])
     cost_plot.plot(range(0, len(cost_tuning)), cost_tuning, color=plt_map['tuning']['c'])
 
+    B_arch_plot.hist(B_changes, density=True)
+    C_arch_plot.hist(C_changes, density=True)
+    arch_scatter_plot.scatter(B_changes, C_changes)
+
     unstable_plot.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     unstable_plot.set_xlabel('Number of unstable modes')
-    unstable_plot.set_ylabel('Number Count')
+    unstable_plot.set_ylabel('Fraction of\nrealizations')
     cost_plot.set_yscale('log')
     # cost_plot.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
     cost_plot.set_xlabel('Time')
     cost_plot.set_ylabel('Cost')
     cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed Architecture'), patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')], loc='upper left')
+    # arch_plot.legend(['B', 'C'])
+    B_arch_plot.set_xlabel('Number of changes to actuators')
+    B_arch_plot.set_ylabel('Fraction of\nrealizations')
+    C_arch_plot.set_xlabel('Number of changes to sensors')
+    C_arch_plot.set_ylabel('Fraction of\nrealizations')
+    arch_scatter_plot.set_xlabel('Number of changes to actuators')
+    arch_scatter_plot.set_ylabel('Number of changes to sensors')
 
     plt.savefig(image_save_folder_path + test_model + '_statistics.png')
     plt.show()

@@ -14,15 +14,17 @@ def sys_gen():
     rho = 4
     Tp = 10
     n_arch = 2
-    n_arch_B = n_arch
-    n_arch_C = n_arch
-    # test_model = 'combined'
-    test_model = None
-    second_order = True
-    # second_order = False
+    # n_arch_B = n_arch
+    # n_arch_C = n_arch
+
+    test_model = 'combined'
+    # test_model = None
+    # second_order = True
+    second_order = False
+
     disturbance_step = 10
     disturbance_number = int(np.floor(n / 2))
-    disturbance_magnitude = 20
+    disturbance_magnitude = 100
     disturbance = {'step': disturbance_step, 'number': disturbance_number, 'magnitude': disturbance_magnitude}
 
     S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho, 'second_order': second_order}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})

@@ -8,8 +8,8 @@ if __name__ == "__main__":
     Tp = 10
     n_arch = 3
 
-    test_model = 'combined'
-    # test_model = None
+    # test_model = 'combined'
+    test_model = None
 
     # second_order = True
     second_order = False
@@ -25,9 +25,9 @@ if __name__ == "__main__":
     S.rescale_dynamics(6)
     # Architecture selection costs
     # S.architecture_cost_update({'R2': 0, 'R3': 0})
-    S.architecture['B']['cost']['R2'] = 10000
+    # S.architecture['B']['cost']['R2'] = 10000
     # S.architecture['C']['cost']['R2'] = 0
-    S.architecture['B']['cost']['R3'] = 10000
+    # S.architecture['B']['cost']['R3'] = 10000
     # S.architecture['C']['cost']['R3'] = 0
     S.model_rename()
 
