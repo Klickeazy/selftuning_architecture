@@ -3,10 +3,10 @@ from copy import deepcopy as dc
 
 if __name__ == "__main__":
 
-    n = 30
-    rho = 3
+    n = 50
+    rho = None
     Tp = 10
-    n_arch = 3
+    n_arch = 5
 
     # test_model = 'combined'
     test_model = None
@@ -20,9 +20,12 @@ if __name__ == "__main__":
 
     print('Retrieved model: ', S.model_name)
 
+    sim_model = 'unlimited_arch_change'
+    # sim_model = None
+
     # # Model update:
     # S.simulation_parameters['T_predict'] = 30
-    S.rescale_dynamics(6)
+    # S.rescale_dynamics(6)
     # Architecture selection costs
     # S.architecture_cost_update({'R2': 0, 'R3': 0})
     # S.architecture['B']['cost']['R2'] = 10000
@@ -38,7 +41,7 @@ if __name__ == "__main__":
     # S.display_active_architecture()
 
     S_fixed = gac.simulate_fixed_architecture(S)
-    if test_model == 'unlimited_arch_change':
+    if sim_model == 'unlimited_arch_change':
         S_tuning = gac.simulate_selftuning_architecture(S, iterations_per_step=n_arch, changes_per_iteration=n_arch)
     else:
         S_tuning = gac.simulate_selftuning_architecture(S)

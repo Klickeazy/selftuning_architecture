@@ -62,7 +62,7 @@ class System:
                     self.simulation_parameters[k] = simulation_parameters[k]
         self.trajectory = {'X0': 10*np.identity(self.dynamics['number_of_nodes']),
                            'x': [], 'x_estimate': [], 'X_enhanced': [], 'u': [], 'error_2norm': [], 'error': [],
-                           'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': []},
+                           'cost': {'running': 0, 'switching': 0, 'control': 0, 'stage': 0, 'predicted': [], 'true': [], 'initial': 0},
                            'P': {}, 'E': {}, 'P_hist': [], 'E_hist': [], 'Z': []}
         self.trajectory['E_hist'].append(self.trajectory['X0'])
         self.additive = {'W': np.identity(self.dynamics['number_of_nodes']),
@@ -89,7 +89,12 @@ class System:
         # self.enhanced_system_matrix()
 
     def model_rename(self, name_append=None):
-        self.model_name = "model_n" + str(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes']) + "_rho" + str(np.round(self.dynamics['rho'], decimals=3)) + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
+        self.model_name = "model_n" + str(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes'])
+        if self.dynamics['rho'] is not None:
+            self.model_name = self.model_name + "_rho" + str(np.round(self.dynamics['rho'], decimals=3))
+        else:
+            self.model_name = self.model_name + "_rhoNone"
+        self.model_name = self.model_name + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
         if 'mod' in self.noise:
             self.model_name = self.model_name + "_" + self.noise['mod']
         if self.dynamics['second_order']:
@@ -115,6 +120,17 @@ class System:
                 G = netx.from_numpy_array(A)
             elif graph_model['type'] == 'path':
                 G = netx.generators.classic.path_graph(self.dynamics['number_of_nodes'])
+            elif graph_model['type'] == 'rand_eval':
+                if 'p' not in graph_model:
+                    graph_model['p'] = 0.2
+                A = np.random.rand(self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])
+                A = A.T + A
+                _, V_mat = np.linalg.eig(A)
+                e = graph_model['p']*(0.5 - np.random.rand(self.dynamics['number_of_nodes']))
+                e = [i*-1 if np.random.rand(1) > 0.5 else i for i in e]
+                print(e)
+                A = V_mat @ np.diag(e) @ np.linalg.inv(V_mat)
+                G = netx.from_numpy_array(A)
             else:
                 raise Exception('Check graph model')
             connected_network_check = netx.algorithms.components.is_connected(G)
@@ -140,12 +156,18 @@ class System:
                                        [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), 0.5*np.identity(int(self.dynamics['number_of_nodes']/2))]])
 
     def rescale_dynamics(self, rho):
-        self.dynamics['rho'] = rho
         if self.dynamics['second_order']:
             self.second_order_network()
         else:
             self.dynamics['A'] = self.dynamics['Adj']
-        self.dynamics['A'] = rho * self.dynamics['A']/(np.max(np.abs(np.linalg.eigvals(self.dynamics['A']))))
+        if rho is not None:
+            if self.dynamics['rho'] is not None:
+                self.dynamics['A'] = rho * self.dynamics['A']/(np.max(np.abs(np.linalg.eigvals(self.dynamics['A']))))
+                self.dynamics['rho'] = rho
+            else:
+                raise Exception('Check rho for eval update')
+        else:
+            self.dynamics['rho'] = None
         self.open_loop_stability_eval()
 
     def open_loop_stability_eval(self):
@@ -354,6 +376,12 @@ class System:
 
     def enhanced_stage_control_cost(self):
         self.trajectory['cost']['stage'] = np.squeeze(self.trajectory['X_enhanced'][-1].T @ self.dynamics['enhanced_stage_cost'][0] @ self.trajectory['X_enhanced'][-1])
+
+    def enhanced_design_cost(self):
+        self.feedback_computations()
+        self.architecture_costs()
+        self.enhanced_system_matrix()
+        self.trajectory['cost']['initial'] = np.max(np.linalg.eigvals(self.trajectory['Z'][0]))
 
     def system_one_step_update_enhanced(self, t):
         active = [self.dynamics['number_of_nodes']+i for i in self.architecture['C']['active']] + [i for i in range(0, self.dynamics['number_of_nodes'])]
@@ -680,9 +708,9 @@ class System:
 
         ax['x'].set_ylabel(r'$|x_t|_'+str(v_norm)+'$')
         ax['error'].set_ylabel(r'$|x_t - \hat{x}_t|_'+str(v_norm)+'$')
+        ax['x'].set_yscale('log')
+        ax['error'].set_yscale('log')
         ax['x'].tick_params(axis="x", labelbottom=False)
-        ax['x'].ticklabel_format(axis='y', style='sci', scilimits=(-3, 3))
-        ax['error'].ticklabel_format(axis='y', style='sci', scilimits=(-3, 3))
 
         if ax_in is None:
             ax['error'].set_xlabel('Time')
@@ -693,6 +721,26 @@ class System:
         else:
             # ax['x'].tick_params(axis="x", labelbottom=False)
             ax['error'].tick_params(axis="x", labelbottom=False)
+
+    def plot_eigvals(self, f_name=None,  ax_in=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(1, 1)
+            ax = fig.add_subplot(grid[0, 0])
+        else:
+            ax = ax_in
+
+        ax.scatter(np.linspace(1, self.dynamics['number_of_nodes']+1), np.sort(np.abs(self.dynamics['ol_eig'])))
+        ax.axhline(1, ls='--', c='k')
+        ax.set_xlabel(r'Mode $i$')
+        ax.set_ylabel(r'$|\lambda_i (A)|$')
+
+        if ax_in is None:
+            if f_name is None:
+                f_name = image_save_folder_path + self.model_name + '_openloopeigs.png'
+            plt.savefig(f_name)
+            plt.show()
+
 
 
 def matrix_convergence_check(A, B, accuracy=10 ** (-8), check_type=None):
@@ -737,7 +785,7 @@ def print_choices(choices):
         print(c)
 
 
-def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_select=False, status_check=False, t_start=time.time()):
+def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_select=False, status_check=False, t_start=time.time(), design_cost=False):
     if not isinstance(sys, System):
         raise Exception('Check data type')
     if status_check:
@@ -769,14 +817,21 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
             test_sys.active_architecture_update(i)
             if status_check:
                 test_sys.display_active_architecture()
-            test_sys.cost_wrapper_enhanced_prediction()
-            i['value'] = test_sys.trajectory['cost']['predicted'][-1]
+            if not design_cost:
+                test_sys.cost_wrapper_enhanced_prediction()
+                i['value'] = test_sys.trajectory['cost']['predicted'][-1]
+            else:
+                test_sys.enhanced_design_cost()
+                i['value'] = test_sys.trajectory['cost']['initial']
         if status_check:
             print_choices(choices)
         value_history.append([i['value'] for i in choices])
         target_idx = item_index_from_policy(value_history[-1], policy)
         work_iteration.active_architecture_update(choices[target_idx])
-        work_iteration.cost_wrapper_enhanced_prediction()
+        if not design_cost:
+            work_iteration.cost_wrapper_enhanced_prediction()
+        else:
+            work_iteration.enhanced_design_cost()
         if not work_iteration.architecture_update_check():
             if status_check:
                 print('No valuable architecture updates')
@@ -791,14 +846,17 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
             print('Selection check: B: ', max_limit(work_iteration.architecture['B'], 'select'), ' |C: ', max_limit(work_iteration.architecture['C'], 'select'))
     return_set = dc(sys)
     return_set.active_architecture_duplicate(work_iteration)
-    return_set.cost_wrapper_enhanced_prediction()
+    if not design_cost:
+        return_set.cost_wrapper_enhanced_prediction()
+    else:
+        return_set.enhanced_design_cost()
     if status_check:
         return_set.display_active_architecture()
     work_history.append(return_set)
     return {'work_set': return_set, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': count_of_changes}
 
 
-def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_reject=False, status_check=False, t_start=time.time()):
+def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_reject=False, status_check=False, t_start=time.time(), design_cost=False):
     if not isinstance(sys, System):
         raise Exception('Check data type')
     if status_check:
@@ -829,14 +887,21 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
             if status_check:
                 print('Choice i:', i)
                 test_sys.display_active_architecture()
-            test_sys.cost_wrapper_enhanced_prediction()
-            i['value'] = test_sys.trajectory['cost']['predicted'][-1]
+            if not design_cost:
+                test_sys.cost_wrapper_enhanced_prediction()
+                i['value'] = test_sys.trajectory['cost']['predicted'][-1]
+            else:
+                test_sys.enhanced_design_cost()
+                i['value'] = test_sys.trajectory['cost']['initial']
         if status_check:
             print_choices(choices)
         target_idx = item_index_from_policy([i['value'] for i in choices], policy)
         value_history.append([i['value'] for i in choices])
         work_iteration.active_architecture_update(choices[target_idx])
-        work_iteration.cost_wrapper_enhanced_prediction()
+        if not design_cost:
+            work_iteration.cost_wrapper_enhanced_prediction()
+        else:
+            work_iteration.enhanced_design_cost()
         if not work_iteration.architecture_update_check():
             if status_check:
                 print('No valuable architecture updates')
@@ -851,14 +916,17 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
             print('Selection check: B: ', min_limit(work_iteration.architecture['B'], 'select'), ' |C: ', min_limit(work_iteration.architecture['C'], 'select'))
     return_set = dc(sys)
     return_set.active_architecture_duplicate(work_iteration)
-    return_set.cost_wrapper_enhanced_prediction()
+    if not design_cost:
+        return_set.cost_wrapper_enhanced_prediction()
+    else:
+        return_set.enhanced_design_cost()
     if status_check:
         return_set.display_active_architecture()
     work_history.append(return_set)
     return {'work_set': return_set, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': count_of_changes}
 
 
-def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), status_check=False):
+def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), status_check=False, design_cost=False):
     if not isinstance(sys, System):
         raise Exception('Incorrect data type')
     if status_check:
@@ -877,17 +945,23 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
         iteration_cases = []
 
         # Select one
-        select = greedy_architecture_selection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=True, status_check=status_check)
+        select = greedy_architecture_selection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=True, status_check=status_check, design_cost=design_cost)
         iteration_cases.append(select['work_set'])
-        values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        if not design_cost:
+            values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        else:
+            values.append(iteration_cases[-1].trajectory['cost']['initial'])
         if status_check:
             print('Add Value: ', values[-1])
             iteration_cases[-1].display_active_architecture()
 
         # Reject one
-        reject = greedy_architecture_rejection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_reject=True, status_check=status_check)
+        reject = greedy_architecture_rejection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_reject=True, status_check=status_check, design_cost=design_cost)
         iteration_cases.append(reject['work_set'])
-        values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        if not design_cost:
+            values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        else:
+            values.append(iteration_cases[-1].trajectory['cost']['initial'])
         if status_check:
             print('Subtract Value: ', values[-1])
             iteration_cases[-1].display_active_architecture()
@@ -897,22 +971,28 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             print('\nSwap\n')
         sys_swap = dc(work_iteration)
         sys_swap.architecture_limit_modifier(min_mod=changes_per_iteration, max_mod=changes_per_iteration)
-        sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=False, status_check=status_check)['work_set']
+        sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=False, status_check=status_check, design_cost=design_cost)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
         # print('1:', sys_swap.trajectory['cost']['predicted'][-1])
         sys_swap.architecture_limit_modifier(min_mod=-changes_per_iteration, max_mod=-changes_per_iteration)
-        sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, status_check=status_check)['work_set']
+        sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, status_check=status_check, design_cost=design_cost)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
         # print('2:', sys_swap.trajectory['cost']['predicted'][-1])
         iteration_cases.append(sys_swap)
-        values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        if not design_cost:
+            values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
+        else:
+            values.append(iteration_cases[-1].trajectory['cost']['initial'])
         if status_check:
             print('Swap Value: ', values[-1])
             iteration_cases[-1].display_active_architecture()
 
         target_idx = item_index_from_policy(values, policy)
         work_iteration.active_architecture_duplicate(iteration_cases[target_idx])
-        work_iteration.cost_wrapper_enhanced_prediction()
+        if not design_cost:
+            work_iteration.cost_wrapper_enhanced_prediction()
+        else:
+            work_iteration.enhanced_design_cost()
         work_history.append(work_iteration)
         value_history.append(values)
         if status_check:
@@ -930,7 +1010,10 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             iteration_stop = True
     return_set = dc(sys)
     return_set.active_architecture_duplicate(work_iteration)
-    return_set.cost_wrapper_enhanced_prediction()
+    if not design_cost:
+        return_set.cost_wrapper_enhanced_prediction()
+    else:
+        return_set.enhanced_design_cost()
     if status_check:
         return_set.display_active_architecture()
     work_history.append(return_set)
@@ -976,22 +1059,23 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
     ax_cost.set_ylabel('Cumulative\nCost')
     ax_cost.legend(loc='upper left')
     improvement = np.round(100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed'], 2)
-    improvement_str = ''
+    improvement_str = 'Cost: '
     if improvement < 100:
-        improvement_str = str(improvement) + r'\% improvement' + '\n'
-    improvement_str = improvement_str + 'Cost:' + np.format_float_scientific(tstep_cost['fixed'], precision=3, trim='0') + ' vs ' + np.format_float_scientific(tstep_cost['tuning'], precision=3, trim='0')
+        improvement_str = improvement_str + str(improvement) + r'\% improvement'
+    improvement_str = improvement_str + ' : Fixed ' + np.format_float_scientific(tstep_cost['fixed'], precision=2, trim='0') + ' vs Self-Tuning ' + np.format_float_scientific(tstep_cost['tuning'], precision=2, trim='0')
     print(improvement_str)
     # if improvement > 95:
     #     ax_cost.set_yscale('log')
     # else:
-    # ax_cost.set_yscale('log')
-    ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-4, 4))
+    ax_cost.set_yscale('log')
+    # ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-4, 4))
     ax_cost.set_xlim(-1, 1+max([len(cost[i]) for i in cost]))
-    x_lims = ax_cost.get_xlim()
-    y_lims = ax_cost.get_ylim()
-    ax_cost.text(x_lims[0]+(0.22*(x_lims[1]-x_lims[0])), y_lims[0]+(0.65*(y_lims[1]-y_lims[0])), improvement_str)
+    ax_cost.set_title(improvement_str)
+    # x_lims = ax_cost.get_xlim()
+    # y_lims = ax_cost.get_ylim()
+    # ax_cost.text(x_lims[0]+(0.5*(x_lims[1]-x_lims[0])), y_lims[0]+(0.0001*(y_lims[1]-y_lims[0])), improvement_str)
     if ax is None:
-        ax_cost.set_title('Cost comparison')
+        # ax_cost.set_title('Cost comparison')
         ax_cost.set_xlabel('Time')
         if f_name is None:
             f_name = image_save_folder_path + "cost_trajectory.png"
@@ -1086,6 +1170,7 @@ def greedy_architecture_initialization(S):
     for a in ['B', 'C']:
         S_test.architecture[a]['active'] = [S_test.architecture[a]['active'][0]]
         S_test.architecture[a]['cost']['R3'] = 0
+    S_test.simulation_parameters['T_predict'] = 50
     S_test.model_name = 'Test model'
     S_test.display_active_architecture()
     S_test = dc(greedy_architecture_selection(S_test)['work_set'])
@@ -1146,7 +1231,12 @@ def data_shelving_gen_model(S):
 
 
 def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False):
-    model = 'model_n' + str(n) + '_rho' + str(rho) + '_Tp' + str(Tp) + '_arch' + str(n_arch)
+    model = 'model_n' + str(n)
+    if rho is not None:
+        model = model + '_rho' + str(rho)
+    else:
+        model = model + '_rhoNone'
+    model = model + '_Tp' + str(Tp) + '_arch' + str(n_arch)
     if test_model is not None:
         model = model + '_' + test_model
     if second_order:
@@ -1215,14 +1305,15 @@ def time_axis_plot(model):
 
     t_step = S.simulation_parameters['T_sim'] + 1
 
-    fig = plt.figure(figsize=(10, 7), constrained_layout=True)
-    grid = fig.add_gridspec(5, 2)
+    fig = plt.figure(figsize=(10, 7), tight_layout=True)
+    grid = fig.add_gridspec(6, 2)
 
     ax_cost = fig.add_subplot(grid[0, 0])
     ax_trajectory = fig.add_subplot(grid[1, 0], sharex=ax_cost)
     ax_error = fig.add_subplot(grid[2, 0], sharex=ax_cost)
     ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
     ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
+    ax_eigvals = fig.add_subplot(grid[5, 0])
 
     ax_tstep_architecture = fig.add_subplot(grid[0:4, 1], frameon=False, zorder=-1)
     ax_tstep_architecture.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
@@ -1232,13 +1323,14 @@ def time_axis_plot(model):
     ax_network_nodes.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
     ax_network_nodes.patch.set_alpha(0.1)
 
-    ax_timeline = fig.add_subplot(grid[:, 0], sharex=ax_cost, frameon=False)
+    ax_timeline = fig.add_subplot(grid[0:5, 0], sharex=ax_cost, frameon=False)
     ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
 
     cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
     S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
     S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
     S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
+    S_fixed.plot_eigvals(ax_in=ax_eigvals)
 
     S_tuning.plot_network(ax_in=ax_network_nodes, node_filter='dynamics')
     ax_network_nodes.set_title(S.model_name + '\nUnstable modes:' + str(S_tuning.dynamics['n_unstable']))
