@@ -6,10 +6,11 @@ if __name__ == "__main__":
 
     print('Generating Model')
 
-    n = 30
-    rho = 3
+    n = 50
+    rho = None
+    p = 0.1
     Tp = 10
-    n_arch = 3
+    n_arch = 5
     n_arch_B = n_arch
     n_arch_C = n_arch
 
@@ -25,7 +26,7 @@ if __name__ == "__main__":
     disturbance = {'step': disturbance_step, 'number': disturbance_number, 'magnitude': disturbance_magnitude}
 
     # Model Gen
-    S = gac.System(graph_model={'number_of_nodes': n, 'rho': rho, 'second_order': second_order}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance, 'W': 1, 'V': 1}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
+    S = gac.System(graph_model={'number_of_nodes': n, 'type': 'rand_eval', 'p': p, 'rho': rho, 'second_order': second_order}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance, 'W': 1, 'V': 1}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
     # print(S.model_name)
 
     # for k in ['B', 'C']:
@@ -47,7 +48,8 @@ if __name__ == "__main__":
 
     S.model_rename()
 
-    S = dc(gac.greedy_architecture_initialization(S))
+    S_init = gac.greedy_architecture_initialization(S)
+    S.active_architecture_duplicate(S_init)
 
     # print(S.dynamics['A'])
 
