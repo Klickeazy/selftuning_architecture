@@ -107,6 +107,7 @@ class System:
         self.dynamics['number_of_nodes'] = graph_model['number_of_nodes']
         G = netx.Graph()
         while not connected_network_check:
+            print('Graph network mode: ', graph_model['type'])
             if graph_model['type'] == 'ER':
                 if 'p' not in graph_model:
                     graph_model['p'] = 0.3
@@ -120,6 +121,8 @@ class System:
                 G = netx.from_numpy_array(A)
             elif graph_model['type'] == 'path':
                 G = netx.generators.classic.path_graph(self.dynamics['number_of_nodes'])
+            elif graph_model['type'] == 'cycle':
+                G = netx.generators.classic.cycle_graph(self.dynamics['number_of_nodes'])
             elif graph_model['type'] == 'rand_eval':
                 if 'p' not in graph_model:
                     graph_model['p'] = 0.2
@@ -128,9 +131,12 @@ class System:
                 _, V_mat = np.linalg.eig(A)
                 e = graph_model['p']*(0.5 - np.random.rand(self.dynamics['number_of_nodes']))
                 e = [i*-1 if np.random.rand(1) > 0.5 else i for i in e]
-                print(e)
                 A = V_mat @ np.diag(e) @ np.linalg.inv(V_mat)
                 G = netx.from_numpy_array(A)
+                if 'rho' in graph_model and graph_model['rho'] is not None:
+                    print('Overriding scaling factor')
+                elif 'rho' not in graph_model:
+                    graph_model['rho'] = None
             else:
                 raise Exception('Check graph model')
             connected_network_check = netx.algorithms.components.is_connected(G)
@@ -160,14 +166,10 @@ class System:
             self.second_order_network()
         else:
             self.dynamics['A'] = self.dynamics['Adj']
-        if rho is not None:
-            if self.dynamics['rho'] is not None:
-                self.dynamics['A'] = rho * self.dynamics['A']/(np.max(np.abs(np.linalg.eigvals(self.dynamics['A']))))
-                self.dynamics['rho'] = rho
-            else:
-                raise Exception('Check rho for eval update')
-        else:
-            self.dynamics['rho'] = None
+        self.dynamics['rho'] = rho
+        if self.dynamics['rho'] is not None:
+            self.dynamics['A'] = rho * self.dynamics['A']/(np.max(np.abs(np.linalg.eigvals(self.dynamics['A']))))
+            self.dynamics['rho'] = rho
         self.open_loop_stability_eval()
 
     def open_loop_stability_eval(self):
@@ -730,10 +732,10 @@ class System:
         else:
             ax = ax_in
 
-        ax.scatter(np.linspace(1, self.dynamics['number_of_nodes']+1), np.sort(np.abs(self.dynamics['ol_eig'])))
+        ax.scatter(range(1, self.dynamics['number_of_nodes']+1), -np.sort(-1*np.abs(self.dynamics['ol_eig'])), s=10, marker='x')
         ax.axhline(1, ls='--', c='k')
         ax.set_xlabel(r'Mode $i$')
-        ax.set_ylabel(r'$|\lambda_i (A)|$')
+        ax.set_ylabel(r'$\lambda_i (A)$')
 
         if ax_in is None:
             if f_name is None:
@@ -1055,9 +1057,10 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         for t in range(1, T):
             cumulative_cost.append(cumulative_cost[-1] + cost[i][t])
         tstep_cost[i] = cumulative_cost[-1]
-        ax_cost.plot(range(0, T), cumulative_cost, label=i, c=plt_map[i]['c'], linestyle=plt_map[i]['line_style'], zorder=plt_map[i]['zorder'])
-    ax_cost.set_ylabel('Cumulative\nCost')
-    ax_cost.legend(loc='upper left')
+        ax_cost.plot(range(0, T), cumulative_cost, label=i+' cumulative', c=plt_map[i]['c'], linestyle='solid', zorder=plt_map[i]['zorder'])
+        ax_cost.plot(range(0, T), cost[i], label=i+' stage', c=plt_map[i]['c'], linestyle='dashed', zorder=plt_map[i]['zorder'])
+    ax_cost.set_ylabel('Cost')
+    ax_cost.legend(loc='upper left', ncols=2)
     improvement = np.round(100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed'], 2)
     improvement_str = 'Cost: '
     if improvement < 100:
@@ -1168,13 +1171,13 @@ def greedy_architecture_initialization(S):
         raise Exception('Data type check')
     S_test = dc(S)
     for a in ['B', 'C']:
-        S_test.architecture[a]['active'] = [S_test.architecture[a]['active'][0]]
+        # S_test.architecture[a]['active'] = [S_test.architecture[a]['active'][0]]
         S_test.architecture[a]['cost']['R3'] = 0
-    S_test.simulation_parameters['T_predict'] = 50
+    # S_test.simulation_parameters['T_predict'] *= 2
     S_test.model_name = 'Test model'
     S_test.display_active_architecture()
-    S_test = dc(greedy_architecture_selection(S_test)['work_set'])
-    S_test = dc(greedy_simultaneous(S_test)['work_set'])
+    # S_test = dc(greedy_architecture_selection(S_test)['work_set'])
+    S_test = dc(greedy_simultaneous(S_test, iterations=S_test.dynamics['number_of_nodes'])['work_set'])
     print('Optimal architecture:')
     S_test.display_active_architecture()
     S_test.model_name = S.model_name
@@ -1305,7 +1308,7 @@ def time_axis_plot(model):
 
     t_step = S.simulation_parameters['T_sim'] + 1
 
-    fig = plt.figure(figsize=(10, 7), tight_layout=True)
+    fig = plt.figure(figsize=(10, 7), constrained_layout=True)
     grid = fig.add_gridspec(6, 2)
 
     ax_cost = fig.add_subplot(grid[0, 0])
