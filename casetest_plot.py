@@ -5,7 +5,7 @@ if __name__ == "__main__":
     n = 30
     # rho = 7
     rho = None
-    Tp = 10
+    Tp = 20
     n_arch = 5
 
     # test_model = 'combined'

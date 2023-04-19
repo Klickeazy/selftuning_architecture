@@ -8,15 +8,15 @@ if __name__ == "__main__":
 
     n = 30
     Tp = 10
-    n_arch = 5
+    n_arch = 3
     n_arch_B = n_arch
     n_arch_C = n_arch
 
     network_model = 'rand_eval'
     rho = None
-    p = 0.1
-    second_order = True
-    # second_order = False
+    p = 0.01
+    # second_order = True
+    second_order = False
 
     # test_model = 'combined'  #  'process', 'sensor', 'combined', None
     test_model = None

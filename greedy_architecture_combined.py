@@ -16,6 +16,7 @@ import matplotlib.ticker as ticker
 from matplotlib.gridspec import GridSpec
 from matplotlib.widgets import Slider, Button, TextBox
 import matplotlib.patches as patches
+import matplotlib.lines as mlines
 # from matplotlib.ticker import MaxNLocator
 import matplotlib.animation
 import multiprocessing
@@ -648,7 +649,7 @@ class System:
 
         if plt_map is None:
             plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-                       'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+                       'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                        'marker': {'B': "+", 'C': "+"}}
 
         architecture_map = {'B': {'active': [], 'time': []}, 'C': {'active': [], 'time': []}}
@@ -665,10 +666,9 @@ class System:
             ax[a].scatter(architecture_map[a]['time'], architecture_map[a]['active'], marker=plt_map['marker'][a], s=3, c=plt_map['tuning']['c'], label=a, zorder=plt_map['fixed']['zorder'])
 
         ax['B'].tick_params(axis="x", labelbottom=False)
-        ax['B'].set_ylabel('Nodes with \n Actuators ' + r'$(B_{S_t})$')
-        ax['B'].set_title(str(self.architecture['B']['change_count']) + ' changes')
-        ax['C'].set_ylabel('Nodes with \n Sensors ' + r'$(C_{S_t})$')
-        ax['C'].set_title(str(self.architecture['C']['change_count']) + ' changes')
+        ax['B'].set_ylabel(r"$S_t$" + "\n Changes: " + str(self.architecture['B']['change_count']))
+        ax['C'].set_ylabel(r"$S'_t$" + "\n Changes: " + str(self.architecture['C']['change_count']))
+        ax['C'].set_xlabel("Time "+ r"$t$")
 
         if ax_in is None:
             ax['C'].set_xlabel('Time')
@@ -688,7 +688,7 @@ class System:
 
         if plt_map is None:
             plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-                       'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+                       'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                        'marker': {'B': "+", 'C': "+"}}
 
         T = len(self.trajectory['x'])
@@ -732,10 +732,17 @@ class System:
         else:
             ax = ax_in
 
-        ax.scatter(range(1, self.dynamics['number_of_nodes']+1), -np.sort(-1*np.abs(self.dynamics['ol_eig'])), s=10, marker='x')
-        ax.axhline(1, ls='--', c='k')
+        e_mag = -np.sort(-1*np.abs(self.dynamics['ol_eig']))
+        ax.scatter(range(1, self.dynamics['number_of_nodes']+1), e_mag, s=10, marker='x', c=['tab:red' if i > 1 else 'tab:orange' if i==1 else 'tab:green' for i in e_mag])
+        ax.axhline(1, ls='--', c='k', linewidth=1)
+        ax.legend(handles=[mlines.Line2D([], [], color='tab:red', marker='x', linestyle='None', markersize=5, label='Unstable'),
+                           mlines.Line2D([], [], color='tab:orange', marker='x', linestyle='None', markersize=5, label='Marginal'),
+                           mlines.Line2D([], [], color='tab:green', marker='x', linestyle='None', markersize=5, label='Stable')],
+                  bbox_to_anchor=[0.5, 0.95], loc='lower center', ncol=3, columnspacing=0.1)
+        # ax.yaxis.tick_right()
+        # ax.yaxis.set_label_position("right")
         ax.set_xlabel(r'Mode $i$')
-        ax.set_ylabel(r'$\lambda_i (A)$')
+        ax.set_ylabel(r'$|\lambda_i (A)|$')
 
         if ax_in is None:
             if f_name is None:
@@ -1045,10 +1052,12 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
     
     if plt_map is None:
         plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-                   'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+                   'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                    'marker': {'B': "+", 'C': "+"}}
 
     # font = {'family': 'serif', 'color': 'darkred', 'weight': 'normal', 'size': 16}
+    # v_align = {'fixed': 'bottom', 'tuning': 'top'}
+    p_name = {'fixed': 'Fixed', 'tuning': 'Self-Tuning'}
 
     tstep_cost = {}
     T = len(cost['fixed'])
@@ -1059,24 +1068,30 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
         tstep_cost[i] = cumulative_cost[-1]
         ax_cost.plot(range(0, T), cumulative_cost, label=i+' cumulative', c=plt_map[i]['c'], linestyle='solid', zorder=plt_map[i]['zorder'])
         ax_cost.plot(range(0, T), cost[i], label=i+' stage', c=plt_map[i]['c'], linestyle='dashed', zorder=plt_map[i]['zorder'])
+        ax_cost.axhline(tstep_cost[i], linestyle=':', c=plt_map[i]['c'], linewidth=1)
+        ax_cost.text(0, tstep_cost[i], p_name[i] + ':' + np.format_float_scientific(tstep_cost[i], precision=2, trim='0'), horizontalalignment='left', verticalalignment='top')
+
     ax_cost.set_ylabel('Cost')
-    ax_cost.legend(loc='upper left', ncols=2)
+    ax_cost.legend(handles=[mlines.Line2D([0], [0], color=plt_map['fixed']['c'], linestyle='solid', label='Fixed'),
+                                           mlines.Line2D([0], [0], color=plt_map['tuning']['c'], linestyle='solid', label='Self-tuning')],
+                                  bbox_to_anchor=(0.5, 1.05), loc='lower center', ncols=2)
+    ax_cost_duplicate = ax_cost.twinx()
+    ax_cost_duplicate.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+    ax_cost_duplicate.set_yticklabels([])
+    ax_cost_duplicate.legend(handles=[mlines.Line2D([0], [0], color='black', linestyle='solid', label='Cumulative'),
+                                           mlines.Line2D([0], [0], color='black', linestyle='dashed', label='Stage')],
+                                  loc='lower right', ncols=2)
+
     improvement = np.round(100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed'], 2)
     improvement_str = 'Cost: '
     if improvement < 100:
         improvement_str = improvement_str + str(improvement) + r'\% improvement'
     improvement_str = improvement_str + ' : Fixed ' + np.format_float_scientific(tstep_cost['fixed'], precision=2, trim='0') + ' vs Self-Tuning ' + np.format_float_scientific(tstep_cost['tuning'], precision=2, trim='0')
     print(improvement_str)
-    # if improvement > 95:
-    #     ax_cost.set_yscale('log')
-    # else:
+
     ax_cost.set_yscale('log')
-    # ax_cost.ticklabel_format(axis='y', style='sci', scilimits=(-4, 4))
     ax_cost.set_xlim(-1, 1+max([len(cost[i]) for i in cost]))
-    ax_cost.set_title(improvement_str)
-    # x_lims = ax_cost.get_xlim()
-    # y_lims = ax_cost.get_ylim()
-    # ax_cost.text(x_lims[0]+(0.5*(x_lims[1]-x_lims[0])), y_lims[0]+(0.0001*(y_lims[1]-y_lims[0])), improvement_str)
+
     if ax is None:
         # ax_cost.set_title('Cost comparison')
         ax_cost.set_xlabel('Time')
@@ -1096,7 +1111,7 @@ def combined_plot(S, S_fixed, S_tuning):
     fig = plt.figure(figsize=(5, 7), tight_layout=True)
     grid = fig.add_gridspec(5, 1)
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-               'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+               'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
 
     ax_cost = fig.add_subplot(grid[0, 0])
@@ -1305,31 +1320,41 @@ def data_reading_sim_model(model):
 def time_axis_plot(model):
     S, S_fixed, S_tuning = data_reading_sim_model(model)
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-               'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+               'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
 
     t_step = S.simulation_parameters['T_sim'] + 1
 
-    fig = plt.figure(figsize=(10, 7), constrained_layout=True)
-    grid = fig.add_gridspec(6, 2)
+    # fig = plt.figure(figsize=(10, 7), constrained_layout=True)
+    # fig = plt.figure(figsize=(10, 7), tight_layout=True)
+    # grid = fig.add_gridspec(6, 2, wspace=0.1, hspace=0.1)
 
-    ax_cost = fig.add_subplot(grid[0, 0])
-    ax_trajectory = fig.add_subplot(grid[1, 0], sharex=ax_cost)
-    ax_error = fig.add_subplot(grid[2, 0], sharex=ax_cost)
-    ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
-    ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
-    ax_eigvals = fig.add_subplot(grid[5, 0])
+    fig = plt.figure(figsize=(10, 7))
+    grid_outer = fig.add_gridspec(1, 2, wspace=0.25)
+    grid_timeplots = grid_outer[0, 0].subgridspec(5, 1, hspace=0)
+    grid_network = grid_outer[0, 1].subgridspec(3, 1, height_ratios = [5, 1, 1])
+    grid_interaction = grid_network[1, 0].subgridspec(2, 3, hspace=0, wspace=0)
 
-    ax_tstep_architecture = fig.add_subplot(grid[0:4, 1], frameon=False, zorder=-1)
+    ax_cost = fig.add_subplot(grid_timeplots[0, 0])
+    ax_trajectory = fig.add_subplot(grid_timeplots[1, 0], sharex=ax_cost)
+    ax_error = fig.add_subplot(grid_timeplots[2, 0], sharex=ax_cost)
+    ax_architecture_B = fig.add_subplot(grid_timeplots[3, 0], sharex=ax_cost)
+    ax_architecture_C = fig.add_subplot(grid_timeplots[4, 0], sharex=ax_cost)
+    ax_eigvals = fig.add_subplot(grid_network[2, 0])
+
+    ax_timeline = fig.add_subplot(grid_timeplots[:, 0], sharex=ax_cost, frameon=False)
+    ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+
+    ax_tstep_architecture = fig.add_subplot(grid_network[0, 0], frameon=False, zorder=-1)
     ax_tstep_architecture.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
     # ax_tstep_architecture.patch.set_alpha(0.1)
 
-    ax_network_nodes = fig.add_subplot(grid[0:4, 1], zorder=0)
+    ax_network_nodes = fig.add_subplot(grid_network[0, 0], zorder=0)
     ax_network_nodes.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
     ax_network_nodes.patch.set_alpha(0.1)
 
-    ax_timeline = fig.add_subplot(grid[0:5, 0], sharex=ax_cost, frameon=False)
-    ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+    # ax_interaction = fig.add_subplot(grid_outer[1,1], frameon=False)
+    # ax_interaction.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
 
     cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
     S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
@@ -1348,19 +1373,24 @@ def time_axis_plot(model):
     prev_button_dim = [0.1, 0.05]
     # text_box_dim = [0.1, 0.05]
 
-    ax_timeslide = fig.add_axes([((0.95 + 0.55 - time_slider_dim[0]) / 2), 0.1, time_slider_dim[0], time_slider_dim[1]])
+    # ax_timeslide = fig.add_axes([((0.95 + 0.55 - time_slider_dim[0]) / 2), 0.1, time_slider_dim[0], time_slider_dim[1]])
+    ax_timeslide = fig.add_subplot(grid_interaction[0, :])
     timeslider = Slider(ax=ax_timeslide, label='', valmin=0, valmax=S.simulation_parameters['T_sim'] + 1, valinit=S.simulation_parameters['T_sim'] + 1, valstep=1)
-    t_text = ax_timeslide.text(0.38, 2.6, 'Time: '+str(t_step), transform=ax_timeslide.transAxes, fontsize='large')
+    # t_text = ax_timeslide.text(0.38, 2.6, 'Time: '+str(t_step), transform=ax_timeslide.transAxes, fontsize='large')
+    t_text = ax_timeslide.text(0.5, 1, 'Time: ' + str(t_step), transform=ax_timeslide.transAxes, fontsize='large', horizontalalignment='center')
     # valfmt=' time: %d'
     timeslider.valtext.set_visible(False)
 
-    ax_reset_button = fig.add_axes([((0.95 + 0.55 - reset_button_dim[0]) / 2), 0.05, reset_button_dim[0], reset_button_dim[1]])
+    # ax_reset_button = fig.add_axes([((0.95 + 0.55 - reset_button_dim[0]) / 2), 0.05, reset_button_dim[0], reset_button_dim[1]])
+    ax_reset_button = fig.add_subplot(grid_interaction[1, 1])
     reset_button = Button(ax=ax_reset_button, label='Reset', hovercolor='0.975')
 
-    ax_prev_button = fig.add_axes([((0.95 + 0.55 - 3*prev_button_dim[0]) / 2), 0.15, prev_button_dim[0], prev_button_dim[1]])
+    # ax_prev_button = fig.add_axes([((0.95 + 0.55 - 3*prev_button_dim[0]) / 2), 0.15, prev_button_dim[0], prev_button_dim[1]])
+    ax_prev_button = fig.add_subplot(grid_interaction[1, 0])
     prev_button = Button(ax=ax_prev_button, label='t-', hovercolor='0.975')
 
-    ax_next_button = fig.add_axes([((0.95 + 0.55 + next_button_dim[0]) / 2), 0.15, next_button_dim[0], next_button_dim[1]])
+    # ax_next_button = fig.add_axes([((0.95 + 0.55 + next_button_dim[0]) / 2), 0.15, next_button_dim[0], next_button_dim[1]])
+    ax_next_button = fig.add_subplot(grid_interaction[1, 2])
     next_button = Button(ax=ax_next_button, label='t+', hovercolor='0.975')
 
     # ax_text_box = fig.add_axes([((0.95 + 0.55 - text_box_dim[0]) / 2), 0.15, text_box_dim[0], text_box_dim[1]])
@@ -1371,7 +1401,7 @@ def time_axis_plot(model):
         t_step = t
         # time_text.set_val(t_step)
         ax_timeslide.text(time_slider_dim[0] / 2, time_slider_dim[1] + 0.05, 'time: ' + str(t_step))
-        t_text.set_text('time: ' + str(t_step))
+        t_text.set_text('Time: ' + str(t_step))
         ax_timeline.clear()
         ax_tstep_architecture.clear()
         ax_timeline.axvline(t, alpha=0.2, c='k', linestyle='dashed')
@@ -1410,7 +1440,7 @@ def time_axis_plot(model):
 
 def statistics_plot(test_model, n_samples=100):
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-               'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
+               'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
     S, _, _ = data_reading_statistics(test_model, 1)
     if not isinstance(S, System):

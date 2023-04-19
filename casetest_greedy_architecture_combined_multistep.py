@@ -7,13 +7,13 @@ if __name__ == "__main__":
     # rho = 7
     rho = None
     Tp = 10
-    n_arch = 5
+    n_arch = 3
 
     # test_model = 'combined'
     test_model = None
 
-    second_order = True
-    # second_order = False
+    # second_order = True
+    second_order = False
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order)
     S = gac.data_reading_gen_model(model)
