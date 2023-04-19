@@ -107,7 +107,7 @@ class System:
         self.dynamics['number_of_nodes'] = graph_model['number_of_nodes']
         G = netx.Graph()
         while not connected_network_check:
-            print('Graph network mode: ', graph_model['type'])
+            # print('Graph network mode: ', graph_model['type'])
             if graph_model['type'] == 'ER':
                 if 'p' not in graph_model:
                     graph_model['p'] = 0.3
@@ -159,7 +159,7 @@ class System:
         # self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
     def second_order_network(self):
         self.dynamics['A'] = np.block([[self.dynamics['Adj'], np.zeros_like(self.dynamics['Adj'])],
-                                       [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), 0.5*np.identity(int(self.dynamics['number_of_nodes']/2))]])
+                                       [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), np.identity(int(self.dynamics['number_of_nodes']/2))]])
 
     def rescale_dynamics(self, rho):
         if self.dynamics['second_order']:
@@ -1166,7 +1166,7 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
     return S_tuning
 
 
-def greedy_architecture_initialization(S):
+def greedy_architecture_initialization(S, print_check=False):
     if not isinstance(S, System):
         raise Exception('Data type check')
     S_test = dc(S)
@@ -1175,11 +1175,13 @@ def greedy_architecture_initialization(S):
         S_test.architecture[a]['cost']['R3'] = 0
     # S_test.simulation_parameters['T_predict'] *= 2
     S_test.model_name = 'Test model'
-    S_test.display_active_architecture()
+    if print_check:
+        S_test.display_active_architecture()
     # S_test = dc(greedy_architecture_selection(S_test)['work_set'])
     S_test = dc(greedy_simultaneous(S_test, iterations=S_test.dynamics['number_of_nodes'])['work_set'])
-    print('Optimal architecture:')
-    S_test.display_active_architecture()
+    if print_check:
+        print('Optimal architecture:')
+        S_test.display_active_architecture()
     S_test.model_name = S.model_name
     for a in ['B', 'C']:
         S.architecture[a]['active'] = dc(S_test.architecture[a]['active'])
@@ -1406,7 +1408,7 @@ def time_axis_plot(model):
     plt.show()
 
 
-def statistics_plot(test_model):
+def statistics_plot(test_model, n_samples=100):
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
                'tuning': {'c': 'C1', 'line_style': 'dashed', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
@@ -1426,7 +1428,7 @@ def statistics_plot(test_model):
     cost_fix = []
     cost_tuning = []
 
-    for model_id in tqdm(range(1, 101), ncols=100):
+    for model_id in tqdm(range(1, n_samples+1), ncols=100):
         S_i, S_fixed_i, S_tuning_i = data_reading_statistics(S.model_name, model_id)
 
         if not isinstance(S_i, System):

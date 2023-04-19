@@ -8,7 +8,7 @@ if __name__ == "__main__":
 
     n = 30
     Tp = 10
-    n_arch = 3
+    n_arch = 5
     n_arch_B = n_arch
     n_arch_C = n_arch
 
@@ -48,8 +48,13 @@ if __name__ == "__main__":
 
     S.model_rename()
 
+    print('Optimizing fixed architecture')
+    print('Initial')
+    S.display_active_architecture()
     S_init = gac.greedy_architecture_initialization(S)
     S.active_architecture_duplicate(S_init)
+    print('Optimized')
+    S.display_active_architecture()
 
     # print(S.dynamics['A'])
 
