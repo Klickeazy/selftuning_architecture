@@ -10,7 +10,7 @@ import numpy as np
 
 
 def sys_gen(optimize_initial_architecture=True):
-    n = 30
+    n = 20
     Tp = 10
     n_arch = 3
     # n_arch_B = n_arch
@@ -25,7 +25,7 @@ def sys_gen(optimize_initial_architecture=True):
     network_model = 'rand_eval'
     # rho = 4
     rho = None
-    p = 0.1
+    p = 0.05
 
     disturbance_step = 10
     disturbance_number = int(np.floor(n / 2))

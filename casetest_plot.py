@@ -2,11 +2,11 @@ import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
 
-    n = 30
+    n = 20
     # rho = 7
     rho = None
-    Tp = 20
-    n_arch = 5
+    Tp = 10
+    n_arch = 2
 
     # test_model = 'combined'
     test_model = None

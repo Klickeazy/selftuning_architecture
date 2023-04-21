@@ -6,17 +6,17 @@ if __name__ == "__main__":
 
     print('Generating Model')
 
-    n = 30
+    n = 20
     Tp = 10
-    n_arch = 3
+    n_arch = 2
     n_arch_B = n_arch
     n_arch_C = n_arch
 
     network_model = 'rand_eval'
     rho = None
     p = 0.01
-    # second_order = True
-    second_order = False
+    second_order = True
+    # second_order = False
 
     # test_model = 'combined'  #  'process', 'sensor', 'combined', None
     test_model = None

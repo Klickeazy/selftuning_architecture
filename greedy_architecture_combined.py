@@ -1449,14 +1449,14 @@ def statistics_plot(test_model, n_samples=100):
     unstable_modes = []
     B_changes = []
     C_changes = []
+    eig_vals = []
     cost_min_fix = np.inf * np.ones(S.simulation_parameters['T_sim'] + 1)
     cost_min_tuning = dc(cost_min_fix)
     cost_max_fix = np.zeros(S.simulation_parameters['T_sim'] + 1)
     cost_max_tuning = dc(cost_max_fix)
 
-    rand_model = np.random.choice(range(1, 101), 1)
-    cost_fix = []
-    cost_tuning = []
+    rand_model = np.random.choice(range(1, n_samples+1), 1)
+    cost_fix_model, cost_tuning_model, eig_vals_model = [], [] ,[]
 
     for model_id in tqdm(range(1, n_samples+1), ncols=100):
         S_i, S_fixed_i, S_tuning_i = data_reading_statistics(S.model_name, model_id)
@@ -1475,10 +1475,14 @@ def statistics_plot(test_model, n_samples=100):
             cumulative_cost_tuning.append(cumulative_cost_tuning[-1] + S_tuning_i.trajectory['cost']['true'][j])
 
         if model_id == rand_model:
-            cost_fix = cumulative_cost_fixed
-            cost_tuning = cumulative_cost_tuning
+            net_size = S_i.dynamics['number_of_nodes']
+            cost_fix_model = cumulative_cost_fixed
+            cost_tuning_model = cumulative_cost_tuning
+            eig_vals_model = -np.sort(-np.abs(S_i.dynamics['ol_eig']))
+            print(eig_vals_model)
 
         unstable_modes.append(S_i.dynamics['n_unstable'])
+        eig_vals = eig_vals + [i for i in -np.sort(-np.abs(S_i.dynamics['ol_eig']))]
         B_changes.append(S_tuning_i.architecture['B']['change_count'])
         C_changes.append(S_tuning_i.architecture['C']['change_count'])
         # print(model_id, ' : ', S_i.dynamics['n_unstable'])
@@ -1492,38 +1496,52 @@ def statistics_plot(test_model, n_samples=100):
     # print('Max fix: ', cost_max_fix)
     # print('Max tuning: ', cost_max_tuning)
 
+    # print('1: ', np.shape(eig_vals))
+    # print(eig_vals)
+
     fig = plt.figure(constrained_layout=True)
-    grid = fig.add_gridspec(4, 2)
+    grid = fig.add_gridspec(3, 2)
 
-    unstable_plot = fig.add_subplot(grid[1, :])
     cost_plot = fig.add_subplot(grid[0, :])
-    B_arch_plot = fig.add_subplot(grid[2, 0])
-    C_arch_plot = fig.add_subplot(grid[3, 0])
-    arch_scatter_plot = fig.add_subplot(grid[2:4, 1])
+    # unstable_plot = fig.add_subplot(grid[1:, 0])
+    eig_val_plot = fig.add_subplot(grid[1:, 0])
+    # B_arch_plot = fig.add_subplot(grid[2, 0])
+    # C_arch_plot = fig.add_subplot(grid[3, 0])
+    arch_scatter_plot = fig.add_subplot(grid[1:, 1])
 
-    unstable_plot.hist(unstable_modes, bins=range(0, max(unstable_modes) + 1), align='right', density=True)
+    # unstable_plot.hist(unstable_modes, bins=range(0, max(unstable_modes) + 1), align='right', density=True)
+    # eig_val_plot.hist(eig_vals, align='right', density=True)
+    # eig_val_plot.boxplot(eig_vals)
+    # eig_val_plot.scatter(np.ones(len(eig_vals_model)), eig_vals_model)
+    # eig_val_plot.set_xticks([])
+    eig_val_plot.scatter(np.tile(np.linspace(1, net_size, net_size), n_samples), eig_vals, alpha=0.3, c='tab:blue')
+    eig_val_plot.scatter(np.linspace(1, net_size, net_size), eig_vals_model, marker='x', c='black')
+
     cost_plot.fill_between(range(0, len(cost_min_fix)), cost_min_fix, cost_max_fix, color=plt_map['fixed']['c'], alpha=plt_map['fixed']['alpha'])
     cost_plot.fill_between(range(0, len(cost_min_tuning)), cost_min_tuning, cost_max_tuning, color=plt_map['tuning']['c'], alpha=plt_map['tuning']['alpha'])
-    cost_plot.plot(range(0, len(cost_fix)), cost_fix, color=plt_map['fixed']['c'])
-    cost_plot.plot(range(0, len(cost_tuning)), cost_tuning, color=plt_map['tuning']['c'])
+    cost_plot.plot(range(0, len(cost_fix_model)), cost_fix_model, color=plt_map['fixed']['c'])
+    cost_plot.plot(range(0, len(cost_tuning_model)), cost_tuning_model, color=plt_map['tuning']['c'])
 
-    B_arch_plot.hist(B_changes, density=True)
-    C_arch_plot.hist(C_changes, density=True)
+    # B_arch_plot.hist(B_changes, density=True)
+    # C_arch_plot.hist(C_changes, density=True)
     arch_scatter_plot.scatter(B_changes, C_changes)
 
-    unstable_plot.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    unstable_plot.set_xlabel('Number of unstable modes')
-    unstable_plot.set_ylabel('Fraction of\nrealizations')
+    eig_val_plot.set_xlabel('Mode ' + r'$i$')
+    eig_val_plot.set_ylabe(r'$|\lambda(A)_i|$')
+
+    # unstable_plot.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    # unstable_plot.set_xlabel('Number of unstable modes')
+    # unstable_plot.set_ylabel('Fraction of\nrealizations')
     cost_plot.set_yscale('log')
     # cost_plot.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
     cost_plot.set_xlabel('Time')
     cost_plot.set_ylabel('Cost')
     cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed Architecture'), patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')], loc='upper left')
     # arch_plot.legend(['B', 'C'])
-    B_arch_plot.set_xlabel('Number of changes to actuators')
-    B_arch_plot.set_ylabel('Fraction of\nrealizations')
-    C_arch_plot.set_xlabel('Number of changes to sensors')
-    C_arch_plot.set_ylabel('Fraction of\nrealizations')
+    # B_arch_plot.set_xlabel('Number of changes to actuators')
+    # B_arch_plot.set_ylabel('Fraction of\nrealizations')
+    # C_arch_plot.set_xlabel('Number of changes to sensors')
+    # C_arch_plot.set_ylabel('Fraction of\nrealizations')
     arch_scatter_plot.set_xlabel('Number of changes to actuators')
     arch_scatter_plot.set_ylabel('Number of changes to sensors')
 
