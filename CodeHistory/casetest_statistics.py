@@ -33,7 +33,7 @@ if __name__ == "__main__":
             # Architecture selection parameters
             S.architecture_limit_modifier(min_mod=n_arch-1, max_mod=-n+n_arch)
             # Architecture selection costs
-            S.architecture_cost_update({'R2': 0, 'R3': 0})
+            S.architecture_cost_update(R2=0, R3=0)
 
             S.model_rename()
 

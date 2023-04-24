@@ -47,7 +47,7 @@ image_save_folder_path = 'Images/'
 class System:
     def __init__(self, graph_model=None, architecture=None, additive=None, initial_conditions=None, simulation_parameters=None):
         self.dynamics = {}
-        default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1, 'second_order': False}
+        default_graph_model = {'number_of_nodes': 10, 'type': 'rand', 'self_loop': True, 'rho': 1, 'second_order': {'check': True, 'A_type': 1, 'B_type': 1, 'C_type': 1}}
         if graph_model is None:
             graph_model = {}
         for key in default_graph_model:
@@ -90,7 +90,7 @@ class System:
         # self.enhanced_system_matrix()
 
     def model_rename(self, name_append=None):
-        self.model_name = "model_n" + str(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes'])
+        self.model_name = "model_n" + str(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order']['check'] else self.dynamics['number_of_nodes'])
         if self.dynamics['rho'] is not None:
             self.model_name = self.model_name + "_rho" + str(np.round(self.dynamics['rho'], decimals=3))
         else:
@@ -98,7 +98,7 @@ class System:
         self.model_name = self.model_name + "_Tp" + str(self.simulation_parameters['T_predict']) + "_arch" + str(self.architecture['B']['max'])
         if 'mod' in self.noise:
             self.model_name = self.model_name + "_" + self.noise['mod']
-        if self.dynamics['second_order']:
+        if self.dynamics['second_order']['check']:
             self.model_name = self.model_name + "_secondorder"
         self.model_name = self.model_name + "_" + self.dynamics['graph_type']
         if name_append is not None:
@@ -109,7 +109,6 @@ class System:
         self.dynamics['number_of_nodes'] = graph_model['number_of_nodes']
         G = netx.Graph()
         while not connected_network_check:
-            # print('Graph network mode: ', graph_model['type'])
             if graph_model['type'] == 'ER':
                 if 'p' not in graph_model:
                     graph_model['p'] = 0.3
@@ -142,39 +141,34 @@ class System:
             else:
                 raise Exception('Check graph model')
             connected_network_check = netx.algorithms.components.is_connected(G)
-
         self.dynamics['graph_type'] = graph_model['type']
         self.dynamics['Adj'] = netx.to_numpy_array(G)
         if graph_model['self_loop']:
             self.dynamics['Adj'] += np.identity(self.dynamics['number_of_nodes'])
-
-        if graph_model['second_order']:
-            self.dynamics['second_order'] = True
-            # self.second_order_network()
+        if graph_model['second_order']['check']:
+            self.dynamics['second_order'] = graph_model['second_order']
             self.dynamics['number_of_nodes'] *= 2
-            # self.open_loop_stability_eval()
         else:
-            self.dynamics['second_order'] = False
+            self.dynamics['second_order'] = graph_model['second_order']
         self.rescale_dynamics(graph_model['rho'])
 
-        # self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
-        # self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
-        # self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
-    def second_order_network(self):
-        self.dynamics['A'] = np.block([[self.dynamics['Adj'], np.zeros_like(self.dynamics['Adj'])],
-                                       [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), np.identity(int(self.dynamics['number_of_nodes']/2))]])
-        # self.dynamics['A'] = np.block([[0.5*np.identity(int(self.dynamics['number_of_nodes'] / 2)),np.identity(int(self.dynamics['number_of_nodes'] / 2))],
-        #                                [self.dynamics['Adj'],  np.zeros_like(self.dynamics['Adj'])]])
-
     def rescale_dynamics(self, rho):
-        if self.dynamics['second_order']:
-            self.second_order_network()
-        else:
-            self.dynamics['A'] = self.dynamics['Adj']
         self.dynamics['rho'] = rho
-        if self.dynamics['rho'] is not None:
-            self.dynamics['A'] = rho * self.dynamics['A']/(np.max(np.abs(np.linalg.eigvals(self.dynamics['A']))))
-            self.dynamics['rho'] = rho
+        if rho is not None:
+            rho = rho/np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
+        else:
+            rho = 1
+        if not self.dynamics['second_order']['check']:
+            self.dynamics['A'] = rho * self.dynamics['Adj']
+        else:
+            if self.dynamics['second_order']['A_type'] == 1:
+                self.dynamics['A'] = np.block([[rho * self.dynamics['Adj'], np.zeros_like(self.dynamics['Adj'])],
+                                               [0.9*np.identity(int(self.dynamics['number_of_nodes'] / 2)), 0.9*np.identity(int(self.dynamics['number_of_nodes'] / 2))]])
+            elif self.dynamics['second_order']['A_type'] == 2:
+                self.dynamics['A'] = np.block([[0.9*np.identity(int(self.dynamics['number_of_nodes'] / 2)), np.zeros_like(self.dynamics['Adj'])],
+                                               [rho * self.dynamics['Adj'], 0.9*np.identity(int(self.dynamics['number_of_nodes'] / 2))]])
+            else:
+                raise Exception('Check second-order network A-type')
         self.open_loop_stability_eval()
 
     def open_loop_stability_eval(self):
@@ -182,7 +176,7 @@ class System:
         self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if np.abs(i) >= 1])
 
     def initialize_architecture(self, architecture):
-        n = int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes']
+        n = int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order']['check'] else self.dynamics['number_of_nodes']
         architecture_model = {'min': 1, 'max': n,
                               'cost': {'Q': np.identity(self.dynamics['number_of_nodes']),
                                        'R1': np.identity(n),
@@ -210,15 +204,29 @@ class System:
             self.random_architecture(n_select=architecture['rand'])
 
     def initialize_architecture_set_as_basis_vectors(self):
-        n = int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes']
+        n = int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order']['check'] else self.dynamics['number_of_nodes']
         basis = []
         for i in range(0, n):
             basis.append(np.zeros(self.dynamics['number_of_nodes']))
             basis[-1][i] = 1
         if len(self.architecture['B']['set']) == 0:
-            self.architecture['B']['set'] = basis
+            if not self.dynamics['second_order']['check'] or self.dynamics['second_order']['B_type'] == 1:
+                self.architecture['B']['set'] = basis
+            elif self.dynamics['second_order']['check'] and self.dynamics['second_order']['B_type'] == 2:
+                self.architecture['B']['set'] = [np.flip(b) for b in basis]
+            else:
+                raise Exception('Check B_type')
+        else:
+            raise Exception('Check B basis')
         if len(self.architecture['C']['set']) == 0:
-            self.architecture['C']['set'] = [b.T for b in basis]
+            if not self.dynamics['second_order']['check'] or self.dynamics['second_order']['C_type'] == 1:
+                self.architecture['C']['set'] = [c.T for c in basis]
+            elif self.dynamics['second_order']['check'] and self.dynamics['second_order']['C_type'] == 2:
+                self.architecture['C']['set'] = [np.flip(c).T for c in basis]
+            else:
+                raise Exception('Check C_type')
+        else:
+            raise Exception('Check C basis')
 
     def active_architecture_update(self, parameters):
         if parameters['architecture_type'] is not None:
@@ -245,7 +253,7 @@ class System:
             architecture_type = ['B', 'C']
         for i in architecture_type:
             self.architecture[i]['matrix'] = np.zeros((self.dynamics['number_of_nodes'], len(self.architecture[i]['active'])))
-            self.architecture[i]['indicator'] = np.zeros(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order'] else self.dynamics['number_of_nodes'])
+            self.architecture[i]['indicator'] = np.zeros(int(self.dynamics['number_of_nodes']/2) if self.dynamics['second_order']['check'] else self.dynamics['number_of_nodes'])
             for k in range(0, len(self.architecture[i]['active'])):
                 if i == 'B':
                     self.architecture[i]['matrix'][:, k] = self.architecture[i]['set'][self.architecture[i]['active'][k]]
@@ -328,7 +336,6 @@ class System:
         self.dynamics['enhanced_terminal_cost'] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])))
         self.noise['enhanced_noise_matrix'] = {}
         self.noise['enhanced_noise_expectation'] = {}
-
         T = self.simulation_parameters['T_predict']
         for t in range(0, T+1):
             BK = self.architecture['B']['matrix'] @ self.architecture['B']['gain'][t]
@@ -337,13 +344,10 @@ class System:
             self.dynamics['A_enhanced'][t] = np.block([
                 [self.dynamics['A'], -BK],
                 [ALC, self.dynamics['A'] - BK - ALC]])
-
             self.noise['enhanced_noise_matrix'][t] = np.block([
                 [np.identity(self.dynamics['number_of_nodes']), np.zeros((self.dynamics['number_of_nodes'], len(self.architecture['C']['active'])))],
                 [np.zeros((self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])), self.dynamics['A'] @ self.architecture['C']['gain'][t]]])
-
             self.noise['enhanced_noise_expectation'][t] = self.noise['enhanced_noise_matrix'][t] @ self.noise['enhanced_noise_covariance'] @ self.noise['enhanced_noise_matrix'][t].T
-
             self.dynamics['enhanced_stage_cost'][t] = scp.linalg.block_diag(self.architecture['B']['cost']['Q'], self.architecture['B']['gain'][t].T @ self.architecture['B']['cost']['R1_active'] @ self.architecture['B']['gain'][t])
 
     def feedback_computations(self):
@@ -354,17 +358,12 @@ class System:
         self.architecture['C']['gain'] = {}
         for t in range(T, -1, -1):
             self.architecture['B']['gain'][t] = np.linalg.inv((self.architecture['B']['matrix'].T @ self.trajectory['P'][t+1] @ self.architecture['B']['matrix']) + self.architecture['B']['cost']['R1_active']) @ self.architecture['B']['matrix'].T @ self.trajectory['P'][t+1] @ self.dynamics['A']
-
             self.trajectory['P'][t] = (self.dynamics['A'].T @ self.trajectory['P'][t+1] @ self.dynamics['A']) - (self.dynamics['A'] @ self.trajectory['P'][t+1] @ self.architecture['B']['matrix'] @ self.architecture['B']['gain'][t]) + self.architecture['B']['cost']['Q']
-
             if np.min(np.linalg.eigvals(self.trajectory['P'][t])) < 0:
                 raise Exception('Negative control cost eigenvalues')
-
         for t in range(0, T+1):
             self.architecture['C']['gain'][t] = self.trajectory['E'][t] @ self.architecture['C']['matrix'].T @ np.linalg.inv((self.architecture['C']['matrix'] @ self.trajectory['E'][t] @ self.architecture['C']['matrix'].T) + self.architecture['C']['cost']['R1_active'])
-
             self.trajectory['E'][t+1] = (self.dynamics['A'] @ self.trajectory['E'][t] @ self.dynamics['A'].T) - (self.dynamics['A'] @ self.architecture['C']['gain'][t] @ self.architecture['C']['matrix'] @ self.trajectory['E'][t] @ self.dynamics['A'].T) + self.architecture['C']['cost']['Q']
-
             if np.min(np.linalg.eigvals(self.trajectory['E'][t+1])) < 0:
                 for k in self.trajectory['E']:
                     print(k, '- Eigenvalues: ', np.min(np.linalg.eigvals(self.trajectory['E'][k])))
@@ -399,10 +398,14 @@ class System:
         self.trajectory['error'].append(self.trajectory['x'][-1] - self.trajectory['x_estimate'][-1])
         self.trajectory['error_2norm'].append(np.linalg.norm(self.trajectory['error'][-1], ord=2))
 
-    def architecture_cost_update(self, R_set):
-        for arch in ['B', 'C']:
-            for R in R_set:
-                self.architecture[arch]['cost'][R] = R_set[R]
+    def architecture_cost_update(self, arch_set=None, R2=None, R3=None):
+        if arch_set is None:
+            arch_set = ['B', 'C']
+        for arch in arch_set:
+            if R2 is not None:
+                self.architecture[arch]['cost']['R2'] = R2
+            if R3 is not None:
+                self.architecture[arch]['cost']['R3'] = R3
 
     def architecture_costs(self):
         self.trajectory['cost']['running'] = 0
@@ -420,7 +423,6 @@ class System:
                     self.trajectory['cost']['running'] += self.simulation_parameters['T_predict']*self.architecture[a]['cost']['R2'] * np.linalg.norm(self.architecture[a]['indicator'], ord=1)
                 else:
                     raise Exception('Check Metric for Type 2 - Running Costs')
-
             if np.asarray((self.architecture[a]['cost']['R3'] > 0)).any():
                 if self.metric_model['type3'] == 'matrix':
                     self.trajectory['cost']['switching'] += self.simulation_parameters['T_predict']*np.squeeze((self.architecture[a]['indicator'] - history_vector).T @ self.architecture[a]['cost']['R3'] @ (self.architecture[a]['indicator'] - history_vector))
@@ -461,7 +463,6 @@ class System:
     def gramian_calc(self, arch_type):
         if arch_type not in ['B', 'C']:
             raise Exception('Check architecture type')
-
         g_mat = np.zeros_like(self.dynamics['A'])
         for i in range(0, self.dynamics['number_of_nodes']):
             A_pow = np.linalg.matrix_power(self.dynamics['A'], i)
@@ -523,10 +524,13 @@ class System:
     def network_node_relabel(self, G):
         node_labels = {}
         color_map = []
-        node_color = {'node': 'C9', 'actuator': 'C1', 'sensor': 'C2'}
+        node_color = {'node': 'tab:blue', 'node2': 'tab:purple', 'actuator': 'tab:green', 'sensor': 'tab:orange'}
         for i in range(0, self.dynamics['number_of_nodes']):
             node_labels[i] = str(i + 1)
             color_map.append(node_color['node'])
+        if self.dynamics['second_order']['check']:
+            for i in range(int(self.dynamics['number_of_nodes']/2), self.dynamics['number_of_nodes']):
+                color_map[i] = node_color['node2']
         for i in range(0, len(self.architecture['B']['active'])):
             node_labels[i + self.dynamics['number_of_nodes']] = "B" + str(i + 1)
             color_map.append(node_color['actuator'])
@@ -554,19 +558,10 @@ class System:
         x = [node_pos[k][0] for k in node_pos]
         y = [node_pos[k][1] for k in node_pos]
 
-        # node_pos = {}
-        # for n in network_plot_parameters:
-        #     node_pos[n] = network_plot_parameters[n]
-
         self.network_plot_parameters['node_pos'] = core_circ_pos
-        # self.network_plot_parameters['lim'] = {'x': [np.min(1.1*np.min(x), 0.9*np.min(x)), np.max(1.1*np.max(x), 0.9*np.max(x))], 'y': [np.min(1.1*np.min(y), 0.9*np.min(y)), np.max(1.1*np.max(y), 0.9*np.max(y))]}
-        # self.network_plot_parameters['lim'] = {
-        #     'x': [np.floor(10*np.min(x))/10, np.ceil(10*np.max(x))/10],
-        #     'y': [np.floor(10*np.min(y))/10, np.ceil(10*np.max(y))/10]}
         self.network_plot_parameters['lim'] = {
             'x': [-1.5, 1.5],
             'y': [-1.5, 1.5]}
-        # print(self.network_plot_parameters['lim'])
 
     def plot_dynamics(self, ax_in=None):
         if ax_in is None:
@@ -609,10 +604,6 @@ class System:
         G = Graph['G']
         c_map = Graph['c_map']
 
-        # network_plot_parameters, lim = S_t.full_network_position()
-        # node_pos = {}
-        # for n in network_plot_parameters:
-        #     node_pos[n] = network_plot_parameters[n]
         if node_filter is None:
             node_list = list(G)
         elif node_filter == 'dynamics':
@@ -630,9 +621,7 @@ class System:
         else:
             raise Exception('Check node filter')
 
-        # print('Node list:', node_list)
         netx.draw_networkx(G, ax=ax, node_size=100, pos=netx.spring_layout(G, pos=self.network_plot_parameters['node_pos'], fixed=[str(i+1) for i in range(0, S_t.dynamics['number_of_nodes'])]), node_color=c_map, with_labels=True, font_size=8, nodelist=node_list, edgelist=netx.edges(G, node_list))
-        # netx.draw_networkx(G, ax=ax, node_color=c_map, with_labels=False)
         ax.set_xlim(self.network_plot_parameters['lim']['x'])
         ax.set_ylim(self.network_plot_parameters['lim']['y'])
         ax.set_aspect('equal')
@@ -696,18 +685,9 @@ class System:
                        'marker': {'B': "+", 'C': "+"}}
 
         T = len(self.trajectory['x'])
-        # ax['error'].plot(range(0, T), self.trajectory['error_2norm'], c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'], label=s_type, alpha=plt_map[s_type]['alpha'])
-
-        # for i in range(0, self.dynamics['number_of_nodes']):
-        #     x = [self.trajectory['error'][t][i] for t in range(0, T)]
-        #     ax['error'].plot(range(0, T), x, linewidth=2, alpha=0.2, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
 
         error_vec = [np.linalg.norm(self.trajectory['error'][t], ord=v_norm) for t in range(0, T)]
         ax['error'].plot(range(0, T), error_vec, linewidth=2, alpha=0.8, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
-
-        # for i in range(0, self.dynamics['number_of_nodes']):
-        #     x = [self.trajectory['x'][t][i] for t in range(0, T)]
-        #     ax['x'].plot(range(0, T), x, linewidth=2, alpha=0.2, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
 
         state_vec = [np.linalg.norm(self.trajectory['x'][t], ord=v_norm) for t in range(0, T)]
         ax['x'].plot(range(0, T), state_vec, linewidth=2, alpha=0.8, c=plt_map[s_type]['c'], linestyle=plt_map[s_type]['line_style'])
@@ -725,7 +705,6 @@ class System:
             plt.savefig(f_name)
             plt.show()
         else:
-            # ax['x'].tick_params(axis="x", labelbottom=False)
             ax['error'].tick_params(axis="x", labelbottom=False)
 
     def plot_eigvals(self, f_name=None,  ax_in=None):
@@ -743,8 +722,6 @@ class System:
                            mlines.Line2D([], [], color='tab:orange', marker='x', linestyle='None', markersize=5, label='Marginal'),
                            mlines.Line2D([], [], color='tab:green', marker='x', linestyle='None', markersize=5, label='Stable')],
                   bbox_to_anchor=[0.5, 0.95], loc='lower center', ncol=3, columnspacing=0.1)
-        # ax.yaxis.tick_right()
-        # ax.yaxis.set_label_position("right")
         ax.set_xlabel(r'Mode $i$')
         ax.set_ylabel(r'$|\lambda_i (A)|$')
 
@@ -753,7 +730,6 @@ class System:
                 f_name = image_save_folder_path + self.model_name + '_openloopeigs.png'
             plt.savefig(f_name)
             plt.show()
-
 
 
 def matrix_convergence_check(A, B, accuracy=10 ** (-8), check_type=None):
@@ -826,7 +802,6 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
             test_sys = dc(work_iteration)
             if status_check:
                 test_sys.model_name = "test_model"
-                # test_sys.display_active_architecture()
             test_sys.active_architecture_update(i)
             if status_check:
                 test_sys.display_active_architecture()
@@ -1033,115 +1008,6 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
     return {'work_set': return_set, 'work_history': work_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': iteration_count}
 
 
-def simultaneous_cost_plot(value_history):
-    for i in value_history:
-        print(i)
-    fig = plt.figure(figsize=(6, 4))
-    grid = fig.add_gridspec(1, 1)
-    ax_cost = fig.add_subplot(grid[0, 0])
-    for i in range(0, len(value_history[0])):
-        ax_cost.scatter(range(0, len(value_history)), [v[i] for v in value_history])
-    ax_cost.legend(['select', 'reject', 'swap'])
-    ax_cost.set_yscale('log')
-    plt.show()
-
-
-def cost_plots(cost, f_name=None, ax=None, plt_map=None):
-    if ax is None:
-        fig = plt.figure(figsize=(6, 4), )
-        grid = fig.add_gridspec(1, 1)
-        ax_cost = fig.add_subplot(grid[0, 0])
-    else:
-        ax_cost = ax
-    
-    if plt_map is None:
-        plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-                   'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
-                   'marker': {'B': "+", 'C': "+"}}
-
-    # font = {'family': 'serif', 'color': 'darkred', 'weight': 'normal', 'size': 16}
-    # v_align = {'fixed': 'bottom', 'tuning': 'top'}
-    p_name = {'fixed': 'Fixed', 'tuning': 'Self-Tuning'}
-
-    tstep_cost = {}
-    T = len(cost['fixed'])
-    for i in cost:
-        cumulative_cost = [cost[i][0]]
-        for t in range(1, T):
-            cumulative_cost.append(cumulative_cost[-1] + cost[i][t])
-        tstep_cost[i] = cumulative_cost[-1]
-        ax_cost.plot(range(0, T), cumulative_cost, label=i+' cumulative', c=plt_map[i]['c'], linestyle='solid', zorder=plt_map[i]['zorder'])
-        ax_cost.plot(range(0, T), cost[i], label=i+' stage', c=plt_map[i]['c'], linestyle='dashed', zorder=plt_map[i]['zorder'])
-        ax_cost.axhline(tstep_cost[i], linestyle=':', c=plt_map[i]['c'], linewidth=1)
-        ax_cost.text(0, tstep_cost[i], p_name[i] + ':' + np.format_float_scientific(tstep_cost[i], precision=2, trim='0'), horizontalalignment='left', verticalalignment='top')
-
-    ax_cost.set_ylabel('Cost')
-    ax_cost.legend(handles=[mlines.Line2D([0], [0], color=plt_map['fixed']['c'], linestyle='solid', label='Fixed'),
-                                           mlines.Line2D([0], [0], color=plt_map['tuning']['c'], linestyle='solid', label='Self-tuning')],
-                                  bbox_to_anchor=(0.5, 1.05), loc='lower center', ncols=2)
-    ax_cost_duplicate = ax_cost.twinx()
-    ax_cost_duplicate.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
-    ax_cost_duplicate.set_yticklabels([])
-    ax_cost_duplicate.legend(handles=[mlines.Line2D([0], [0], color='black', linestyle='solid', label='Cumulative'),
-                                           mlines.Line2D([0], [0], color='black', linestyle='dashed', label='Stage')],
-                                  loc='lower right', ncols=2)
-
-    improvement = np.round(100*(tstep_cost['fixed']-tstep_cost['tuning'])/tstep_cost['fixed'], 2)
-    improvement_str = 'Cost: '
-    if improvement < 100:
-        improvement_str = improvement_str + str(improvement) + r'\% improvement'
-    improvement_str = improvement_str + ' : Fixed ' + np.format_float_scientific(tstep_cost['fixed'], precision=2, trim='0') + ' vs Self-Tuning ' + np.format_float_scientific(tstep_cost['tuning'], precision=2, trim='0')
-    print(improvement_str)
-
-    ax_cost.set_yscale('log')
-    ax_cost.set_xlim(-1, 1+max([len(cost[i]) for i in cost]))
-
-    if ax is None:
-        # ax_cost.set_title('Cost comparison')
-        ax_cost.set_xlabel('Time')
-        if f_name is None:
-            f_name = image_save_folder_path + "cost_trajectory.png"
-        else:
-            f_name = image_save_folder_path + f_name + "_cost_trajectory.png"
-        plt.savefig(f_name)
-        plt.show()
-    else:
-        ax_cost.tick_params(axis="x", labelbottom=False)
-
-
-def combined_plot(S, S_fixed, S_tuning):
-    print('\n Plotting')
-
-    fig = plt.figure(figsize=(5, 7), tight_layout=True)
-    grid = fig.add_gridspec(5, 1)
-    plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
-               'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
-               'marker': {'B': "o", 'C': "o"}}
-
-    ax_cost = fig.add_subplot(grid[0, 0])
-    ax_trajectory = fig.add_subplot(grid[1, 0], sharex=ax_cost)
-    ax_error = fig.add_subplot(grid[2, 0], sharex=ax_cost)
-    ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
-    ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
-
-    cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
-    S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
-    S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
-    S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
-
-    # ax_cost.tick_params(axis="x", labelbottom=False)
-    # ax_error.tick_params(axis="x", labelbottom=False)
-    # ax_trajectory.tick_params(axis="x", labelbottom=False)
-
-    ax_cost.set_title(S.model_name)
-    ax_architecture_C.set_xlabel('Time')
-
-    save_file = image_save_folder_path + S.model_name+'_fixed_vs_tuning.png'
-    plt.savefig(save_file)
-    print('Figure saved:', save_file)
-    plt.show()
-
-
 def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
     if not isinstance(S, System):
         raise Exception('Check data type')
@@ -1209,65 +1075,6 @@ def greedy_architecture_initialization(S, print_check=False):
     return S_test
 
 
-# def statistics_shelving_initialize(fname):
-#     folder_path = datadump_folder_path + 'statistics/' + fname
-#     if os.path.isdir(folder_path):
-#         rmtree(folder_path)
-#     os.makedirs(folder_path)
-
-
-def data_shelving_statistics(S, S_fixed, S_tuning, model_id, sim_model=None, print_check=False):
-    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name
-    if sim_model is not None:
-        shelve_filename = shelve_filename + '_' + sim_model
-    if not os.path.isdir(shelve_filename):
-        os.makedirs(shelve_filename)
-    shelve_filename = shelve_filename + '/model_' + str(model_id)
-    for f_type in ['.bak', '.dat', '.dir']:
-        if os.path.exists(shelve_filename + f_type):
-            os.remove(shelve_filename + f_type)
-            del_check = True
-    shelve_data = shelve.open(shelve_filename)
-    if print_check:
-        print('\nShelving to:', shelve_filename)
-    shelve_data['System'] = S
-    shelve_data['Fixed'] = S_fixed
-    shelve_data['SelfTuning'] = S_tuning
-    shelve_data.close()
-    if print_check:
-        print('\nModel shelve done: ', shelve_filename)
-
-
-def data_reading_statistics(model_type, model_id, sim_model=None, print_check=False):
-    shelve_filename = datadump_folder_path + 'statistics/' + model_type
-    if sim_model is not None:
-        shelve_filename = shelve_filename + '_' + str(sim_model)
-    shelve_filename = shelve_filename + '/model_' + str(model_id)
-    if print_check:
-        print('\nShelving from:', shelve_filename)
-    shelve_data = shelve.open(shelve_filename)
-    S = shelve_data['System']
-    S_fixed = shelve_data['Fixed']
-    S_tuning = shelve_data['SelfTuning']
-    shelve_data.close()
-    return S, S_fixed, S_tuning
-
-
-def data_shelving_gen_model(S):
-    shelve_filename = datadump_folder_path + 'gen_' + S.model_name
-    del_check = False
-    for f_type in ['.bak', '.dat', '.dir']:
-        if os.path.exists(shelve_filename + f_type):
-            os.remove(shelve_filename + f_type)
-            del_check = True
-    if del_check:
-        print('\nOld data deleted for overwriting')
-    shelve_data = shelve.open(shelve_filename)
-    shelve_data['System'] = S
-    shelve_data.close()
-    print('\nModel shelve done: ', shelve_filename)
-
-
 def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False, graph_type='rand', optional_suffix=None):
     model = 'model_n' + str(n)
     if rho is not None:
@@ -1285,57 +1092,85 @@ def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False, graph_t
     return model
 
 
+def data_shelving_gen_model(S, save_folder=None):
+    print('\nShelving model')
+    shelve_filename = datadump_folder_path + 'gen_' + S.model_name
+    with shelve.open(shelve_filename, flag='c', writeback=True) as shelve_data:
+        shelve_data['System'] = S
+    print('\nModel shelve done: ', shelve_filename)
+
+
 def data_reading_gen_model(model):
     print('\nReading generated model...')
     modelname = 'gen_' + model
-    print(modelname)
     shelve_file = datadump_folder_path + modelname
-    shelve_data = shelve.open(shelve_file)
-    S = shelve_data['System']
-    shelve_data.close()
+    with shelve.open(shelve_file, flag='r') as shelve_data:
+        S = shelve_data['System']
     if not isinstance(S, System):
         raise Exception('System model error')
     return S
 
 
-def data_shelving_sim_model(S, S_fixed, S_tuning, sim_model=None):
+def data_shelving_sim_model(S, S_fixed, S_tuning):
     print('\nTrajectory data shelving')
     shelve_file = datadump_folder_path + 'sim_' + S.model_name
-    print('\nDeleting old data...')
-    for f_type in ['.bak', '.dat', '.dir']:
-        if os.path.exists(shelve_file + f_type):
-            os.remove(shelve_file + f_type)
-    print('\nShelving new data...')
-    shelve_data = shelve.open(shelve_file)
-    for k in ['System', 'Fixed', 'SelfTuning']:
-        if k in shelve_data:
-            del shelve_data[k]
-    shelve_data['System'] = S
-    shelve_data['Fixed'] = S_fixed
-    shelve_data['SelfTuning'] = S_tuning
-    shelve_data.close()
-    print('\nShelving done:', shelve_file)
+    with shelve.open(shelve_file, flag='c', writeback=True) as shelve_data:
+        shelve_data['System'] = S
+        shelve_data['Fixed'] = S_fixed
+        shelve_data['SelfTuning'] = S_tuning
+    print('\nShelving done: ', shelve_file)
 
 
 def data_reading_sim_model(model):
     print('\nData reading')
     shelve_file = datadump_folder_path + 'sim_' + model
-    print(shelve_file)
-    try:
-        shelve_data = shelve.open(shelve_file)
-    except (FileNotFoundError, IOError):
-        raise Exception('test file not found')
-    for k in ['System', 'Fixed', 'SelfTuning']:
-        if k not in shelve_data:
-            raise Exception('Check data file')
-    S = shelve_data['System']
-    S_fixed = shelve_data['Fixed']
-    S_tuning = shelve_data['SelfTuning']
-    shelve_data.close()
+    with shelve.open(shelve_file, flag='r') as shelve_data:
+        S, S_fixed, S_tuning = shelve_data['System'], shelve_data['Fixed'], shelve_data['SelfTuning']
     if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
         raise Exception('Data type mismatch')
     print('\nModel: ', S.model_name)
     return S, S_fixed, S_tuning
+
+
+def data_shelving_statistics(S, S_fixed, S_tuning, model_id, print_check=False):
+    shelve_folder = datadump_folder_path + 'statistics/' + S.model_name
+    if not os.path.isdir(shelve_folder):
+        os.makedirs(shelve_folder)
+        if print_check:
+            print('\nCreated model folder: ', shelve_folder)
+    shelve_filename = shelve_folder + '/model_' + str(model_id)
+    with shelve.open(shelve_filename, flag='c', writeback=True) as shelve_data:
+        shelve_data['System'] = S
+        shelve_data['Fixed'] = S_fixed
+        shelve_data['SelfTuning'] = S_tuning
+    if print_check:
+        print('\nModel shelve done: ', shelve_filename)
+
+
+def data_reading_statistics(model_type, model_id, sim_model=None, print_check=False):
+    shelve_folder = datadump_folder_path + 'statistics/' + S.model_name
+    if sim_model is not None:
+        shelve_folder = shelve_folder + '_' + sim_model
+    if not os.path.isdir(shelve_folder):
+        os.makedirs(shelve_folder)
+        if print_check:
+            print('\nCreated model folder: ', shelve_folder)
+    shelve_filename = shelve_folder + '/model_' + str(model_id)
+    with shelve.open(shelve_filename, flag='r') as shelve_data:
+        S, S_fixed, S_tuning = shelve_data['System'], shelve_data['Fixed'], shelve_data['SelfTuning']
+    if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
+        raise Exception('Data type mismatch')
+    return S, S_fixed, S_tuning
+
+
+def create_gen_model(exp_parameters):
+    print(exp_parameters)
+    S = System(
+        graph_model={'number_of_nodes': exp_parameters['number_of_nodes'], 'type': exp_parameters['network_model'], 'p': exp_parameters['p'], 'rho': exp_parameters['rho'], 'second_order': exp_parameters['second_order']},
+        architecture={'rand': exp_parameters['rand_arch']},
+        additive={'type': exp_parameters['test_model'], 'disturbance': exp_parameters['disturbance'], 'W': exp_parameters['W'], 'V': exp_parameters['V']},
+        simulation_parameters={'T_sim': exp_parameters['T_sim'], 'T_predict': exp_parameters['Tp']})
+    return S
 
 
 def time_axis_plot(model):
@@ -1345,10 +1180,6 @@ def time_axis_plot(model):
                'marker': {'B': "o", 'C': "o"}}
 
     t_step = S.simulation_parameters['T_sim'] + 1
-
-    # fig = plt.figure(figsize=(10, 7), constrained_layout=True)
-    # fig = plt.figure(figsize=(10, 7), tight_layout=True)
-    # grid = fig.add_gridspec(6, 2, wspace=0.1, hspace=0.1)
 
     fig = plt.figure(figsize=(10, 7))
     grid_outer = fig.add_gridspec(1, 2, wspace=0.25)
@@ -1368,14 +1199,10 @@ def time_axis_plot(model):
 
     ax_tstep_architecture = fig.add_subplot(grid_network[0, 0], frameon=False, zorder=-1)
     ax_tstep_architecture.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
-    # ax_tstep_architecture.patch.set_alpha(0.1)
 
     ax_network_nodes = fig.add_subplot(grid_network[0, 0], zorder=0)
     ax_network_nodes.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
     ax_network_nodes.patch.set_alpha(0.1)
-
-    # ax_interaction = fig.add_subplot(grid_outer[1,1], frameon=False)
-    # ax_interaction.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
 
     cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']}, S.model_name, ax_cost, plt_map=plt_map)
     S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
@@ -1385,77 +1212,56 @@ def time_axis_plot(model):
 
     S_tuning.plot_network(ax_in=ax_network_nodes, node_filter='dynamics')
     ax_network_nodes.set_title(S.model_name + '\nUnstable modes:' + str(S_tuning.dynamics['n_unstable']))
-    # S_tuning.plot_dynamics(ax_in=ax_network_nodes)
     S_tuning.plot_network(ax_in=ax_tstep_architecture, node_filter='architecture')
 
     time_slider_dim = [0.3, 0.025]
     reset_button_dim = [0.1, 0.05]
     next_button_dim = [0.1, 0.05]
     prev_button_dim = [0.1, 0.05]
-    # text_box_dim = [0.1, 0.05]
 
-    # ax_timeslide = fig.add_axes([((0.95 + 0.55 - time_slider_dim[0]) / 2), 0.1, time_slider_dim[0], time_slider_dim[1]])
     ax_timeslide = fig.add_subplot(grid_interaction[0, :])
     timeslider = Slider(ax=ax_timeslide, label='', valmin=0, valmax=S.simulation_parameters['T_sim'] + 1, valinit=S.simulation_parameters['T_sim'] + 1, valstep=1)
-    # t_text = ax_timeslide.text(0.38, 2.6, 'Time: '+str(t_step), transform=ax_timeslide.transAxes, fontsize='large')
     t_text = ax_timeslide.text(0.5, 1, 'Time: ' + str(t_step), transform=ax_timeslide.transAxes, fontsize='large', horizontalalignment='center')
-    # valfmt=' time: %d'
     timeslider.valtext.set_visible(False)
 
-    # ax_reset_button = fig.add_axes([((0.95 + 0.55 - reset_button_dim[0]) / 2), 0.05, reset_button_dim[0], reset_button_dim[1]])
     ax_reset_button = fig.add_subplot(grid_interaction[1, 1])
     reset_button = Button(ax=ax_reset_button, label='Reset', hovercolor='0.975')
 
-    # ax_prev_button = fig.add_axes([((0.95 + 0.55 - 3*prev_button_dim[0]) / 2), 0.15, prev_button_dim[0], prev_button_dim[1]])
     ax_prev_button = fig.add_subplot(grid_interaction[1, 0])
     prev_button = Button(ax=ax_prev_button, label='t-', hovercolor='0.975')
 
-    # ax_next_button = fig.add_axes([((0.95 + 0.55 + next_button_dim[0]) / 2), 0.15, next_button_dim[0], next_button_dim[1]])
     ax_next_button = fig.add_subplot(grid_interaction[1, 2])
     next_button = Button(ax=ax_next_button, label='t+', hovercolor='0.975')
-
-    # ax_text_box = fig.add_axes([((0.95 + 0.55 - text_box_dim[0]) / 2), 0.15, text_box_dim[0], text_box_dim[1]])
-    # time_text = TextBox(ax=ax_text_box, label='', textalignment='center', initial='t:'+str(S.simulation_parameters['T_sim'] + 1))
 
     def slider_update(t):
         nonlocal t_step
         t_step = t
-        # time_text.set_val(t_step)
         ax_timeslide.text(time_slider_dim[0] / 2, time_slider_dim[1] + 0.05, 'time: ' + str(t_step))
         t_text.set_text('Time: ' + str(t_step))
         ax_timeline.clear()
         ax_tstep_architecture.clear()
         ax_timeline.axvline(t, alpha=0.2, c='k', linestyle='dashed')
-        # ax_timeline.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
         S_tuning.plot_network(ax_in=ax_tstep_architecture, time_step=t, node_filter='architecture')
 
     def reset_button_press(event):
         nonlocal t_step
         t_step = S.simulation_parameters['T_sim'] + 1
-        # time_text.set_val(t_step)
         timeslider.reset()
 
     def next_button_press(event):
         nonlocal t_step
         t_step += 1
-        # time_text.set_val(t_step)
         timeslider.set_val(t_step)
 
     def prev_button_press(event):
         nonlocal t_step
         t_step -= 1
-        # time_text.set_val(t_step)
         timeslider.set_val(t_step)
-
-    # def text_box_update(event):
-    #     nonlocal t_step
-    #     # time_text.set_val('t='+str(t_step))
 
     timeslider.on_changed(slider_update)
     reset_button.on_clicked(reset_button_press)
     next_button.on_clicked(next_button_press)
     prev_button.on_clicked(prev_button_press)
-    # time_text.on_submit(text_box_update)
     plt.show()
 
 
@@ -1548,5 +1354,115 @@ def statistics_plot(test_model, sim_model=None, n_samples=100):
     plt.show()
 
 
+def simultaneous_cost_plot(value_history):
+    for i in value_history:
+        print(i)
+    fig = plt.figure(figsize=(6, 4))
+    grid = fig.add_gridspec(1, 1)
+    ax_cost = fig.add_subplot(grid[0, 0])
+    for i in range(0, len(value_history[0])):
+        ax_cost.scatter(range(0, len(value_history)), [v[i] for v in value_history])
+    ax_cost.legend(['select', 'reject', 'swap'])
+    ax_cost.set_yscale('log')
+    plt.show()
+
+
+def cost_plots(cost, f_name=None, ax=None, plt_map=None):
+    if ax is None:
+        fig = plt.figure(figsize=(6, 4), )
+        grid = fig.add_gridspec(1, 1)
+        ax_cost = fig.add_subplot(grid[0, 0])
+    else:
+        ax_cost = ax
+
+    if plt_map is None:
+        plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+                   'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
+                   'marker': {'B': "+", 'C': "+"}}
+    p_name = {'fixed': 'Fixed', 'tuning': 'Self-Tuning'}
+
+    tstep_cost = {}
+    T = len(cost['fixed'])
+    for i in cost:
+        cumulative_cost = [cost[i][0]]
+        for t in range(1, T):
+            cumulative_cost.append(cumulative_cost[-1] + cost[i][t])
+        tstep_cost[i] = cumulative_cost[-1]
+        ax_cost.plot(range(0, T), cumulative_cost, label=i + ' cumulative', c=plt_map[i]['c'], linestyle='solid',
+                     zorder=plt_map[i]['zorder'])
+        ax_cost.plot(range(0, T), cost[i], label=i + ' stage', c=plt_map[i]['c'], linestyle='dashed',
+                     zorder=plt_map[i]['zorder'])
+        ax_cost.axhline(tstep_cost[i], linestyle=':', c=plt_map[i]['c'], linewidth=1)
+        ax_cost.text(0, tstep_cost[i],
+                     p_name[i] + ':' + np.format_float_scientific(tstep_cost[i], precision=2, trim='0'),
+                     horizontalalignment='left', verticalalignment='top')
+
+    ax_cost.set_ylabel('Cost')
+    ax_cost.legend(handles=[mlines.Line2D([0], [0], color=plt_map['fixed']['c'], linestyle='solid', label='Fixed'),
+                            mlines.Line2D([0], [0], color=plt_map['tuning']['c'], linestyle='solid',
+                                          label='Self-tuning')],
+                   bbox_to_anchor=(0.5, 1.05), loc='lower center', ncols=2)
+    ax_cost_duplicate = ax_cost.twinx()
+    ax_cost_duplicate.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
+                                  right=False)
+    ax_cost_duplicate.set_yticklabels([])
+    ax_cost_duplicate.legend(handles=[mlines.Line2D([0], [0], color='black', linestyle='solid', label='Cumulative'),
+                                      mlines.Line2D([0], [0], color='black', linestyle='dashed', label='Stage')],
+                             loc='lower right', ncols=2)
+
+    improvement = np.round(100 * (tstep_cost['fixed'] - tstep_cost['tuning']) / tstep_cost['fixed'], 2)
+    improvement_str = 'Cost: '
+    if improvement < 100:
+        improvement_str = improvement_str + str(improvement) + r'\% improvement'
+    improvement_str = improvement_str + ' : Fixed ' + np.format_float_scientific(tstep_cost['fixed'], precision=2,
+                                                                                 trim='0') + ' vs Self-Tuning ' + np.format_float_scientific(
+        tstep_cost['tuning'], precision=2, trim='0')
+    print(improvement_str)
+
+    ax_cost.set_yscale('log')
+    ax_cost.set_xlim(-1, 1 + max([len(cost[i]) for i in cost]))
+
+    if ax is None:
+        ax_cost.set_xlabel('Time')
+        if f_name is None:
+            f_name = image_save_folder_path + "cost_trajectory.png"
+        else:
+            f_name = image_save_folder_path + f_name + "_cost_trajectory.png"
+        plt.savefig(f_name)
+        plt.show()
+    else:
+        ax_cost.tick_params(axis="x", labelbottom=False)
+
+
+def combined_plot(S, S_fixed, S_tuning):
+    print('\n Plotting')
+
+    fig = plt.figure(figsize=(5, 7), tight_layout=True)
+    grid = fig.add_gridspec(5, 1)
+    plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
+               'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
+               'marker': {'B': "o", 'C': "o"}}
+
+    ax_cost = fig.add_subplot(grid[0, 0])
+    ax_trajectory = fig.add_subplot(grid[1, 0], sharex=ax_cost)
+    ax_error = fig.add_subplot(grid[2, 0], sharex=ax_cost)
+    ax_architecture_B = fig.add_subplot(grid[3, 0], sharex=ax_cost)
+    ax_architecture_C = fig.add_subplot(grid[4, 0], sharex=ax_cost)
+
+    cost_plots({'fixed': S_fixed.trajectory['cost']['true'], 'tuning': S_tuning.trajectory['cost']['true']},
+               S.model_name, ax_cost, plt_map=plt_map)
+    S_fixed.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='fixed')
+    S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
+    S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
+
+    ax_cost.set_title(S.model_name)
+    ax_architecture_C.set_xlabel('Time')
+
+    save_file = image_save_folder_path + S.model_name + '_fixed_vs_tuning.png'
+    plt.savefig(save_file)
+    print('Figure saved:', save_file)
+    plt.show()
+
+
 if __name__ == "__main__":
-    print('Check function file')
+    print('Check function file: Done')

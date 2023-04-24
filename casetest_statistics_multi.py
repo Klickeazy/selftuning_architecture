@@ -38,7 +38,7 @@ def sys_gen(optimize_initial_architecture=True):
     # Architecture selection parameters
     S.architecture_limit_modifier(min_mod=n_arch - 1, max_mod=-n + n_arch)
     # Architecture selection costs
-    S.architecture_cost_update({'R2': 0, 'R3': 0})
+    S.architecture_cost_update(R2=0, R3=0)
     S.model_rename()
     if optimize_initial_architecture:
         S_temp = gac.greedy_architecture_initialization(S)
@@ -56,13 +56,14 @@ def sys_test(i):
     while fail_check:
         try:
             S = sys_gen()
+            S.model_rename(sim_model)
             S_fixed = gac.simulate_fixed_architecture(S, print_check=False, multiprocess_check=True)
             # S_tuning = gac.simulate_selftuning_architecture(S, print_check=False, multiprocess_check=True)
             if sim_model == 'unlimited_arch_change':
                 S_tuning = gac.simulate_selftuning_architecture(S, iterations_per_step=S.dynamics['number_of_nodes'], print_check=False, multiprocess_check=True)
             else:
                 S_tuning = gac.simulate_selftuning_architecture(S, print_check=False, multiprocess_check=True)
-            gac.data_shelving_statistics(S, S_fixed, S_tuning, i, sim_model)
+            gac.data_shelving_statistics(S, S_fixed, S_tuning, i)
             fail_check = False
         except Exception as e:
             print(e)
@@ -73,7 +74,7 @@ if __name__ == "__main__":
 
     n_samples = 100
     print('CPUs available: ', os.cpu_count())
-    active_pool = os.cpu_count() - 4
+    active_pool = max(os.cpu_count() - 4, 1)
     print('CPUs for process: ', active_pool)
     m_pool = Pool(active_pool)
     S_namer = sys_gen(optimize_initial_architecture=False)
