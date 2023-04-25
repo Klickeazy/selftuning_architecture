@@ -28,7 +28,7 @@ if __name__ == "__main__":
     disturbance = {'step': disturbance_step, 'number': disturbance_number, 'magnitude': disturbance_magnitude}
 
     # Model Gen
-    S = gac.System(graph_model={'number_of_nodes': n, 'type': network_model, 'p': p, 'rho': rho, 'second_order': second_order}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance, 'W': 1, 'V': 1}, simulation_parameters={'T_sim': 100, 'T_predict': Tp})
+    S = gac.System(graph_model={'number_of_nodes': n, 'type': network_model, 'p': p, 'rho': rho, 'second_order': second_order}, architecture={'rand': n_arch}, additive={'type': test_model, 'disturbance': disturbance, 'W': 1, 'V': 1}, simulation_parameters={'T_sim': 100, 'T_predict': Tp, 'model': None})
     # print(S.model_name)
 
     # for k in ['B', 'C']:
@@ -49,6 +49,9 @@ if __name__ == "__main__":
     # S.architecture['C']['cost']['R3'] = 0
 
     S.model_rename()
+
+    # print('Unstable modes: ', S.dynamics['n_unstable'])
+    # print('Eig Vals: ', S.dynamics['ol_eig'])
 
     print('Optimizing fixed architecture')
     print('Initial')
