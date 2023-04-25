@@ -3,10 +3,10 @@ import greedy_architecture_combined as gac
 if __name__ == "__main__":
 
     n = 20
-    # rho = 3
-    rho = None
+    rho = 3
+    # rho = None
     Tp = 10
-    n_arch = 3
+    n_arch = 2
 
     # test_model = 'combined'
     test_model = None
@@ -17,8 +17,8 @@ if __name__ == "__main__":
     sim_model = 'unlimited_arch_change'
     # sim_model = None
 
-    network_model = 'rand_eval'
-    # network_model = 'rand'
+    # network_model = 'rand_eval'
+    network_model = 'rand'
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order, network_model, sim_model)
     print(model)
