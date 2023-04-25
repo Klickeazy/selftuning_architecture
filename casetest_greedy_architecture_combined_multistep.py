@@ -4,12 +4,8 @@ from copy import deepcopy as dc
 if __name__ == "__main__":
 
     n = 20
-
-    # network_model = 'rand_eval'
-    network_model = 'rand'
     # rho = 7
-    rho = 3
-
+    rho = None
     Tp = 10
     n_arch = 2
 
@@ -19,15 +15,14 @@ if __name__ == "__main__":
     second_order = True
     # second_order = False
 
-    sim_model = 'unlimited_arch_change'
-    # sim_model = None
-
-    model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order, network_model)
+    model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order)
     S = gac.data_reading_gen_model(model)
     S.display_active_architecture()
 
     print('Retrieved model: ', S.model_name)
 
+    sim_model = 'unlimited_arch_change'
+    # sim_model = None
 
     # # Model update:
     # S.simulation_parameters['T_predict'] = 30
@@ -38,7 +33,7 @@ if __name__ == "__main__":
     # S.architecture['C']['cost']['R2'] = 0
     # S.architecture['B']['cost']['R3'] = 10000
     # S.architecture['C']['cost']['R3'] = 0
-    S.model_rename(sim_model)
+    S.model_rename()
 
     print('Simulating Model: ', S.model_name)
     print('Number of unstable modes: ', S.dynamics['n_unstable'])
@@ -48,7 +43,7 @@ if __name__ == "__main__":
 
     S_fixed = gac.simulate_fixed_architecture(S)
     if sim_model == 'unlimited_arch_change':
-        S_tuning = gac.simulate_selftuning_architecture(S, iterations_per_step=n)
+        S_tuning = gac.simulate_selftuning_architecture(S, iterations_per_step=n_arch, changes_per_iteration=n_arch)
     else:
         S_tuning = gac.simulate_selftuning_architecture(S)
 

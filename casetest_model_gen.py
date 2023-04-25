@@ -13,10 +13,8 @@ if __name__ == "__main__":
     n_arch_C = n_arch
 
     network_model = 'rand_eval'
-    # network_model = 'rand'
-    # rho = 3
     rho = None
-    p = 0.05
+    p = 0.01
     second_order = True
     # second_order = False
 

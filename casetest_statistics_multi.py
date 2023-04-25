@@ -10,9 +10,9 @@ import numpy as np
 
 
 def sys_gen(optimize_initial_architecture=True):
-    n = 50
+    n = 20
     Tp = 10
-    n_arch = 5
+    n_arch = 3
     # n_arch_B = n_arch
     # n_arch_C = n_arch
 
@@ -23,10 +23,9 @@ def sys_gen(optimize_initial_architecture=True):
     # second_order = False
 
     network_model = 'rand_eval'
-    # network_model = 'rand'
     # rho = 4
     rho = None
-    p = 0.5
+    p = 0.05
 
     disturbance_step = 10
     disturbance_number = int(np.floor(n / 2))
@@ -48,10 +47,8 @@ def sys_gen(optimize_initial_architecture=True):
 
 def sys_test(i):
     sleep(1)
-
-    # sim_model = 'unlimited_arch_change'
-    sim_model = None
-
+    # print('Sample s: ', str(i))
+    sim_model = 'unlimited_arch_change'
     fail_check = True
     while fail_check:
         try:
@@ -59,14 +56,14 @@ def sys_test(i):
             S_fixed = gac.simulate_fixed_architecture(S, print_check=False, multiprocess_check=True)
             # S_tuning = gac.simulate_selftuning_architecture(S, print_check=False, multiprocess_check=True)
             if sim_model == 'unlimited_arch_change':
-                S_tuning = gac.simulate_selftuning_architecture(S, iterations_per_step=S.dynamics['number_of_nodes'], print_check=False, multiprocess_check=True)
+                S_tuning = gac.simulate_selftuning_architecture(S, iterations_per_step=S_fixed.architecture['B']['max'], changes_per_iteration=S_fixed.architecture['B']['max'], print_check=False, multiprocess_check=True)
             else:
-                S_tuning = gac.simulate_selftuning_architecture(S, print_check=False, multiprocess_check=True)
-            gac.data_shelving_statistics(S, S_fixed, S_tuning, i, sim_model)
+                S_tuning = gac.simulate_selftuning_architecture(S)
+            gac.data_shelving_statistics(S, S_fixed, S_tuning, i)
             fail_check = False
         except Exception as e:
             print(e)
-            print('Fail at model_id: ', str(i))
+            print('Fail at s: ', str(i))
 
 
 if __name__ == "__main__":
@@ -77,8 +74,7 @@ if __name__ == "__main__":
     print('CPUs for process: ', active_pool)
     m_pool = Pool(active_pool)
     S_namer = sys_gen(optimize_initial_architecture=False)
-    print('Model:', S_namer.model_name)
-    # gac.statistics_shelving_initialize(S_namer.model_name)
+    gac.statistics_shelving_initialize(S_namer.model_name)
     for _ in tqdm(m_pool.imap_unordered(sys_test, range(1, n_samples+1)), total=len(range(1, n_samples+1)), ncols=100, position=0, desc='Realizations'):
         pass
     print('Code Run Done: ', S_namer.model_name)

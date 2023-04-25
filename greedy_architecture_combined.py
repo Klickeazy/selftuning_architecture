@@ -100,7 +100,6 @@ class System:
             self.model_name = self.model_name + "_" + self.noise['mod']
         if self.dynamics['second_order']:
             self.model_name = self.model_name + "_secondorder"
-        self.model_name = self.model_name + "_" + self.dynamics['graph_type']
         if name_append is not None:
             self.model_name = self.model_name + "_" + name_append
 
@@ -143,7 +142,6 @@ class System:
                 raise Exception('Check graph model')
             connected_network_check = netx.algorithms.components.is_connected(G)
 
-        self.dynamics['graph_type'] = graph_model['type']
         self.dynamics['Adj'] = netx.to_numpy_array(G)
         if graph_model['self_loop']:
             self.dynamics['Adj'] += np.identity(self.dynamics['number_of_nodes'])
@@ -163,8 +161,6 @@ class System:
     def second_order_network(self):
         self.dynamics['A'] = np.block([[self.dynamics['Adj'], np.zeros_like(self.dynamics['Adj'])],
                                        [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), np.identity(int(self.dynamics['number_of_nodes']/2))]])
-        # self.dynamics['A'] = np.block([[0.5*np.identity(int(self.dynamics['number_of_nodes'] / 2)),np.identity(int(self.dynamics['number_of_nodes'] / 2))],
-        #                                [self.dynamics['Adj'],  np.zeros_like(self.dynamics['Adj'])]])
 
     def rescale_dynamics(self, rho):
         if self.dynamics['second_order']:
@@ -672,7 +668,7 @@ class System:
         ax['B'].tick_params(axis="x", labelbottom=False)
         ax['B'].set_ylabel(r"$S_t$" + "\n Changes: " + str(self.architecture['B']['change_count']))
         ax['C'].set_ylabel(r"$S'_t$" + "\n Changes: " + str(self.architecture['C']['change_count']))
-        ax['C'].set_xlabel("Time " + r"$t$")
+        ax['C'].set_xlabel("Time "+ r"$t$")
 
         if ax_in is None:
             ax['C'].set_xlabel('Time')
@@ -1152,8 +1148,7 @@ def simulate_fixed_architecture(S, print_check=True, multiprocess_check=False):
     S_fixed.model_rename(S.model_name + "_fixed")
     if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
-        # for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
-        for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False):
+        for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
             S_fixed.cost_wrapper_enhanced_true()
             S_fixed.system_one_step_update_enhanced(t)
     else:
@@ -1172,8 +1167,7 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
     if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
-        # for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
-        for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False):
+        for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
             S_tuning.cost_wrapper_enhanced_true()
             S_tuning.system_one_step_update_enhanced(t)
             S_tuning = dc(greedy_simultaneous(S_tuning, iterations=iterations_per_step, changes_per_iteration=changes_per_iteration)['work_set'])
@@ -1209,24 +1203,15 @@ def greedy_architecture_initialization(S, print_check=False):
     return S_test
 
 
-# def statistics_shelving_initialize(fname):
-#     folder_path = datadump_folder_path + 'statistics/' + fname
-#     if os.path.isdir(folder_path):
-#         rmtree(folder_path)
-#     os.makedirs(folder_path)
+def statistics_shelving_initialize(fname):
+    folder_path = datadump_folder_path + 'statistics/' + fname
+    if os.path.isdir(folder_path):
+        rmtree(folder_path)
+    os.makedirs(folder_path)
 
 
-def data_shelving_statistics(S, S_fixed, S_tuning, model_id, sim_model=None, print_check=False):
-    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name
-    if sim_model is not None:
-        shelve_filename = shelve_filename + '_' + sim_model
-    if not os.path.isdir(shelve_filename):
-        os.makedirs(shelve_filename)
-    shelve_filename = shelve_filename + '/model_' + str(model_id)
-    for f_type in ['.bak', '.dat', '.dir']:
-        if os.path.exists(shelve_filename + f_type):
-            os.remove(shelve_filename + f_type)
-            del_check = True
+def data_shelving_statistics(S, S_fixed, S_tuning, i, print_check=False):
+    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name + '/model_' + str(i)
     shelve_data = shelve.open(shelve_filename)
     if print_check:
         print('\nShelving to:', shelve_filename)
@@ -1238,11 +1223,8 @@ def data_shelving_statistics(S, S_fixed, S_tuning, model_id, sim_model=None, pri
         print('\nModel shelve done: ', shelve_filename)
 
 
-def data_reading_statistics(model_type, model_id, sim_model=None, print_check=False):
-    shelve_filename = datadump_folder_path + 'statistics/' + model_type
-    if sim_model is not None:
-        shelve_filename = shelve_filename + '_' + str(sim_model)
-    shelve_filename = shelve_filename + '/model_' + str(model_id)
+def data_reading_statistics(model_type, model_id, print_check=False):
+    shelve_filename = datadump_folder_path + 'statistics/' + model_type + '/model_' + str(model_id)
     if print_check:
         print('\nShelving from:', shelve_filename)
     shelve_data = shelve.open(shelve_filename)
@@ -1268,7 +1250,7 @@ def data_shelving_gen_model(S):
     print('\nModel shelve done: ', shelve_filename)
 
 
-def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False, graph_type='rand', optional_suffix=None):
+def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False):
     model = 'model_n' + str(n)
     if rho is not None:
         model = model + '_rho' + str(rho)
@@ -1279,9 +1261,6 @@ def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False, graph_t
         model = model + '_' + test_model
     if second_order:
         model = model + '_secondorder'
-    model = model + "_" + graph_type
-    if optional_suffix is not None:
-        model = model + '_' + optional_suffix
     return model
 
 
@@ -1298,7 +1277,7 @@ def data_reading_gen_model(model):
     return S
 
 
-def data_shelving_sim_model(S, S_fixed, S_tuning, sim_model=None):
+def data_shelving_sim_model(S, S_fixed, S_tuning):
     print('\nTrajectory data shelving')
     shelve_file = datadump_folder_path + 'sim_' + S.model_name
     print('\nDeleting old data...')
@@ -1459,11 +1438,11 @@ def time_axis_plot(model):
     plt.show()
 
 
-def statistics_plot(test_model, sim_model=None, n_samples=100):
+def statistics_plot(test_model, n_samples=100):
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
                'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
-    S, _, _ = data_reading_statistics(test_model, 1, sim_model)
+    S, _, _ = data_reading_statistics(test_model, 1)
     if not isinstance(S, System):
         raise Exception('Incorrect model')
 
@@ -1476,11 +1455,11 @@ def statistics_plot(test_model, sim_model=None, n_samples=100):
     cost_max_fix = np.zeros(S.simulation_parameters['T_sim'] + 1)
     cost_max_tuning = dc(cost_max_fix)
 
-    rand_model = int(np.random.choice(range(1, n_samples+1), 1))
+    rand_model = np.random.choice(range(1, n_samples+1), 1)
     cost_fix_model, cost_tuning_model, eig_vals_model = [], [] ,[]
 
     for model_id in tqdm(range(1, n_samples+1), ncols=100):
-        S_i, S_fixed_i, S_tuning_i = data_reading_statistics(test_model, model_id, sim_model)
+        S_i, S_fixed_i, S_tuning_i = data_reading_statistics(S.model_name, model_id)
 
         if not isinstance(S_i, System):
             raise Exception('Incorrect system model')
@@ -1500,49 +1479,71 @@ def statistics_plot(test_model, sim_model=None, n_samples=100):
             cost_fix_model = cumulative_cost_fixed
             cost_tuning_model = cumulative_cost_tuning
             eig_vals_model = -np.sort(-np.abs(S_i.dynamics['ol_eig']))
+            print(eig_vals_model)
 
         unstable_modes.append(S_i.dynamics['n_unstable'])
         eig_vals = eig_vals + [i for i in -np.sort(-np.abs(S_i.dynamics['ol_eig']))]
         B_changes.append(S_tuning_i.architecture['B']['change_count'])
         C_changes.append(S_tuning_i.architecture['C']['change_count'])
+        # print(model_id, ' : ', S_i.dynamics['n_unstable'])
         cost_min_fix = [min(cost_min_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_min_fix))]
         cost_min_tuning = [min(cost_min_tuning[i], cumulative_cost_tuning[i]) for i in range(0, len(cost_min_tuning))]
         cost_max_fix = [max(cost_max_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_max_fix))]
         cost_max_tuning = [max(cost_max_tuning[i], cumulative_cost_tuning[i]) for i in range(0, len(cost_max_tuning))]
 
+    # print('Min fix: ', cost_min_fix)
+    # print('Min tuning: ', cost_min_tuning)
+    # print('Max fix: ', cost_max_fix)
+    # print('Max tuning: ', cost_max_tuning)
+
+    # print('1: ', np.shape(eig_vals))
+    # print(eig_vals)
+
     fig = plt.figure(constrained_layout=True)
     grid = fig.add_gridspec(3, 2)
 
     cost_plot = fig.add_subplot(grid[0, :])
-    cost_plot_sample = fig.add_subplot(grid[0, :], frameon=False, sharex=cost_plot, sharey=cost_plot)
+    # unstable_plot = fig.add_subplot(grid[1:, 0])
     eig_val_plot = fig.add_subplot(grid[1:, 0])
+    # B_arch_plot = fig.add_subplot(grid[2, 0])
+    # C_arch_plot = fig.add_subplot(grid[3, 0])
     arch_scatter_plot = fig.add_subplot(grid[1:, 1])
+
+    # unstable_plot.hist(unstable_modes, bins=range(0, max(unstable_modes) + 1), align='right', density=True)
+    # eig_val_plot.hist(eig_vals, align='right', density=True)
+    # eig_val_plot.boxplot(eig_vals)
+    # eig_val_plot.scatter(np.ones(len(eig_vals_model)), eig_vals_model)
+    # eig_val_plot.set_xticks([])
+    eig_val_plot.scatter(np.tile(np.linspace(1, net_size, net_size), n_samples), eig_vals, alpha=0.3, c='tab:blue')
+    eig_val_plot.scatter(np.linspace(1, net_size, net_size), eig_vals_model, marker='x', c='black')
 
     cost_plot.fill_between(range(0, len(cost_min_fix)), cost_min_fix, cost_max_fix, color=plt_map['fixed']['c'], alpha=plt_map['fixed']['alpha'])
     cost_plot.fill_between(range(0, len(cost_min_tuning)), cost_min_tuning, cost_max_tuning, color=plt_map['tuning']['c'], alpha=plt_map['tuning']['alpha'])
+    cost_plot.plot(range(0, len(cost_fix_model)), cost_fix_model, color=plt_map['fixed']['c'])
+    cost_plot.plot(range(0, len(cost_tuning_model)), cost_tuning_model, color=plt_map['tuning']['c'])
+
+    # B_arch_plot.hist(B_changes, density=True)
+    # C_arch_plot.hist(C_changes, density=True)
+    arch_scatter_plot.scatter(B_changes, C_changes)
+
+    eig_val_plot.set_xlabel('Mode ' + r'$i$')
+    eig_val_plot.set_ylabe(r'$|\lambda(A)_i|$')
+
+    # unstable_plot.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    # unstable_plot.set_xlabel('Number of unstable modes')
+    # unstable_plot.set_ylabel('Fraction of\nrealizations')
     cost_plot.set_yscale('log')
+    # cost_plot.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
     cost_plot.set_xlabel('Time')
     cost_plot.set_ylabel('Cost')
-    cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed Architecture'),
-                              patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')],
-                     loc='upper left')
-    cost_plot.set_title(test_model)
-
-    cost_plot_sample.plot(range(0, len(cost_fix_model)), cost_fix_model, color='k', linestyle='solid', linewidth=1, label='Sample Fixed')
-    cost_plot_sample.plot(range(0, len(cost_tuning_model)), cost_tuning_model, color='k', linestyle='dashed', linewidth=1, label='Sample Self-tuning')
-    cost_plot_sample.legend(loc='lower right')
-
-    eig_val_plot.scatter(np.tile(np.linspace(1, net_size, net_size), n_samples), eig_vals, alpha=0.3, c='tab:blue')
-    eig_val_plot.scatter(np.linspace(1, net_size, net_size), eig_vals_model, marker='x', c='black', label='Sample')
-    eig_val_plot.set_xlabel('Mode ' + r'$i$')
-    eig_val_plot.set_ylabel(r'$|\lambda(A)_i|$')
-    eig_val_plot.legend(loc='upper right')
-
-    arch_scatter_plot.scatter(B_changes, C_changes, alpha=0.5, c='tab:blue')
-    arch_scatter_plot.scatter([B_changes[rand_model]], [C_changes[rand_model]], marker='x', c='k', label='Sample')
-    arch_scatter_plot.set_xlabel('Number of ' + r'$|S_t|$' + 'changes')
-    arch_scatter_plot.set_ylabel("Number of " + r"$|S'_t|$" + "changes")
-    arch_scatter_plot.legend(loc='upper right')
+    cost_plot.legend(handles=[patches.Patch(color=plt_map['fixed']['c'], label='Fixed Architecture'), patches.Patch(color=plt_map['tuning']['c'], label='SelfTuning')], loc='upper left')
+    # arch_plot.legend(['B', 'C'])
+    # B_arch_plot.set_xlabel('Number of changes to actuators')
+    # B_arch_plot.set_ylabel('Fraction of\nrealizations')
+    # C_arch_plot.set_xlabel('Number of changes to sensors')
+    # C_arch_plot.set_ylabel('Fraction of\nrealizations')
+    arch_scatter_plot.set_xlabel('Number of changes to actuators')
+    arch_scatter_plot.set_ylabel('Number of changes to sensors')
 
     plt.savefig(image_save_folder_path + test_model + '_statistics.png')
     plt.show()
