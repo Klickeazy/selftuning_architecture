@@ -19,7 +19,7 @@ if __name__ == "__main__":
     second_order = True
     # second_order = False
 
-    network_model = 'rand_eval'
+    network_model = 'eval_squeeze'
 
     # sim_model = 'arch_replace'
     sim_model = None

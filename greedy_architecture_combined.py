@@ -110,27 +110,35 @@ class System:
         connected_network_check = False
         self.dynamics['number_of_nodes'] = graph_model['number_of_nodes']
         G = netx.Graph()
+
         while not connected_network_check:
-            # print('Graph network mode: ', graph_model['type'])
             if graph_model['type'] == 'ER':
                 if 'p' not in graph_model:
                     graph_model['p'] = 0.3
                 G = netx.generators.random_graphs.erdos_renyi_graph(self.dynamics['number_of_nodes'], graph_model['p'])
+
             elif graph_model['type'] == 'BA':
                 if 'p' not in graph_model:
                     graph_model['p'] = self.dynamics['number_of_nodes'] // 2
                 G = netx.generators.random_graphs.barabasi_albert_graph(self.dynamics['number_of_nodes'], graph_model['p'])
+
             elif graph_model['type'] == 'rand':
                 A = np.random.rand(self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])
                 G = netx.from_numpy_array(A)
+
             elif graph_model['type'] == 'path':
                 G = netx.generators.classic.path_graph(self.dynamics['number_of_nodes'])
+
             elif graph_model['type'] == 'cycle':
                 G = netx.generators.classic.cycle_graph(self.dynamics['number_of_nodes'])
-            elif graph_model['type'] == 'rand_eval':
+
+            elif graph_model['type'] == 'eval_squeeze' or graph_model['type'] == 'eval_bound':
                 if 'p' not in graph_model:
                     graph_model['p'] = 0.2
-                e = graph_model['p']*(1 - 2*np.random.rand(self.dynamics['number_of_nodes']))
+                if graph_model['type'] == 'eval_squeeze':
+                    e = graph_model['p']*(1 - 2*np.random.rand(self.dynamics['number_of_nodes']))
+                elif graph_model['type'] == 'eval_bound':
+                    e = -graph_model['p'] * np.random.rand(self.dynamics['number_of_nodes'])
                 A = np.random.rand(self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])
                 A = A.T + A
                 _, V_mat = np.linalg.eig(A)
@@ -159,12 +167,9 @@ class System:
             self.dynamics['second_order'] = False
         self.rescale_dynamics(graph_model['rho'])
 
-        # self.dynamics['A'] = self.dynamics['Adj'] * graph_model['rho'] / np.max(np.abs(np.linalg.eigvals(self.dynamics['Adj'])))
-        # self.dynamics['ol_eig'] = np.sort(np.linalg.eigvals(self.dynamics['A']))
-        # self.dynamics['n_unstable'] = sum([1 for i in self.dynamics['ol_eig'] if i >= 1])
     def second_order_network(self):
         self.dynamics['A'] = np.block([[self.dynamics['Adj'], np.zeros_like(self.dynamics['Adj'])],
-                                       [0.5*np.identity(int(self.dynamics['number_of_nodes']/2)), np.identity(int(self.dynamics['number_of_nodes']/2))]])
+                                       [np.identity(int(self.dynamics['number_of_nodes']/2)), np.identity(int(self.dynamics['number_of_nodes']/2))]])
         # self.dynamics['A'] = np.block([[0.5*np.identity(int(self.dynamics['number_of_nodes'] / 2)),np.identity(int(self.dynamics['number_of_nodes'] / 2))],
         #                                [self.dynamics['Adj'],  np.zeros_like(self.dynamics['Adj'])]])
 

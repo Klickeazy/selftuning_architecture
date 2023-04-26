@@ -3,9 +3,10 @@ from copy import deepcopy as dc
 
 if __name__ == "__main__":
 
-    n = 20
+    n = 30
 
-    network_model = 'rand_eval'
+    # network_model = 'eval_squeeze'
+    network_model = 'eval_bound'
     # network_model = 'rand'
     # rho = 7
     rho = None
@@ -16,11 +17,11 @@ if __name__ == "__main__":
     # test_model = 'combined'
     test_model = None
 
-    second_order = True
-    # second_order = False
+    # second_order = True
+    second_order = False
 
-    sim_model = 'arch_replace'
-    # sim_model = None
+    # sim_model = 'arch_replace'
+    sim_model = None
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order, network_model)
     print(model)

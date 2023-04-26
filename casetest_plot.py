@@ -2,8 +2,9 @@ import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
 
-    n = 20
-    network_model = 'rand_eval'
+    n = 30
+    network_model = 'eval_squeeze'
+    # network_model = 'eval_bound'
     # network_model = 'rand'
     rho = None
     # rho = 3
@@ -13,8 +14,8 @@ if __name__ == "__main__":
     # test_model = 'combined'
     test_model = None
 
-    second_order = True
-    # second_order = False
+    # second_order = True
+    second_order = False
 
     # sim_model = 'arch_replace'
     sim_model = None
