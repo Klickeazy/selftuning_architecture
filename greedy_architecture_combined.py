@@ -744,8 +744,6 @@ class System:
                            mlines.Line2D([], [], color='tab:orange', marker='x', linestyle='None', markersize=5, label='Marginal'),
                            mlines.Line2D([], [], color='tab:green', marker='x', linestyle='None', markersize=5, label='Stable')],
                   bbox_to_anchor=[0.5, 0.95], loc='lower center', ncol=3, columnspacing=0.1)
-        # ax.yaxis.tick_right()
-        # ax.yaxis.set_label_position("right")
         ax.set_xlabel(r'Mode $i$')
         ax.set_ylabel(r'$|\lambda_i (A)|$')
 
@@ -768,8 +766,6 @@ class System:
             ax = ax_in
 
         ax.scatter(range(1, len(self.trajectory['compute_time'])+1), self.trajectory['compute_time'], s=10, marker='x', c=plt_map[model]['c'])
-        # ax.yaxis.tick_right()
-        # ax.yaxis.set_label_position("right")
         ax.set_xlabel("Time " + r"$t$")
         ax.set_ylabel('Compute time')
 
@@ -851,7 +847,6 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
             test_sys = dc(work_iteration)
             if status_check:
                 test_sys.model_name = "test_model"
-                # test_sys.display_active_architecture()
             test_sys.active_architecture_update(i)
             if status_check:
                 test_sys.display_active_architecture()
@@ -1084,8 +1079,6 @@ def cost_plots(cost, f_name=None, ax=None, plt_map=None):
                    'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                    'marker': {'B': "+", 'C': "+"}}
 
-    # font = {'family': 'serif', 'color': 'darkred', 'weight': 'normal', 'size': 16}
-    # v_align = {'fixed': 'bottom', 'tuning': 'top'}
     p_name = {'fixed': 'Fixed', 'tuning': 'Self-Tuning'}
 
     tstep_cost = {}
@@ -1154,10 +1147,6 @@ def combined_plot(S, S_fixed, S_tuning):
     S_tuning.plot_trajectory(ax_in={'x': ax_trajectory, 'error': ax_error}, plt_map=plt_map, s_type='tuning')
     S_tuning.plot_architecture_history(ax_in={'B': ax_architecture_B, 'C': ax_architecture_C}, plt_map=plt_map)
 
-    # ax_cost.tick_params(axis="x", labelbottom=False)
-    # ax_error.tick_params(axis="x", labelbottom=False)
-    # ax_trajectory.tick_params(axis="x", labelbottom=False)
-
     ax_cost.set_title(S.model_name)
     ax_architecture_C.set_xlabel('Time')
 
@@ -1199,8 +1188,8 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
     S_tuning = dc(S)
     S_tuning.model_rename(S.model_name + "_selftuning")
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
-    if S_tuning.simulation_parameters['model'] == 'unlimited_arch_change':
-        iterations_per_step = S_tuning.dynamics['number_of_nodes']
+    if S_tuning.simulation_parameters['model'] == 'arch_replace':
+        iterations_per_step = S_tuning.architecture['B']['max']*2
     if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
         # for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
@@ -1242,13 +1231,6 @@ def greedy_architecture_initialization(S, print_check=False):
     for a in ['B', 'C']:
         S.architecture[a]['active'] = dc(S_test.architecture[a]['active'])
     return S_test
-
-
-# def statistics_shelving_initialize(fname):
-#     folder_path = datadump_folder_path + 'statistics/' + fname
-#     if os.path.isdir(folder_path):
-#         rmtree(folder_path)
-#     os.makedirs(folder_path)
 
 
 def model_namer(n, rho, Tp, n_arch, test_model=None, second_order=False, graph_type='rand', optional_suffix=None):
@@ -1327,7 +1309,7 @@ def data_reading_statistics(model_type, model_id, print_check=False):
     if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
         raise Exception('Data type mismatch')
     if print_check:
-        print('\nModel shelve done: ', shelve_filename)
+        print('\nModel read done: ', shelve_filename)
     return S, S_fixed, S_tuning
 
 
@@ -1455,28 +1437,29 @@ def time_axis_plot(model):
     plt.show()
 
 
-def statistics_plot(test_model, sim_model=None, n_samples=100):
+def statistics_plot(test_model, n_samples=100):
     plt_map = {'fixed': {'c': 'C0', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 1},
                'tuning': {'c': 'C1', 'line_style': 'solid', 'alpha': 0.5, 'zorder': 2},
                'marker': {'B': "o", 'C': "o"}}
-    S, _, _ = data_reading_statistics(test_model, 1, sim_model)
+    S, _, _ = data_reading_statistics(test_model, 1)
 
     unstable_modes = []
     B_changes = []
     C_changes = []
     eig_vals = []
-    compute_time = []
+    compute_time_fix, compute_time_tuning = [], []
     cost_min_fix = np.inf * np.ones(S.simulation_parameters['T_sim'] + 1)
     cost_min_tuning = dc(cost_min_fix)
     cost_max_fix = np.zeros(S.simulation_parameters['T_sim'] + 1)
     cost_max_tuning = dc(cost_max_fix)
+    T_sim = 0
 
     rand_model = int(np.random.choice(range(1, n_samples+1), 1))
-    compute_time_model = []
+    compute_time_fix_model, compute_time_tuning_model = [], []
     cost_fix_model, cost_tuning_model, eig_vals_model = [], [] ,[]
 
     for model_id in tqdm(range(1, n_samples+1), ncols=100):
-        S_i, S_fixed_i, S_tuning_i = data_reading_statistics(test_model, model_id, sim_model)
+        S_i, S_fixed_i, S_tuning_i = data_reading_statistics(test_model, model_id)
 
         cumulative_cost_fixed = [S_fixed_i.trajectory['cost']['true'][0]]
         cumulative_cost_tuning = [S_tuning_i.trajectory['cost']['true'][0]]
@@ -1485,17 +1468,20 @@ def statistics_plot(test_model, sim_model=None, n_samples=100):
             cumulative_cost_tuning.append(cumulative_cost_tuning[-1] + S_tuning_i.trajectory['cost']['true'][j])
 
         if model_id == rand_model:
+            T_sim = S_i.simulation_parameters['T_sim'] + 1
             net_size = S_i.dynamics['number_of_nodes']
             cost_fix_model = cumulative_cost_fixed
             cost_tuning_model = cumulative_cost_tuning
             eig_vals_model = -np.sort(-np.abs(S_i.dynamics['ol_eig']))
-            compute_time_model = S_i.trajectory['compute_time']
+            compute_time_fix_model = S_fixed_i.trajectory['compute_time']
+            compute_time_tuning_model = S_tuning_i.trajectory['compute_time']
 
         unstable_modes.append(S_i.dynamics['n_unstable'])
         eig_vals = eig_vals + [i for i in -np.sort(-np.abs(S_i.dynamics['ol_eig']))]
         B_changes.append(S_tuning_i.architecture['B']['change_count'])
         C_changes.append(S_tuning_i.architecture['C']['change_count'])
-        compute_time.append()
+        compute_time_fix = compute_time_fix + S_fixed_i.trajectory['compute_time'][:]
+        compute_time_tuning = compute_time_tuning + S_tuning_i.trajectory['compute_time'][:]
         cost_min_fix = [min(cost_min_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_min_fix))]
         cost_min_tuning = [min(cost_min_tuning[i], cumulative_cost_tuning[i]) for i in range(0, len(cost_min_tuning))]
         cost_max_fix = [max(cost_max_fix[i], cumulative_cost_fixed[i]) for i in range(0, len(cost_max_fix))]
@@ -1530,11 +1516,13 @@ def statistics_plot(test_model, sim_model=None, n_samples=100):
     eig_val_plot.set_ylabel(r'$|\lambda(A)_i|$')
     eig_val_plot.legend(loc='upper right')
 
-    compute_time_plot.scatter(np.tile(np.linspace(1, net_size, net_size), n_samples), compute_time, alpha=0.3, c='tab:blue')
-    compute_time_plot.scatter(np.linspace(1, net_size, net_size), compute_time_model, marker='x', c='black', label='Sample')
+    compute_time_plot.scatter(np.tile(np.linspace(1, T_sim, T_sim), n_samples), compute_time_fix, marker='o', alpha=0.3, c='tab:blue')
+    compute_time_plot.scatter(np.tile(np.linspace(1, T_sim, T_sim), n_samples), compute_time_tuning, marker='o', alpha=0.3, c='tab:orange')
+    compute_time_plot.scatter(np.linspace(1, T_sim, T_sim), compute_time_fix_model, marker='x', c='black', label='Sample Fixed')
+    compute_time_plot.scatter(np.linspace(1, T_sim, T_sim), compute_time_tuning_model, marker='+', c='black', label='Sample Self-tuning')
     compute_time_plot.set_xlabel('Time ' + r'$t$')
     compute_time_plot.set_ylabel('Compute time')
-    compute_time_plot.legend(loc='upper right')
+    compute_time_plot.legend(loc='upper right', ncols=2)
 
     arch_scatter_plot.scatter(B_changes, C_changes, alpha=0.5, c='tab:blue')
     arch_scatter_plot.scatter([B_changes[rand_model]], [C_changes[rand_model]], marker='x', c='k', label='Sample')

@@ -16,7 +16,7 @@ if __name__ == "__main__":
     second_order = True
     # second_order = False
 
-    # sim_model = 'unlimited_arch_change'
+    # sim_model = 'arch_replace'
     sim_model = None
 
     model = gac.model_namer(n, rho, Tp, n_arch, test_model, second_order, network_model, sim_model)

@@ -18,11 +18,11 @@ def sys_gen(optimize_initial_architecture=True):
     # network_model = 'rand'
     # rho = 3
     rho = None
-    p = 0.05
+    p = 0.1
     second_order = True
     # second_order = False
 
-    sim_model = 'unlimited_arch_change'
+    sim_model = 'arch_replace'
     # sim_model = None
 
     # test_model = 'combined'  #  'process', 'sensor', 'combined', None
