@@ -10,7 +10,7 @@ import numpy as np
 
 
 def sys_gen(optimize_initial_architecture=True):
-    n = 20
+    n = 30
     Tp = 10
     n_arch = 2
 
@@ -19,14 +19,14 @@ def sys_gen(optimize_initial_architecture=True):
     # rho = 3
     rho = None
     p = 0.1
-    second_order = True
-    # second_order = False
+    # second_order = True
+    second_order = False
 
-    sim_model = 'arch_replace'
-    # sim_model = None
+    # sim_model = 'arch_replace'
+    sim_model = None
 
-    # test_model = 'combined'  #  'process', 'sensor', 'combined', None
-    test_model = None
+    test_model = 'combined'  #  'process', 'sensor', 'combined', None
+    # test_model = None
     disturbance_step = 15
     disturbance_number = int(np.floor(n / 2))
     disturbance_magnitude = 10

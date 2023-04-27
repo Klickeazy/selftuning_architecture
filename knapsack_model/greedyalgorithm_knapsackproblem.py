@@ -190,7 +190,7 @@ def item_index_from_policy(values, policy):
         raise Exception('Check policy')
 
 
-def greedy_selection(total_set, work_set, limit, number_of_changes=None, fixed_set=None, failure_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), no_select=False, status_check=False):
+def greedy_selection(total_set, work_set, limit, number_of_changes=None, fixed_set=None, failure_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), no_select=False, print_check=False):
     work_iteration, available_set = initialize_greedy(total_set, work_set, fixed_set, failure_set)
     choice_history = []
     work_history = []
@@ -203,7 +203,7 @@ def greedy_selection(total_set, work_set, limit, number_of_changes=None, fixed_s
             choice_iteration = fixed_set.compare_lists(choice_iteration)['absent']
         choice_history.append(choice_iteration)
         if len(choice_iteration.items) == 0:
-            if status_check:
+            if print_check:
                 print('No selections possible')
             break
         iteration_cases = []
@@ -219,12 +219,12 @@ def greedy_selection(total_set, work_set, limit, number_of_changes=None, fixed_s
         target_idx = item_index_from_policy(values, policy)
         work_iteration = dc(iteration_cases[target_idx])
         if len(work_iteration.compare_lists(work_history[-1])['unique'].items) == 0:
-            if status_check:
+            if print_check:
                 print('No valuable selections')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
     work_history.append(work_iteration)
@@ -232,7 +232,7 @@ def greedy_selection(total_set, work_set, limit, number_of_changes=None, fixed_s
     return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time()-t_start}
 
 
-def greedy_rejection(total_set, work_set, limit, number_of_changes=None, fixed_set=None, failure_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), no_reject=False, status_check=False):
+def greedy_rejection(total_set, work_set, limit, number_of_changes=None, fixed_set=None, failure_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), no_reject=False, print_check=False):
     work_iteration, available_set = initialize_greedy(total_set, work_set, fixed_set, failure_set)
     choice_history = []
     work_history = []
@@ -245,7 +245,7 @@ def greedy_rejection(total_set, work_set, limit, number_of_changes=None, fixed_s
             choice_iteration = available_set.compare_lists(choice_iteration)['absent']
         choice_history.append(choice_iteration)
         if len(choice_iteration.items) == 0:
-            if status_check:
+            if print_check:
                 print('No rejections possible')
             break
         iteration_cases = []
@@ -261,12 +261,12 @@ def greedy_rejection(total_set, work_set, limit, number_of_changes=None, fixed_s
         target_idx = item_index_from_policy(values, policy)
         work_iteration = dc(iteration_cases[target_idx])
         if len(work_iteration.compare_lists(work_history[-1])['absent'].items) == 0:
-            if status_check:
+            if print_check:
                 print('No valuable rejections')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
     work_history.append(work_iteration)
@@ -286,7 +286,7 @@ def initialize_greedy(total_set, work_set, fixed_set, failure_set):
     return work_iteration, available_set
 
 
-def greedy_simultaneous(total_set, work_set, limit, iterations=1, changes_per_iteration=1, fixed_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), status_check=False):
+def greedy_simultaneous(total_set, work_set, limit, iterations=1, changes_per_iteration=1, fixed_set=None, max_greedy_limit=max_limit, min_greedy_limit=min_limit, cost_metric=knapsack_value, policy="max", t_start=time.time(), print_check=False):
     if not isinstance(total_set, ItemList) or not isinstance(work_set, ItemList) or not (isinstance(fixed_set, ItemList) or fixed_set is None):
         raise Exception('Incorrect data type')
 
@@ -300,27 +300,27 @@ def greedy_simultaneous(total_set, work_set, limit, iterations=1, changes_per_it
         all_values = [cost_metric(iteration_cases[-1])]
 
         # Select one
-        select = greedy_selection(total_set, work_iteration, limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=status_check)
+        select = greedy_selection(total_set, work_iteration, limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, print_check=print_check)
         iteration_cases.append(select['work_set'])
         values.append(cost_metric(iteration_cases[-1]))
         all_values += select['value_history']
 
         # Reject one
-        reject = greedy_rejection(total_set, work_iteration, limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=status_check)
+        reject = greedy_rejection(total_set, work_iteration, limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, print_check=print_check)
         iteration_cases.append(reject['work_set'])
         values.append(cost_metric(iteration_cases[-1]))
         all_values += reject['value_history']
 
         # Swap: add then drop
-        swap_select1 = greedy_selection(total_set, work_iteration, limit+np.array([0, changes_per_iteration]), number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=False)
-        swap_reject1 = greedy_rejection(total_set, swap_select1['work_set'], limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=status_check)
+        swap_select1 = greedy_selection(total_set, work_iteration, limit+np.array([0, changes_per_iteration]), number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, print_check=False)
+        swap_reject1 = greedy_rejection(total_set, swap_select1['work_set'], limit, number_of_changes=changes_per_iteration, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, print_check=print_check)
         iteration_cases.append(swap_reject1['work_set'])
         values.append(cost_metric(iteration_cases[-1]))
         all_values += swap_reject1['value_history']
 
         # # Swap: drop then add
-        # swap_reject2 = greedy_rejection(total_set, work_iteration, limit-np.array([1, 0]), fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, status_check=False)
-        # swap_select2 = greedy_selection(total_set, swap_reject2['work_set'], limit, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, status_check=status_check)
+        # swap_reject2 = greedy_rejection(total_set, work_iteration, limit-np.array([1, 0]), fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_reject=True, print_check=False)
+        # swap_select2 = greedy_selection(total_set, swap_reject2['work_set'], limit, fixed_set=fixed_set, max_greedy_limit=max_greedy_limit, min_greedy_limit=min_greedy_limit, cost_metric=cost_metric, policy=policy, no_select=True, print_check=print_check)
         # iteration_cases.append(swap_select2['work_set'])
         # values.append(cost_metric(iteration_cases[-1]))
 

@@ -3,19 +3,19 @@ from copy import deepcopy as dc
 
 if __name__ == "__main__":
 
-    n = 30
+    n = 50
 
-    # network_model = 'eval_squeeze'
-    network_model = 'eval_bound'
+    network_model = 'eval_squeeze'
+    # network_model = 'eval_bound'
     # network_model = 'rand'
     # rho = 7
     rho = None
 
     Tp = 10
-    n_arch = 2
+    n_arch = 3
 
-    # test_model = 'combined'
-    test_model = None
+    test_model = 'combined'
+    # test_model = None
 
     # second_order = True
     second_order = False

@@ -139,6 +139,8 @@ class System:
                     e = graph_model['p']*(1 - 2*np.random.rand(self.dynamics['number_of_nodes']))
                 elif graph_model['type'] == 'eval_bound':
                     e = -graph_model['p'] * np.random.rand(self.dynamics['number_of_nodes'])
+                else:
+                    raise Exception('Check ')
                 A = np.random.rand(self.dynamics['number_of_nodes'], self.dynamics['number_of_nodes'])
                 A = A.T + A
                 _, V_mat = np.linalg.eig(A)
@@ -824,23 +826,23 @@ def print_choices(choices):
         print(c)
 
 
-def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_select=False, status_check=False, t_start=time.time(), design_cost=False):
+def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_select=False, print_check=False, t_start=time.time(), design_cost=False):
     if not isinstance(sys, System):
         raise Exception('Check data type')
-    if status_check:
+    if print_check:
         print('\nSelection\n')
     work_iteration = dc(sys)
     work_history, choice_history, value_history = [], [], []
     selection_check = (max_limit(work_iteration.architecture['B'], 'select') or max_limit(work_iteration.architecture['C'], 'select'))
     count_of_changes = 0
     while selection_check:
-        if status_check:
+        if print_check:
             print('\n Change:', count_of_changes)
             work_iteration.display_active_architecture()
         work_history.append(work_iteration)
         choices = work_iteration.available_choices('select')
         if len(choices) == 0:
-            if status_check:
+            if print_check:
                 print('No selections available')
             selection_check = False
             break
@@ -850,10 +852,10 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
         for i in choices:
             i['algorithm'] = 'select'
             test_sys = dc(work_iteration)
-            if status_check:
+            if print_check:
                 test_sys.model_name = "test_model"
             test_sys.active_architecture_update(i)
-            if status_check:
+            if print_check:
                 test_sys.display_active_architecture()
             if not design_cost:
                 test_sys.cost_wrapper_enhanced_prediction()
@@ -861,7 +863,7 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
             else:
                 test_sys.enhanced_design_cost()
                 i['value'] = test_sys.trajectory['cost']['initial']
-        if status_check:
+        if print_check:
             print_choices(choices)
         value_history.append([i['value'] for i in choices])
         target_idx = item_index_from_policy(value_history[-1], policy)
@@ -871,16 +873,16 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
         else:
             work_iteration.enhanced_design_cost()
         if not work_iteration.architecture_update_check():
-            if status_check:
+            if print_check:
                 print('No valuable architecture updates')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
         selection_check = (max_limit(work_iteration.architecture['B'], 'select') or max_limit(work_iteration.architecture['C'], 'select'))
-        if status_check:
+        if print_check:
             print('Selection check: B: ', max_limit(work_iteration.architecture['B'], 'select'), ' |C: ', max_limit(work_iteration.architecture['C'], 'select'))
     return_set = dc(sys)
     return_set.active_architecture_duplicate(work_iteration)
@@ -888,29 +890,29 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
         return_set.cost_wrapper_enhanced_prediction()
     else:
         return_set.enhanced_design_cost()
-    if status_check:
+    if print_check:
         return_set.display_active_architecture()
     work_history.append(return_set)
     return {'work_set': return_set, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': count_of_changes}
 
 
-def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_reject=False, status_check=False, t_start=time.time(), design_cost=False):
+def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_reject=False, print_check=False, t_start=time.time(), design_cost=False):
     if not isinstance(sys, System):
         raise Exception('Check data type')
-    if status_check:
+    if print_check:
         print('\nRejection\n')
     work_iteration = dc(sys)
     work_history, choice_history, value_history = [], [], []
     rejection_check = (min_limit(work_iteration.architecture['B'], 'reject') or min_limit(work_iteration.architecture['C'], 'reject'))
     count_of_changes = 0
     while rejection_check:
-        if status_check:
+        if print_check:
             print('\n Change:', count_of_changes)
             work_iteration.display_active_architecture()
         work_history.append(work_iteration)
         choices = work_iteration.available_choices('reject')
         if len(choices) == 0:
-            if status_check:
+            if print_check:
                 print('No selections available')
             rejection_check = False
             break
@@ -922,7 +924,7 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
             test_sys = dc(work_iteration)
             test_sys.model_name = "test_model"
             test_sys.active_architecture_update(i)
-            if status_check:
+            if print_check:
                 print('Choice i:', i)
                 test_sys.display_active_architecture()
             if not design_cost:
@@ -931,7 +933,7 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
             else:
                 test_sys.enhanced_design_cost()
                 i['value'] = test_sys.trajectory['cost']['initial']
-        if status_check:
+        if print_check:
             print_choices(choices)
         target_idx = item_index_from_policy([i['value'] for i in choices], policy)
         value_history.append([i['value'] for i in choices])
@@ -941,16 +943,16 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
         else:
             work_iteration.enhanced_design_cost()
         if not work_iteration.architecture_update_check():
-            if status_check:
+            if print_check:
                 print('No valuable architecture updates')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
         rejection_check = min_limit(work_iteration.architecture['B'], 'reject') or min_limit(work_iteration.architecture['C'], 'reject')
-        if status_check:
+        if print_check:
             print('Selection check: B: ', min_limit(work_iteration.architecture['B'], 'select'), ' |C: ', min_limit(work_iteration.architecture['C'], 'select'))
     return_set = dc(sys)
     return_set.active_architecture_duplicate(work_iteration)
@@ -958,16 +960,16 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
         return_set.cost_wrapper_enhanced_prediction()
     else:
         return_set.enhanced_design_cost()
-    if status_check:
+    if print_check:
         return_set.display_active_architecture()
     work_history.append(return_set)
     return {'work_set': return_set, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': count_of_changes}
 
 
-def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), status_check=False, design_cost=False):
+def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), print_check=False, design_cost=False):
     if not isinstance(sys, System):
         raise Exception('Incorrect data type')
-    if status_check:
+    if print_check:
         print('\nSimultaneous\n')
     work_iteration = dc(sys)
     work_history = [work_iteration]
@@ -975,7 +977,7 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
     iteration_stop = False
     iteration_count = 0
     while not iteration_stop:
-        if status_check:
+        if print_check:
             print('Iteration:', iteration_count)
             work_iteration.display_active_architecture()
         # Keep same
@@ -983,37 +985,37 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
         iteration_cases = []
 
         # Select one
-        select = greedy_architecture_selection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=True, status_check=status_check, design_cost=design_cost)
+        select = greedy_architecture_selection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=True, print_check=print_check, design_cost=design_cost)
         iteration_cases.append(select['work_set'])
         if not design_cost:
             values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
         else:
             values.append(iteration_cases[-1].trajectory['cost']['initial'])
-        if status_check:
+        if print_check:
             print('Add Value: ', values[-1])
             iteration_cases[-1].display_active_architecture()
 
         # Reject one
-        reject = greedy_architecture_rejection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_reject=True, status_check=status_check, design_cost=design_cost)
+        reject = greedy_architecture_rejection(work_iteration, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_reject=True, print_check=print_check, design_cost=design_cost)
         iteration_cases.append(reject['work_set'])
         if not design_cost:
             values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
         else:
             values.append(iteration_cases[-1].trajectory['cost']['initial'])
-        if status_check:
+        if print_check:
             print('Subtract Value: ', values[-1])
             iteration_cases[-1].display_active_architecture()
 
         # Swap: add then drop
-        if status_check:
+        if print_check:
             print('\nSwap\n')
         sys_swap = dc(work_iteration)
         sys_swap.architecture_limit_modifier(min_mod=changes_per_iteration, max_mod=changes_per_iteration)
-        sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, no_select=False, status_check=status_check, design_cost=design_cost)['work_set']
+        sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration*2, policy=policy, t_start=t_start, no_select=False, print_check=print_check, design_cost=design_cost)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
         # print('1:', sys_swap.trajectory['cost']['predicted'][-1])
         sys_swap.architecture_limit_modifier(min_mod=-changes_per_iteration, max_mod=-changes_per_iteration)
-        sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration, policy=policy, t_start=t_start, status_check=status_check, design_cost=design_cost)['work_set']
+        sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration*2, policy=policy, t_start=t_start, print_check=print_check, design_cost=design_cost)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
         # print('2:', sys_swap.trajectory['cost']['predicted'][-1])
         iteration_cases.append(sys_swap)
@@ -1021,7 +1023,7 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])
         else:
             values.append(iteration_cases[-1].trajectory['cost']['initial'])
-        if status_check:
+        if print_check:
             print('Swap Value: ', values[-1])
             iteration_cases[-1].display_active_architecture()
 
@@ -1033,17 +1035,17 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
             work_iteration.enhanced_design_cost()
         work_history.append(work_iteration)
         value_history.append(values)
-        if status_check:
+        if print_check:
             print('Iteration:', iteration_count)
             print(values)
             work_iteration.display_active_architecture()
         if not work_iteration.architecture_update_check():
-            if status_check:
+            if print_check:
                 print('No changes to work_set')
             break
         iteration_count += 1
         if iterations is not None and iteration_count >= iterations:
-            if status_check:
+            if print_check:
                 print('Max iterations of simultaneous greedy')
             iteration_stop = True
     return_set = dc(sys)
@@ -1052,7 +1054,7 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
         return_set.cost_wrapper_enhanced_prediction()
     else:
         return_set.enhanced_design_cost()
-    if status_check:
+    if print_check:
         return_set.display_active_architecture()
     work_history.append(return_set)
     return {'work_set': return_set, 'work_history': work_history, 'value_history': value_history, 'time': time.time() - t_start, 'steps': iteration_count}
@@ -1194,7 +1196,8 @@ def simulate_selftuning_architecture(S, iterations_per_step=1, changes_per_itera
     S_tuning.model_rename(S.model_name + "_selftuning")
     T_sim = dc(S.simulation_parameters['T_sim']) + 1
     if S_tuning.simulation_parameters['model'] == 'arch_replace':
-        iterations_per_step = S_tuning.architecture['B']['max']*2
+        # iterations_per_step = S_tuning.architecture['B']['max']*2
+        iterations_per_step = None
     if multiprocess_check:
         process_number = int(multiprocessing.current_process().name[-1])
         # for t in tqdm(range(0, T_sim), ncols=100, position=process_number, leave=False, desc='Process '+str(process_number)):
@@ -1223,18 +1226,16 @@ def greedy_architecture_initialization(S, print_check=False):
     for a in ['B', 'C']:
         # S_test.architecture[a]['active'] = [S_test.architecture[a]['active'][0]]
         S_test.architecture[a]['cost']['R3'] = 0
-    # S_test.simulation_parameters['T_predict'] *= 2
+    S_test.simulation_parameters['T_predict'] *= 5
     S_test.model_name = 'Test model'
     if print_check:
         S_test.display_active_architecture()
     # S_test = dc(greedy_architecture_selection(S_test)['work_set'])
-    S_test = dc(greedy_simultaneous(S_test, iterations=S_test.dynamics['number_of_nodes'])['work_set'])
+    S_test = dc(greedy_simultaneous(S_test)['work_set'])
     if print_check:
         print('Optimal architecture:')
         S_test.display_active_architecture()
     S_test.model_name = S.model_name
-    for a in ['B', 'C']:
-        S.architecture[a]['active'] = dc(S_test.architecture[a]['active'])
     return S_test
 
 

@@ -43,13 +43,13 @@ if __name__ == "__main__":
     # # for i in S.trajectory:
     # #     print(i, S.trajectory[i])
     #
-    # greedy = gac.greedy_architecture_selection(S, no_select=True, status_check=True)
-    # greedy = gac.greedy_architecture_rejection(S, no_reject=True, status_check=True)
+    # greedy = gac.greedy_architecture_selection(S, no_select=True, print_check=True)
+    # greedy = gac.greedy_architecture_rejection(S, no_reject=True, print_check=True)
     # print('Values:')
     # for k in greedy['value_history']:
     #     print(k)
 
-    # greedy = gac.greedy_simultaneous(S, iterations=None, changes_per_iteration=1)#, status_check=True)
+    # greedy = gac.greedy_simultaneous(S, iterations=None, changes_per_iteration=1)#, print_check=True)
     # gac.simultaneous_cost_plot(greedy['value_history'])
     #
     # # for i in greedy['value_history']:

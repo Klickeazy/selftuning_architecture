@@ -142,18 +142,18 @@ class System:
             for i in range(0, len(self.architecture[architecture_type]['active'])):
                 self.architecture[architecture_type]['matrix'][self.architecture[architecture_type]['active'], i] = 1
 
-    def add_architecture(self, node, architecture_type='B', status_check=False):
+    def add_architecture(self, node, architecture_type='B', print_check=False):
         if node in self.architecture[architecture_type]['available'] and node not in self.architecture[architecture_type]['active']:
             self.architecture[architecture_type]['active'] = np.append(self.architecture[architecture_type]['active'], node)
             self.matrix_from_active([architecture_type])
-        elif status_check:
+        elif print_check:
             print('Element not found')
 
-    def remove_architecture(self, node, architecture_type='B', status_check=False):
+    def remove_architecture(self, node, architecture_type='B', print_check=False):
         if node in self.architecture[architecture_type]['active']:
             self.architecture[architecture_type]['active'] = np.delete(self.architecture[architecture_type]['active'], np.where(self.architecture[architecture_type]['active'] == node))
             self.matrix_from_active([architecture_type])
-        elif status_check:
+        elif print_check:
             print('Element not found')
 
 

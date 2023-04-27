@@ -106,7 +106,7 @@ def item_index_from_policy(values, policy):
         raise Exception('Check policy')
 
 
-def greedy_selection(S, architecture_type='B', number_of_changes=None, policy="max", t_start=time.time(), no_select=False, status_check=False):
+def greedy_selection(S, architecture_type='B', number_of_changes=None, policy="max", t_start=time.time(), no_select=False, print_check=False):
     if not isinstance(S, System):
         raise Exception('Incorrect data type')
     choice_history = []
@@ -120,7 +120,7 @@ def greedy_selection(S, architecture_type='B', number_of_changes=None, policy="m
         choice_iteration = compare_architecture(work_iteration, architecture_type=architecture_type)['choices']
         choice_history.append(choice_iteration)
         if len(choice_iteration) == 0:
-            if status_check:
+            if print_check:
                 print('No selections possible')
             break
         iteration_cases = []
@@ -137,19 +137,19 @@ def greedy_selection(S, architecture_type='B', number_of_changes=None, policy="m
         work_iteration = dc(iteration_cases[target_idx])
         limit = work_iteration.architecture_limits(architecture_type=architecture_type, algorithm='select')
         if len(compare_architecture(work_iteration, work_history[-1])['added']) == 0:
-            if status_check:
+            if print_check:
                 print('No valuable selections')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
     work_history.append(work_iteration)
     return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time()-t_start}
 
 
-def greedy_rejection(S, architecture_type='B', number_of_changes=None, policy="max", t_start=time.time(), no_reject=False, status_check=False):
+def greedy_rejection(S, architecture_type='B', number_of_changes=None, policy="max", t_start=time.time(), no_reject=False, print_check=False):
     if not isinstance(S, System):
         raise Exception('Incorrect data type')
     choice_history = []
@@ -163,7 +163,7 @@ def greedy_rejection(S, architecture_type='B', number_of_changes=None, policy="m
         choice_iteration = work_iteration.architecture[architecture_type]['active']
         choice_history.append(choice_iteration)
         if len(choice_iteration) == 0:
-            if status_check:
+            if print_check:
                 print('No rejections possible')
             break
         iteration_cases = []
@@ -180,12 +180,12 @@ def greedy_rejection(S, architecture_type='B', number_of_changes=None, policy="m
         work_iteration = dc(iteration_cases[target_idx])
         limit = work_iteration.architecture_limits(architecture_type=architecture_type, algorithm='reject')
         if len(compare_architecture(work_iteration, work_history[-1])['removed']) == 0:
-            if status_check:
+            if print_check:
                 print('No valuable rejections')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
     work_history.append(work_iteration)

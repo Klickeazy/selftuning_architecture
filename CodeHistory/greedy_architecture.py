@@ -480,7 +480,7 @@ def matrix_convergence_check(A, B, accuracy=10**(-3), check_type=None):
         raise Exception('Check Matrix Convergence')
 
 
-def greedy_architecture_selection(sys_model, architecture_type, number_of_changes=None, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), no_select=False, status_check=False):
+def greedy_architecture_selection(sys_model, architecture_type, number_of_changes=None, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), no_select=False, print_check=False):
     work_sys, available_set, work_iteration = initialize_greedy(sys_model, architecture_type, failure_set)
     choice_history, work_history, value_history = [], [], []
     count_of_changes = 0
@@ -492,7 +492,7 @@ def greedy_architecture_selection(sys_model, architecture_type, number_of_change
             choice_iteration = compare_lists(choice_iteration, fixed_set)['a1only']
         choice_history.append(choice_iteration)
         if len(choice_iteration) == 0:
-            if status_check:
+            if print_check:
                 print('No selections possible')
             break
         iteration_cases = []
@@ -508,19 +508,19 @@ def greedy_architecture_selection(sys_model, architecture_type, number_of_change
         target_idx = item_index_from_policy(values, policy)
         work_iteration = dc(iteration_cases[target_idx])
         if len(compare_lists(work_iteration, work_history[-1])['a1only']) == 0:
-            if status_check:
+            if print_check:
                 print('No valuable selections')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
     work_history.append(work_iteration)
     return {'work_set': work_iteration, 'work_history': work_history, 'choice_history': choice_history, 'value_history': value_history, 'time': time.time() - t_start}
 
 
-def greedy_architecture_rejection(sys_model, architecture_type, number_of_changes=None, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), no_reject=False, status_check=False):
+def greedy_architecture_rejection(sys_model, architecture_type, number_of_changes=None, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), no_reject=False, print_check=False):
     work_sys, available_set, work_iteration = initialize_greedy(sys_model, architecture_type, failure_set)
     choice_history, work_history, value_history = [], [], []
     count_of_changes = 0
@@ -532,7 +532,7 @@ def greedy_architecture_rejection(sys_model, architecture_type, number_of_change
             choice_iteration = compare_lists(choice_iteration, fixed_set)['a1only']
         choice_history.append(choice_iteration)
         if len(choice_iteration) == 0:
-            if status_check:
+            if print_check:
                 print('No rejections possible')
             break
         iteration_cases = []
@@ -547,12 +547,12 @@ def greedy_architecture_rejection(sys_model, architecture_type, number_of_change
         target_idx = item_index_from_policy(values, policy)
         work_iteration = dc(iteration_cases[target_idx])
         if len(compare_lists(work_iteration, work_history[-1])['a2only']) == 0:
-            if status_check:
+            if print_check:
                 print('No valuable rejections')
             break
         count_of_changes += 1
         if number_of_changes is not None and count_of_changes == number_of_changes:
-            if status_check:
+            if print_check:
                 print('Maximum number of changes done')
             break
     work_history.append(work_iteration)
@@ -571,7 +571,7 @@ def initialize_greedy(sys_model, architecture_type, failure_set):
     return work_sys, available_set, work_iteration
 
 
-def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), status_check=False):
+def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_iteration=1, fixed_set=None, failure_set=None, policy="min", t_start=time.time(), print_check=False):
     if not isinstance(sys_model, System):
         raise Exception('Incorrect data type')
     work_sys = dc(sys_model)
@@ -585,13 +585,13 @@ def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_
         all_values = [values[-1]]
 
         # Select one
-        select = greedy_architecture_selection(sys_model, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_select=True, status_check=status_check)
+        select = greedy_architecture_selection(sys_model, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_select=True, print_check=print_check)
         iteration_cases.append(select['work_set'])
         values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1])['cost'])
         all_values += select['value_history']
 
         # Reject one
-        reject = greedy_architecture_rejection(sys_model, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_reject=True, status_check=status_check)
+        reject = greedy_architecture_rejection(sys_model, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_reject=True, print_check=print_check)
         iteration_cases.append(reject['work_set'])
         values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1])['cost'])
         all_values += reject['value_history']
@@ -600,9 +600,9 @@ def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_
         sys_select = dc(work_sys)
         sys_select.architecture[architecture_type]['min'] += 1
         sys_select.architecture[architecture_type]['max'] += 1
-        swap_select1 = greedy_architecture_selection(sys_select, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_select=True, status_check=False)
+        swap_select1 = greedy_architecture_selection(sys_select, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, no_select=True, print_check=False)
         work_sys.active_architecture_update(swap_select1['work_set'], architecture_type)
-        swap_reject1 = greedy_architecture_rejection(work_sys, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, status_check=status_check)
+        swap_reject1 = greedy_architecture_rejection(work_sys, architecture_type, number_of_changes=changes_per_iteration, fixed_set=fixed_set, failure_set=failure_set, policy=policy, t_start=t_start, print_check=print_check)
         iteration_cases.append(swap_reject1['work_set'])
         values.append(work_sys.architecture_cost_calculator(architecture_type, iteration_cases[-1])['cost'])
         all_values += swap_reject1['value_history']
@@ -622,5 +622,5 @@ def greedy_simultaneous(sys_model, architecture_type, iterations=1, changes_per_
 #     if not isinstance(S, System):
 #         raise Exception('Incorrect data type')
 #
-#     actuator_update = greedy_simultaneous(S, 'B', status_check=True)
+#     actuator_update = greedy_simultaneous(S, 'B', print_check=True)
 #     S.active_architecture_update(actuator_update['work_'], 'B')
