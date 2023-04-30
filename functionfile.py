@@ -74,14 +74,15 @@ class ClassError(Exception):
 class System:
 
     class Dynamics:
-        def __init__(self, number_of_nodes=None, network_model='rand', network_model_parameter=None, rho=1, self_loop=True, second_order=False):
-            self.number_of_nodes = number_of_nodes
-            self.number_of_states = self.number_of_nodes
-            self.network_model = network_model
-            self.network_model_parameter = network_model_parameter
-            self.rho = rho
-            self.self_loop = self_loop
-            self.second_order = second_order
+        def __init__(self, initialize_check=False):
+            self.number_of_nodes = 20
+            self.number_of_states = 20
+            self.network_model = 'rand'
+            self.network_model_parameter = None
+            self.rho = 1
+            self.self_loop = True
+
+            self.second_order = False
 
             self.second_order_factor = 1
             self.second_order_type = 1
@@ -91,12 +92,15 @@ class System:
             self.number_of_non_stable_modes = 0
             self.A = np.zeros((self.number_of_nodes, self.number_of_nodes))
 
+            if initialize_check:
+                self.initialize_dynamics()
+
+        def initialize_dynamics(self):
             self.adjacency_matrix_initialize()
-
-            if self.second_order:
-                self.number_of_states = 2*self.number_of_nodes
-
             self.rescale_wrapper()
+            if self.second_order:
+                self.number_of_states = self.number_of_nodes * 2
+                self.second_order_matrix()
 
         def adjacency_matrix_initialize(self):
             if self.network_model not in ['rand', 'ER', 'BA', 'path', 'cycle', 'eval_squeeze', 'eval_bound']:
@@ -149,12 +153,12 @@ class System:
                     else:
                         raise Exception('Check Network model')
 
+                    self.self_loop = None
+                    self.rho = None
+
                     e = np.array([i*-1 if coin_toss() else i for i in e])
                     A = V_mat @ np.diag(e) @ np.linalg.inv(V_mat)
                     G = netx.from_numpy_array(A)
-
-                    self.self_loop = None
-                    self.rho = None
 
                 else:
                     raise Exception('Check Network model')
@@ -195,53 +199,37 @@ class System:
             self.evaluate_modes()
 
     class Architecture:
-        def __init__(self, architecture_type='B', number_of_nodes=20, available_set_vectors=None, second_order_architecture_type=None, initialize_random=None):
+        def __init__(self, architecture_type='B'):
 
             if architecture_type in ['B', 'C']:
                 self.architecture_type = architecture_type
             else:
                 raise ArchitectureError
 
-            self.number_of_nodes = number_of_nodes
-            if second_order_architecture_type is not None:
-                self.second_order_architecture_type = None
-                self.number_of_states = self.number_of_nodes
-            elif second_order_architecture_type in [1, 2]:
-                self.second_order_architecture_type = second_order_architecture_type
-                self.number_of_states = 2*self.number_of_nodes
-            else:
-                raise SecondOrderError
+            self.second_order_architecture_type = None
 
-            self.available_vectors = available_set_vectors
-            if self.available_vectors is None:
-                self.initialize_available_vectors_as_basis_vectors()
+            self.available_vectors = {}
 
-            self.number_of_available = len(self.available_vectors)
+            self.number_of_available = 0
 
             self.min = 1
-            self.max = self.number_of_available
+            self.max = 0
 
-            self.Q = np.identity(self.number_of_states)
-            self.R1_reference = np.identity(self.number_of_available)
-            self.R1 = np.zeros_like(self.R1_reference)
+            self.Q = 0
+            self.R1_reference = 1
+            self.R1 = 0
             self.R2 = 0
             self.R3 = 0
 
-            self.available_indices = [k for k in self.available_vectors]
+            self.available_indices = []
 
             self.active_set = []
 
             self.active_matrix = 0
             self.initialize_active_matrix()
 
-            self.indicator_vector_current = np.zeros_like(self.available_indices)
-            self.indicator_vector_history = np.zeros_like(self.available_indices)
-
-            if initialize_random is None:
-                initialize_random = int(self.number_of_available // 10)
-
-            if initialize_random != 0:
-                self.initialize_random_architecture(initialize_random)
+            self.indicator_vector_current = 0
+            self.indicator_vector_history = 0
 
             self.history_active_set = []
             self.change_count = 0
@@ -255,19 +243,19 @@ class System:
             else:
                 raise ArchitectureError
 
-        def initialize_available_vectors_as_basis_vectors(self):
-            set_mat = np.identity(self.number_of_states)
+        def initialize_available_vectors_as_basis_vectors(self, number_of_nodes, number_of_states):
+            set_mat = np.identity(number_of_states)
             if self.second_order_architecture_type == 1:
-                set_mat = set_mat[:self.number_of_nodes, :]
+                set_mat = set_mat[:number_of_nodes, :]
             elif self.second_order_architecture_type == 2:
-                set_mat = set_mat[self.number_of_nodes:, :]
+                set_mat = set_mat[number_of_nodes:, :]
             else:
                 raise SecondOrderError
 
             if self.architecture_type == 'B':
-                self.available_vectors = {i+1: np.expand_dims(set_mat[:, i], axis=1) for i in range(0, self.number_of_nodes)}
+                self.available_vectors = {i+1: np.expand_dims(set_mat[:, i], axis=1) for i in range(0, number_of_nodes)}
             elif self.architecture_type == 'C':
-                self.available_vectors = {i+1: np.expand_dims(set_mat[:, i], axis=0) for i in range(0, self.number_of_nodes)}
+                self.available_vectors = {i+1: np.expand_dims(set_mat[:, i], axis=0) for i in range(0, number_of_nodes)}
             else:
                 raise ArchitectureError
 
@@ -302,9 +290,8 @@ class System:
             self.active_set = dc(reference_architecture.active_set)
             self.architecture_update_wrapper_from_active_set()
 
-        def initialize_random_architecture(self, initialize_random):
+        def initialize_random_architecture_active_set(self, initialize_random):
             self.active_set = np.random.default_rng().choice(self.available_indices, size=initialize_random, replace=False)
-            self.architecture_update_wrapper_from_active_set()
 
     class Disturbance:
         def __init__(self, number_of_nodes, scaling_W=1, scaling_V=1, t_simulate=100, noise_model=None):
@@ -352,6 +339,23 @@ class System:
             self.simulation_parameters = self.Simulation()
 
         self.disturbance = self.Disturbance(self.dynamics.number_of_nodes, self.simulation_parameters.t_simulate)
+
+    def initialize_dynamics(self, number_of_nodes=20, available_set_vectors=None, second_order_architecture_type=None, initialize_random=None):
+
+        if self.available_vectors is None:
+            self.initialize_available_vectors_as_basis_vectors()
+
+        self.number_of_available = len(self.available_vectors)
+        self.available_indices = [k for k in self.available_vectors]
+
+        self.R1_reference = np.identity(self.number_of_available)
+        self.R1 = np.zeros_like(self.R1_reference)
+
+        if initialize_random is None:
+            initialize_random = int(self.number_of_available // 10)
+
+        if initialize_random != 0:
+            self.initialize_random_architecture(initialize_random)
 
 
 
