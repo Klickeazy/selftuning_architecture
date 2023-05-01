@@ -77,38 +77,93 @@ class Experiment:
     def __init__(self):
         self.save_filename = "experiment_parameters.csv"
 
-        self.parameter_keys = ['number_of_nodes', 'network_model', 'second_order', 'second_order_network', 'initial_architecture_size', 'second_order_architecture', 'W_scaling', 'V_scaling', 'disturbance_model', 'disturbance_step', 'disturbance_number', 'disturbance_magnitude', 'simulation_model', 'architecture_constraint', 'rho', 'network_parameter', 'prediction_time_horizon', 'X0_scaling']
+        self.parameter_keys = ['experiment_no', 'number_of_nodes', 'network_model', 'second_order', 'second_order_network', 'initial_architecture_size', 'second_order_architecture', 'W_scaling', 'V_scaling', 'disturbance_model', 'disturbance_step', 'disturbance_number', 'disturbance_magnitude', 'simulation_model', 'architecture_constraint_min', 'architecture_constraint_max', 'rho', 'network_parameter', 'prediction_time_horizon', 'X0_scaling']
+        self.parameter_dtypes = [int, int, str, bool, int, int, int, float, float, str, int, int, int, str, int, int, float, float, int, float]
+        self.dtype_map = dict(zip(self.parameter_keys, self.parameter_dtypes))
+        self.sample_values = [1, 20, 'rand', False, 0, 2, 0, 1, 1, None, 0, 0, 0, None, 2, 2, 3, 0, 10, 1]
 
-        self.parameter_table = None
-        self.parameters = None
-        self.experiment_number = None
+        self.parameter_table = pd.DataFrame()
+        self.experiments_list = []
+        self.parameter_values = []
+
+        self.read_table_from_file()
+
+    def initialize_table(self):
+        print('Initializing table with default parameters')
+        self.parameter_values = [[k] for k in self.sample_values]
+        self.parameter_table = pd.DataFrame(dict(zip(self.parameter_keys, self.parameter_values)))
+        self.parameter_table.set_index(self.parameter_keys[0], inplace=True)
+        self.write_table_to_file()
+
+    def check_dimensions(self, print_check=False):
+        if len(self.parameter_values) == len(self.parameter_dtypes) == len(self.parameter_keys):
+            if print_check:
+                print('Dimensions agree')
+        else:
+            raise Exception("Dimension mismatch - values: {}, dtype: {}, keys: {}".format(len(self.parameter_values), len(self.parameter_dtypes), len(self.parameter_keys)))
 
     def read_table_from_file(self):
         if not os.path.exists(datadump_folder_path + self.save_filename):
             raise Warning('File does not exist')
         else:
-            self.parameter_table = pd.read_csv(datadump_folder_path + self.save_filename)
+            self.parameter_table = pd.read_csv(datadump_folder_path + self.save_filename, index_col=0, dtype=self.dtype_map)
+            self.parameter_table.replace({np.nan: None}, inplace=True)
+            self.experiments_list = self.parameter_table.index
 
-    def read_parameters_from_table(self, experiment_no):
-        if experiment_no not in self.parameter_table:
+    def read_parameters_from_table(self, experiment_no=1):
+        if experiment_no not in self.experiments_list:
             raise Exception('Experiment parameters not in table')
         if not isinstance(self.parameter_table, pd.DataFrame):
             raise Exception('Not a pandas frame')
 
-        self.parameters = zip(self.parameter_table.columns, [k for k in self.parameter_table.iloc(experiment_no)])
+        self.parameter_values = [k for k in self.parameter_table.loc[experiment_no]]
 
-    def write_to_table(self, parameter_values=None):
-        if parameter_values is None:
+    def parameter_value_map(self):
+        self.parameter_values = [list(map(d, [v]))[0] if v is not None else None for d, v in zip(self.parameter_dtypes, self.parameter_values)]
+
+    def write_parameters_to_table(self):
+        if len(self.parameter_values) == 0:
             raise Exception('No experiment parameters provided')
-        # parameter_values = [20, 'rand', False, 0, 2, None, 1, 1, None, None, None, None, None, 3, 3, None, 10, 1]
-        self.parameter_table = self.parameter_table.append(parameter_values)
+        self.check_dimensions()
+        self.parameter_value_map()
+        append_check = True
+        for i in self.experiments_list:
+            if [k for k in self.parameter_table.loc[i]][:] == self.parameter_values[1:]:
+                print('Duplicate experiment at :', i)
+                append_check = False
+                break
+        if append_check:
+            self.parameter_table.loc[max(self.experiments_list)+1] = self.parameter_values[1:]
+            self.experiments_list = self.parameter_table.index
+            self.write_table_to_file()
 
-    def write_to_file(self):
+    def write_table_to_file(self):
         self.parameter_table.to_csv(datadump_folder_path + self.save_filename)
         print('Printing done')
 
     def return_keys_values(self):
-        return self.parameters, self.parameter_keys
+        return self.parameter_values, self.parameter_keys
+
+    def display_test_parameters(self):
+        print(self.parameter_table)
+
+
+def test_all_experiments():
+    Exp = Experiment()
+    print('Experiments:', Exp.experiments_list)
+    for i in Exp.experiments_list:
+        S_test = initialize_system_from_experiment_number(i)
+
+
+def initialize_system_from_experiment_number(exp_no=1):
+    print('Exp No:', exp_no)
+    exp = Experiment()
+    exp.read_parameters_from_table(exp_no)
+    print('Parameters:', exp.parameter_values)
+    S = System()
+    S.initialize_system_from_experiment_parameters(exp.parameter_values, exp.parameter_keys[1:])
+    return S
+
 
 
 class System:
@@ -118,7 +173,7 @@ class System:
 
             self.rho = 1
             self.network_model = 'rand'
-            self.network_parameter = None
+            self.network_parameter = 0
             self.self_loop = True
 
             self.second_order = False
@@ -138,7 +193,7 @@ class System:
             if architecture_type == 'Error':
                 raise ArchitectureError
 
-            self.second_order_architecture_type = False
+            self.second_order_architecture_type = 0
 
             self.min = 0
             self.max = 0
@@ -173,9 +228,9 @@ class System:
             self.v_gen = 0
 
             self.noise_model = None
-            self.disturbance_step = None
-            self.disturbance_number = None
-            self.disturbance_magnitude = None
+            self.disturbance_step = 0
+            self.disturbance_number = 0
+            self.disturbance_magnitude = 0
 
     class Simulation:
         def __init__(self):
@@ -244,9 +299,10 @@ class System:
     def initialize_system_from_experiment_parameters(self, experiment_parameters, experiment_keys):
         # parameter_keys = ['number_of_nodes', 'network_model', 'second_order', 'second_order_network', 'initial_architecture_size', 'second_order_architecture', 'disturbance_model', 'disturbance_step', 'disturbance_number', 'disturbance_magnitude', 'simulation_model', 'architecture_constraint_min', 'architecture_constraint_max', 'rho', 'network_parameter', 'prediction_time_horizon']
 
-        parameters = zip(experiment_keys, experiment_parameters)
+        parameters = dict(zip(experiment_keys, experiment_parameters))
 
-        self.A.number_of_nodes = parameters['number_of_nodes']
+        self.number_of_nodes = parameters['number_of_nodes']
+        self.number_of_states = parameters['number_of_nodes']
         self.A.rho = parameters['rho']
         self.A.network_model = parameters['network_model']
         self.A.network_parameter = parameters['network_parameter']
@@ -255,23 +311,21 @@ class System:
 
         self.A.second_order = parameters['second_order']
         if self.A.second_order:
-            self.A.number_of_states = self.A.number_of_nodes * 2
-        self.A.second_order_network_type = parameters['second_order_network']
+            self.number_of_states = self.number_of_nodes * 2
+            self.A.second_order_network_type = parameters['second_order_network']
+            self.B.second_order_architecture_type = parameters['second_order_architecture']
+            self.C.second_order_architecture_type = parameters['second_order_architecture']
         self.rescale_wrapper()
 
         self.sim.t_predict = parameters['prediction_time_horizon']
         self.sim.test_model = 'simulation_model'
-
-        self.initialize_available_vectors_as_basis_vectors()
 
         self.B.min = parameters['architecture_constraint_min']
         self.B.max = parameters['architecture_constraint_max']
         self.C.min = parameters['architecture_constraint_min']
         self.C.max = parameters['architecture_constraint_max']
 
-        self.B.second_order_architecture_type = parameters['second_order_architecture']
-        self.C.second_order_architecture_type = parameters['second_order_architecture']
-
+        self.initialize_available_vectors_as_basis_vectors()
         self.initialize_random_architecture_active_set(parameters['initial_architecture_size'])
 
         self.disturbance.W_scaling = parameters['W_scaling']
@@ -292,7 +346,7 @@ class System:
 
     def adjacency_matrix_initialize(self):
         if self.A.network_model not in ['rand', 'ER', 'BA', 'path', 'cycle', 'eval_squeeze', 'eval_bound']:
-            raise Exception('Network model not defined')
+            raise Exception('Network model not defined: {}'.format(self.A.network_model))
 
         connected_graph_check = False
         G = netx.Graph()
@@ -362,6 +416,8 @@ class System:
     def rescale(self):
         if self.A.rho is not None:
             self.A.A_mat = self.A.rho * self.A.adjacency_matrix / np.max(np.abs(np.linalg.eigvals(self.A.adjacency_matrix)))
+        else:
+            self.A.A_mat = self.A.adjacency_matrix
 
     def evaluate_modes(self):
         self.A.open_loop_eig_vals = np.sort(np.linalg.eigvals(self.A.A_mat))
@@ -415,7 +471,8 @@ class System:
                         set_mat = set_mat[:, self.number_of_nodes:]
                     else:
                         raise SecondOrderError
-                self.B.available_vectors = {i + 1: np.expand_dims(set_mat[:, i], axis=1) for i in range(0, self.number_of_nodes)}
+                self.B.available_vectors = {i+1: np.expand_dims(set_mat[:, i], axis=1) for i in range(0, self.number_of_nodes)}
+                self.B.available_indices = [i for i in self.B.available_vectors]
 
             else:  # a == 'C'
                 if self.A.second_order:
@@ -426,6 +483,7 @@ class System:
                     else:
                         raise SecondOrderError
                 self.C.available_vectors = {i + 1: np.expand_dims(set_mat[:, i], axis=0) for i in range(0, self.number_of_nodes)}
+                self.C.available_indices = [i for i in self.C.available_vectors]
 
     def initialize_random_architecture_active_set(self, initialize_random, arch=None):
         arch = self.architecture_iterator(arch)
@@ -519,18 +577,20 @@ class System:
         self.disturbance.v_gen = np.random.default_rng().multivariate_normal(np.zeros(self.number_of_nodes), self.disturbance.V, self.sim.t_simulate)
 
         if self.disturbance.noise_model in ['process', 'measurement', 'combined']:
+            if self.disturbance.disturbance_number == 0 or self.disturbance.disturbance_magnitude == 0 or self.disturbance.disturbance_step == 0:
+                raise Exception('Check disturbance parameters')
             for t in range(0, self.sim.t_simulate, self.disturbance.disturbance_step):
                 if self.disturbance.noise_model in ['process', 'combined']:
-                    self.disturbance.w_gen[t][np.random.default_rng().choice(self.number_of_nodes, self.disturbance.disturbance_number, replace=False)] = self.disturbance.disturbance_magnitude * [coin_toss() for _ in range(0, self.disturbance.disturbance_number)]
+                    self.disturbance.w_gen[t][np.random.default_rng().choice(self.number_of_nodes, self.disturbance.disturbance_number, replace=False)] = self.disturbance.disturbance_magnitude * np.array([coin_toss() for _ in range(0, self.disturbance.disturbance_number)])
                 if self.disturbance.noise_model in ['measurement', 'combined']:
-                    self.disturbance.v_gen[t] = self.disturbance.disturbance_magnitude * [coin_toss() for _ in range(0, self.number_of_nodes)]
+                    self.disturbance.v_gen[t] = self.disturbance.disturbance_magnitude * np.array([coin_toss() for _ in range(0, self.number_of_nodes)])
 
     def initialize_trajectory(self):
         self.trajectory.X0_covariance = np.identity(self.number_of_states) * self.trajectory.X0_scaling
 
-        self.trajectory.x = [np.random.default_rng().multivariate_normal(np.zeros(self.number_of_nodes), self.trajectory.X0_covariance)]
+        self.trajectory.x = [np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)]
 
-        self.trajectory.x_estimate = [np.random.default_rng().multivariate_normal(np.zeros(self.number_of_nodes), self.trajectory.X0_covariance)]
+        self.trajectory.x_estimate = [np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)]
 
         self.trajectory.X_enhanced = [np.squeeze(np.concatenate((self.trajectory.x[-1], self.trajectory.x_estimate[-1])))]
 
@@ -610,6 +670,29 @@ class System:
             self.C.gain[t] = self.C.recursion_matrix[t] @ self.C.active_matrix.T @ np.linalg.inv((self.C.active_matrix @ self.C.recursion_matrix[t] @ self.C.active_matrix.T) + self.C.R1)
             self.C.recursion_matrix[t+1] = (self.A.A_mat @ self.C.recursion_matrix[t] @ self.A.A_mat.T) - (self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix @ self.C.recursion_matrix[t] @ self.A.A_mat.T) + self.C.Q
         self.trajectory.estimation_matrix.append(self.C.recursion_matrix[1])
+
+    def prediction_cost_calculation(self):
+        A_enhanced = {}
+        W_enhanced = {}
+        W_mat = np.block([
+            [self.disturbance.W, np.zeros_like(self.disturbance.W)],
+            [np.zeros_like(self.disturbance.W), self.disturbance.V]])
+        for t in range(0, self.sim.t_predict):
+            BKt = self.B.active_matrix @ self.B.gain[t]
+            ALtC = self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix
+            A_enhanced[t] = np.block([
+                [self.A.A_mat, -BKt],
+                [ALtC, self.A.A_mat - ALtC - BKt]])
+            F_enhanced = np.block([
+                [np.identity(self.number_of_states), np.zeros(self.number_of_states)],
+                [np.zeros(self.number_of_states), ALtC]])
+            W_enhanced[t] = F_enhanced @ W_mat @ F_enhanced.T
+        P = np.block_diag([self.B.Q, np.zeros(np.number_of_states)])
+        # for t in range(0, self.sim.t_predict):
+
+
+
+
 
 def coin_toss():
     return np.random.default_rng().random() > 0
