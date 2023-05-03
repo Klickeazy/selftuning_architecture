@@ -20,7 +20,7 @@ import matplotlib.patches as patches
 import matplotlib.lines as mlines
 # from matplotlib.ticker import MaxNLocator
 import matplotlib.animation
-import multiprocessing
+from multiprocessing import Pool
 import pandas as pd
 
 matplotlib.rcParams['axes.titlesize'] = 12
@@ -227,11 +227,11 @@ class System:
             self.number_of_available = 0            # Count of available architecture
             self.active_set = []                    # Set of indices of active architecture
             self.active_matrix = np.zeros((0, 0))   # Matrix of active architecture
-            self.Q = np.zeros((0, 0))                # Cost on states/Process noise covariance
-            self.R1 = np.zeros((0, 0))               # Cost on active actuators/Measurement noise covariance
-            self.R1_reference = np.zeros((0, 0))     # Cost on available actuators
-            self.indicator_vector_current = 0       # {1, 0} binary vector of currently active architecture - to compute running/switching costs
-            self.indicator_vector_history = 0       # {1, 0} binary vector of previously active architecture - to compute switching costs
+            self.Q = np.zeros((0, 0))               # Cost on states/Process noise covariance
+            self.R1 = np.zeros((0, 0))              # Cost on active actuators/Measurement noise covariance
+            self.R1_reference = np.zeros((0, 0))    # Cost on available actuators
+            self.indicator_vector_current = np.zeros(self.number_of_available)  # {1, 0} binary vector of currently active architecture - to compute running/switching costs
+            self.indicator_vector_history = np.zeros(self.number_of_available)  # {1, 0} binary vector of previously active architecture - to compute switching costs
             self.history_active_set = []            # Record of active architecture over simulation horizon
             self.change_count = 0                   # Count of number of changes in architecture over simulation horizon
             self.recursion_matrix = {}              # Recursive cost matrix/estimation error covariance over the prediction horizon
@@ -274,10 +274,12 @@ class System:
             self.X_enhanced = []                    # Enhanced state trajectory
             self.u = []                             # Control input trajectory
             self.error = []                         # Estimation error trajectory
-            self.control_matrix = []                # Control cost matrix at each time step
-            self.estimation_matrix = []             # Estimation error covariance matrix at each time step
+            self.control_matrix = []                # Control cost matrix at each timestep
+            self.estimation_matrix = []             # Estimation error covariance matrix at each timestep
             self.error_2norm = []                   # 2-norm of estimation error trajectory
             self.cost = System.Cost()               # Cost variables
+            self.computation_time = []              # Computation time at each simulation timestep
+            self.number_of_choices = []             # Sum of number of choices over all iterations
 
     class Cost:
         def __init__(self):
@@ -292,7 +294,7 @@ class System:
             self.control = 0                        # Control cost at current timestep
             self.stage = 0                          # True stage cost at current timestep
             self.predicted = []                     # Predicted total cost trajectory
-            self.true = []                          # Predicted true cost trajectory
+            self.true = []                          # True cost trajectory
             self.initial = []                       # Costs for initial architecture optimization
             self.predicted_matrix = {}              # Cost matrix over the prediction horizon
 
@@ -360,28 +362,30 @@ class System:
             self.disturbance.disturbance_magnitude = parameters['disturbance_magnitude']
         self.initialize_disturbance()
 
-        self.C.Q = self.disturbance.W
-        self.C.R1_reference = self.disturbance.V
-
         self.B.R2 = parameters['B_run_cost']
         self.C.R2 = parameters['C_run_cost']
         self.B.R3 = parameters['B_switch_cost']
         self.C.R3 = parameters['C_switch_cost']
 
-        self.B.min = parameters['architecture_constraint_min']
-        self.B.max = parameters['architecture_constraint_max']
-        self.C.min = parameters['architecture_constraint_min']
-        self.C.max = parameters['architecture_constraint_max']
+        self.architecture_limit_set(min_set=parameters['architecture_constraint_min'], max_set=parameters['architecture_constraint_max'])
 
         self.initialize_available_vectors_as_basis_vectors()
 
         self.B.Q = np.identity(self.number_of_states)*parameters['Q_cost_scaling']
         self.B.R1_reference = np.identity(self.B.number_of_available) * parameters['R_cost_scaling']
 
+        self.C.Q = self.disturbance.W
+        self.C.R1_reference = self.disturbance.V
+
         self.initialize_random_architecture_active_set(parameters['initial_architecture_size'])
 
         self.trajectory.X0_scaling = parameters['X0_scaling']
         self.initialize_trajectory()
+
+        self.prediction_control_gain()
+        self.prediction_estimation_gain()
+
+        self.model_namer()
 
     def adjacency_matrix_initialize(self):
         if self.A.network_model not in ['rand', 'ER', 'BA', 'path', 'cycle', 'eval_squeeze', 'eval_bound']:
@@ -483,6 +487,8 @@ class System:
 
     @staticmethod
     def architecture_iterator(arch=None):
+        if type(arch) == list and len(arch) == 1:
+            arch = arch[0]
         arch = [arch] if arch in ['B', 'C'] else ['B', 'C'] if (arch is None or arch == ['B', 'C']) else 'Error'
         if arch == 'Error':
             raise ArchitectureError
@@ -530,9 +536,9 @@ class System:
         arch = self.architecture_iterator(arch)
         for a in arch:
             if a == 'B':
-                self.B.active_set = np.random.default_rng().choice(self.B.available_indices, size=initialize_random, replace=False)
+                self.B.active_set = list(np.sort(np.random.default_rng().choice(self.B.available_indices, size=initialize_random, replace=False)))
             else:  # a == 'C'
-                self.C.active_set = np.random.default_rng().choice(self.C.available_indices, size=initialize_random, replace=False)
+                self.C.active_set = list(np.sort(np.random.default_rng().choice(self.C.available_indices, size=initialize_random, replace=False)))
         self.architecture_active_set_update()
 
     def architecture_limit_set(self, arch=None, min_set=None, max_set=None):
@@ -571,6 +577,7 @@ class System:
                     self.C.active_set = list(np.sort(self.C.active_set))
                     for k in range(0, len(self.C.active_set)):
                         self.C.active_matrix[k, :] = self.C.available_vectors[self.C.active_set[k]]
+                    self.C.R1 = self.C.R1_reference[self.C.active_set, :][:, self.C.active_set]
 
     def architecture_update_to_indicator_vector_from_active_set(self, arch=None):
         arch = self.architecture_iterator(arch)
@@ -584,6 +591,26 @@ class System:
                 self.C.indicator_vector_history = self.C.indicator_vector_current
                 self.C.indicator_vector_current = np.zeros_like(self.C.available_indices)
                 self.C.indicator_vector_current[self.C.active_set] = 1
+
+    def architecture_running_costs(self):
+        if self.trajectory.cost.metric_running == 0 or (self.B.R2 == 0 and self.C.R2 == 0):
+            self.trajectory.cost.running = 0
+        elif self.trajectory.cost.metric_running == 1 and type(self.B.R2) == int and type(self.C.R2) == int:
+            self.trajectory.cost.running = np.linalg.norm(self.B.indicator_vector_current) * self.B.R2 + np.linalg.norm(self.C.indicator_vector_current) * self.C.R2
+        elif self.trajectory.cost.metric_running == 2 and np.shape(self.B.R2) == (len(self.B.active_set), len(self.B.active_set)) and np.shape(self.C.R2) == (len(self.C.active_set), len(self.C.active_set)):
+            self.trajectory.cost.running = self.B.indicator_vector_current.T @ self.B.R2 @ self.B.indicator_vector_current + self.C.indicator_vector_current.T @ self.C.R2 @ self.C.indicator_vector_current
+        else:
+            raise Exception('Check running cost metric')
+
+    def architecture_switching_costs(self):
+        if self.trajectory.cost.metric_switching == 0 or (self.B.R3 == 0 and self.C.R3 == 0):
+            self.trajectory.cost.switching = 0
+        elif self.trajectory.cost.metric_switching == 1 and type(self.B.R3) == int and type(self.C.R3) == int:
+            self.trajectory.cost.switching = np.linalg.norm(self.B.indicator_vector_current - self.B.indicator_vector_history) * self.B.R3 + np.linalg.norm(self.C.indicator_vector_current - self.C.indicator_vector_history) * self.C.R3
+        elif self.trajectory.cost.metric_switching == 2 and np.shape(self.B.R3) == (len(self.B.active_set), len(self.B.active_set)) and np.shape(self.C.R3) == (len(self.C.active_set), len(self.C.active_set)):
+            self.trajectory.cost.switching = (self.B.indicator_vector_current - self.B.indicator_vector_history).T @ self.B.R2 @ (self.B.indicator_vector_current - self.B.indicator_vector_history) + (self.C.indicator_vector_current - self.C.indicator_vector_history).T @ self.C.R2 @ (self.C.indicator_vector_current - self.C.indicator_vector_history)
+        else:
+            raise Exception('Check switching cost metric')
 
     def architecture_update_wrapper_from_active_set(self, arch=None):
         self.architecture_update_to_indicator_vector_from_active_set(arch)
@@ -602,14 +629,24 @@ class System:
         if history_update_check:
             self.architecture_update_wrapper_from_active_set()
 
-    def architecture_active_set_update(self):
-        arch = self.architecture_iterator(None)
+    def architecture_compare(self, reference_system):
+        if not isinstance(reference_system, System):
+            raise ClassError
+        return self.B.active_set == reference_system.B.active_set and self.C.active_set == reference_system.C.active_set
+
+    def architecture_active_set_update(self, arch=None):
+        arch = self.architecture_iterator(arch)
         for a in arch:
             if a == 'B':
                 self.B.history_active_set.append(self.B.active_set)
             else:  # a == 'C'
                 self.C.history_active_set.append(self.C.active_set)
-        self.architecture_update_wrapper_from_active_set(None)
+        self.architecture_update_wrapper_from_active_set(arch)
+
+    def architecture_display(self):
+        print('B:', self.B.active_set)
+        print('C:', self.C.active_set)
+        print('\n')
 
     def initialize_disturbance(self):
         self.disturbance.W = np.identity(self.number_of_states) * self.disturbance.W_scaling
@@ -642,55 +679,17 @@ class System:
         self.trajectory.error = [self.trajectory.x[-1] - self.trajectory.x_estimate[-1]]
         self.trajectory.error_2norm = [np.linalg.norm(self.trajectory.error[-1])]
 
-    def architecture_check_min_limits(self, architecture_set, arch):
-        if arch not in ['B', 'C']:
-            raise ArchitectureError
-        if arch == 'B':
-            return self.B.min <= len(architecture_set)
-        else:  # arch == 'B':
-            return self.C.min <= len(architecture_set)
-
-    def architecture_check_max_limits(self, architecture_set, arch):
-        if arch not in ['B', 'C']:
-            raise ArchitectureError
-        if arch == 'B':
-            return len(architecture_set) <= self.B.max
-        else:  # arch == 'B':
-            return len(architecture_set) <= self.C.max
-
-    def available_selection_choices(self):
-        choices = []
-        if len(self.B.active_set) <= self.B.min and len(self.C.active_set) <= self.C.min:
-            choices = [(None, None, None)]
-        if len(self.B.active_set) < self.B.max:
-            for i in compare_lists(self.B.active_set, self.B.available_indices)['only2']:
-                choices.append(('B', i, '+'))
-        if len(self.C.active_set) < self.C.max:
-            for i in compare_lists(self.C.active_set, self.C.available_indices)['only2']:
-                choices.append(('C', i, '+'))
-        return choices
-
-    def available_rejection_choices(self):
-        choices = []
-        if len(self.B.active_set) <= self.B.max and len(self.C.active_set) <= self.C.max:
-            choices = [(None, None, None)]
-        if len(self.B.active_set) > self.B.min:
-            for i in self.B.active_set:
-                choices.append(('B', i, '-'))
-        if len(self.C.active_set) > self.C.min:
-            for i in self.C.active_set:
-                choices.append(('C', i, '-'))
-        return choices
-
     def update_active_set_from_choices(self, choice):
         if choice(0) == 'B':
             if choice(2) == '+':
                 self.B.active_set.append(choice(1))
+                self.B.active_set = list(np.sort(np.array(self.B.active_set)))
             elif choice(2) == '-':
                 self.B.active_set = [k for k in self.B.active_set if k != choice(1)]
         elif choice(0) == 'C':
             if choice(2) == '+':
                 self.C.active_set.append(choice(1))
+                self.C.active_set = list(np.sort(np.array(self.C.active_set)))
             elif choice(2) == '-':
                 self.C.active_set = [k for k in self.C.active_set if k != choice(1)]
         elif choice == (None, None, None):
@@ -700,7 +699,7 @@ class System:
 
     def prediction_control_gain(self):
         self.B.recursion_matrix = {self.sim.t_predict: self.B.Q}
-        for t in tqdm(range(self.sim.t_predict-1, -1, -1)):
+        for t in range(self.sim.t_predict-1, -1, -1):
             self.B.gain[t] = np.linalg.inv((self.B.active_matrix.T @ self.B.recursion_matrix[t+1] @ self.B.active_matrix) + self.B.R1) @ self.B.active_matrix.T @ self.B.recursion_matrix[t+1] @ self.A.A_mat
             self.B.recursion_matrix[t] = (self.A.A_mat.T @ self.B.recursion_matrix[t+1] @ self.A.A_mat) - (self.A.A_mat.T @ self.B.recursion_matrix[t+1] @ self.B.active_matrix @ self.B.gain[t]) + self.B.Q
         self.trajectory.control_matrix.append(self.B.recursion_matrix[0])
@@ -718,30 +717,102 @@ class System:
         Q_enhanced = {}
         W_mat = np.block([[self.disturbance.W, np.zeros_like(self.disturbance.W)],
                           [np.zeros_like(self.disturbance.W), self.disturbance.V]])
-        for t in range(0, self.sim.t_predict-1):
+        for t in range(0, self.sim.t_predict):
             BKt = self.B.active_matrix @ self.B.gain[t]
             ALtC = self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix
             A_enhanced_mat[t] = np.block([[self.A.A_mat, -BKt],
                                           [ALtC, self.A.A_mat - ALtC - BKt]])
-            F_enhanced = np.block([[np.identity(self.number_of_states), np.zeros(self.number_of_states)],
-                                   [np.zeros(self.number_of_states), ALtC]])
+            F_enhanced = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, self.C.number_of_available))],
+                                   [np.zeros((self.C.number_of_available, self.number_of_states)), ALtC]])
             W_enhanced[t] = F_enhanced @ W_mat @ F_enhanced.T
-            Q_enhanced[t] = np.block([[self.B.Q, np.zeros(self.number_of_states, self.number_of_states)],
-                                      [np.zeros(self.number_of_states, self.number_of_states), self.B.R1]])
-        Q_enhanced[self.sim.t_predict] = np.block_diag([[self.B.Q, np.zeros(np.number_of_states)],
-                                                        [np.zeros(np.number_of_states), np.zeros(np.number_of_states)]])
-        Z = {self.sim.t_predict: Q_enhanced[self.sim.t_predict]}
+            Q_enhanced[t] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.B.number_of_available))],
+                                      [np.zeros((self.B.number_of_available, self.number_of_states)), self.B.gain[t].T @ self.B.R1 @ self.B.gain[t]]])
+        Q_enhanced[self.sim.t_predict] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
+                                                   [np.zeros((self.number_of_states, self.number_of_states)), np.zeros((self.number_of_states, self.number_of_states))]])
+        self.trajectory.cost.predicted_matrix = {self.sim.t_predict: Q_enhanced[self.sim.t_predict]}
 
         self.trajectory.cost.control = 0
         for t in range(self.sim.t_predict-1, -1, -1):
-            self.trajectory.cost.control += np.trace(Z[t+1] @ W_enhanced[t])
-            Z[t] = A_enhanced_mat[t].T @ Z[t+1] @ A_enhanced_mat[t]
+            self.trajectory.cost.control += np.trace(self.trajectory.cost.predicted_matrix[t+1] @ W_enhanced[t])
+            self.trajectory.cost.predicted_matrix[t] = A_enhanced_mat[t].T @ self.trajectory.cost.predicted_matrix[t+1] @ A_enhanced_mat[t]
 
+        if self.trajectory.cost.metric_control == 1:
+            x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[-1], (1, 2)))
+            self.trajectory.cost.control += (x_estimate_stack.T @ self.trajectory.cost.predicted_matrix[0] @ x_estimate_stack)
+        elif self.trajectory.cost.metric_control == 2:
+            self.trajectory.cost.control += np.max(np.linalg.eigvals(self.trajectory.cost.predicted_matrix[0]))
+        else:
+            raise Exception('Check control cost metric')
 
+    def prediction_cost_wrapper(self, arch=None, gain_update_check=True):
+        if gain_update_check:
+            arch = self.architecture_iterator(arch)
+            for a in arch:
+                if a == 'B':
+                    self.prediction_control_gain()
+                else:  # a == 'C'
+                    self.prediction_estimation_gain()
 
+        self.prediction_cost_calculation()
+        self.architecture_running_costs()
+        self.architecture_switching_costs()
+        self.trajectory.cost.predicted.append(self.trajectory.cost.control + self.trajectory.cost.running + self.trajectory.cost.switching)
 
+    def prediction_cost_for_architecture_change(self, architecture_change):
+        gain_update_check = True
+        if architecture_change == [None, None, None]:
+            gain_update_check = False
+        elif architecture_change[0] == 'B':
+            if architecture_change[2] == '+':
+                self.B.active_set.append(architecture_change[1])
+                self.B.active_set = list(np.sort(np.array(self.B.active_set)))
+            elif architecture_change[2] == '-':
+                self.B.active_set.remove(architecture_change[1])
+            else:
+                raise Exception('Check architecture change parameters')
+            self.architecture_update_wrapper_from_active_set('B')
+        elif architecture_change[0] == 'C':
+            if architecture_change[2] == '+':
+                self.C.active_set.append(architecture_change[1])
+                self.C.active_set = list(np.sort(np.array(self.C.active_set)))
+            elif architecture_change[2] == '-':
+                self.C.active_set.remove(architecture_change[1])
+            else:
+                raise Exception('Check architecture change')
+            self.architecture_update_wrapper_from_active_set('C')
+        else:
+            print(architecture_change)
+            raise Exception('Check architecture change')
+        # self.prediction_cost_wrapper(architecture_change[0], gain_update_check)
+        self.prediction_cost_wrapper()
+        return_val = [self.trajectory.cost.predicted[-1]] + list(architecture_change)
+        return return_val
 
+    def available_selection_choices(self):
+        if len(self.B.active_set) >= self.B.min and len(self.C.active_set) >= self.C.min:
+            choices = [[None, None, None]]
+        else:
+            choices = []
+        if len(self.B.active_set) < self.B.max:
+            for i in compare_lists(self.B.active_set, self.B.available_indices)['only2']:
+                choices.append(['B', i, '+'])
+        if len(self.C.active_set) < self.C.max:
+            for i in compare_lists(self.C.active_set, self.C.available_indices)['only2']:
+                choices.append(['C', i, '+'])
+        return choices
 
+    def available_rejection_choices(self):
+        if len(self.B.active_set) <= self.B.max and len(self.C.active_set) <= self.C.max:
+            choices = [[None, None, None]]
+        else:
+            choices = []
+        if len(self.B.active_set) > self.B.min:
+            for i in self.B.active_set:
+                choices.append(['B', i, '-'])
+        if len(self.C.active_set) > self.C.min:
+            for i in self.C.active_set:
+                choices.append(['C', i, '-'])
+        return choices
 
 
 def coin_toss():
@@ -750,3 +821,220 @@ def coin_toss():
 
 def compare_lists(list1, list2):
     return {'only1': [k for k in list1 if k not in list2], 'only2': [k for k in list2 if k not in list1], 'both': [k for k in list1 if k in list2]}
+
+
+def cost_eval_mapper(S, choices, multiprocess_check=True):
+    if multiprocess_check:
+        with Pool(processes=os.cpu_count()-4) as P:
+            prediction_costs = list(P.map(S.prediction_cost_for_architecture_change, choices))
+    else:
+        prediction_costs = list(map(S.prediction_cost_for_architecture_change, choices))
+    return prediction_costs
+
+
+def greedy_selection(S, number_of_changes_limit=None, multiprocess_check=True, print_check=False, t_start=time.time()):
+    if not isinstance(S, System):
+        raise ClassError
+    work_sys = dc(S)
+    if print_check:
+        print('Initial architecture')
+        work_sys.architecture_display()
+    number_of_changes = 0
+    number_of_choices = 0
+    selection_check = True
+    while selection_check:
+        work_iteration = dc(work_sys)
+        choices = work_iteration.available_selection_choices()
+        if print_check:
+            print('Choices:', choices)
+        if len(choices) == 0 or (len(choices) == 1 and choices[0] == (None, None, None)):
+            print('Selection exit 1')
+            selection_check = False
+            if print_check:
+                print('No more valuable selections')
+        else:
+            number_of_choices += len(choices)
+            iterations = cost_eval_mapper(work_iteration, choices, multiprocess_check=multiprocess_check)
+            iteration_costs = np.array([k[0] for k in iterations])
+            if print_check:
+                print('Iteration costs:', iteration_costs)
+            idx = np.argmin(iteration_costs)
+            if print_check:
+                print('Min change:', iterations[idx])
+            if iterations[idx][1:] == [None, None, None]:
+                selection_check = False
+                print('Selection exit 2')
+            else:
+                number_of_changes += 1
+                work_sys.prediction_cost_for_architecture_change(iterations[idx][1:])
+                print(work_sys.trajectory.cost.predicted)
+                print(work_sys.trajectory.cost.running)
+                print(work_sys.trajectory.cost.switching)
+                print(work_sys.trajectory.cost.control)
+                if print_check:
+                    work_sys.architecture_display()
+                if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
+                    selection_check = False
+                    print('Selection exit 3')
+    return_sys = dc(S)
+    return_sys.architecture_duplicate(work_sys)
+    return_sys.prediction_cost_wrapper()
+    return_sys.trajectory.computation_time.append(time.time() - t_start)
+    return_sys.trajectory.number_of_choices.append(number_of_choices)
+    if print_check:
+        print('Final architecture')
+        return_sys.architecture_display()
+        print('Computation time: ', return_sys.trajectory.computation_time[-1])
+    return return_sys
+
+
+def greedy_rejection(S, number_of_changes_limit=None, multiprocess_check=True, print_check=False, t_start=time.time()):
+    if not isinstance(S, System):
+        raise ClassError
+    work_sys = dc(S)
+    if print_check:
+        print('Initial architecture')
+        work_sys.architecture_display()
+    number_of_changes = 0
+    number_of_choices = 0
+    rejection_check = True
+    while rejection_check:
+        work_iteration = dc(work_sys)
+        choices = work_iteration.available_rejection_choices()
+        if print_check:
+            print('Choices:', choices)
+        if len(choices) == 0 or (len(choices) == 1 and choices[0] == (None, None, None)):
+            rejection_check = False
+            print('Rejection exit 1')
+            if print_check:
+                print('No more valuable rejections')
+        else:
+            number_of_choices += len(choices)
+            iterations = cost_eval_mapper(work_iteration, choices, multiprocess_check=multiprocess_check)
+            iteration_costs = np.array([k[0] for k in iterations])
+            if print_check:
+                print('Iteration costs:', iteration_costs)
+            idx = np.argmin(iteration_costs)
+            if print_check:
+                print('Min cost:', iteration_costs[idx])
+            if iterations[idx][1:] == [None, None, None]:
+                rejection_check = False
+                print('Rejection exit 2')
+            else:
+                number_of_changes += 1
+                work_sys.prediction_cost_for_architecture_change(iterations[idx][1:])
+                if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
+                    rejection_check = False
+                    print('Rejection exit 3')
+    return_sys = dc(S)
+    return_sys.architecture_duplicate(work_sys)
+    return_sys.prediction_cost_wrapper()
+    return_sys.trajectory.computation_time.append(time.time() - t_start)
+    return_sys.trajectory.number_of_choices.append(number_of_choices)
+    if print_check:
+        print('Final architecture')
+        return_sys.architecture_display()
+        print('Computation time: ', return_sys.trajectory.computation_time[-1])
+    return return_sys
+
+
+def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_iteration=1, multiprocess_check=True, print_check=False, t_start=time.time()):
+    if not isinstance(S, System):
+        raise ClassError
+    work_sys = dc(S)
+    if print_check:
+        print('Initial architecture')
+        work_sys.architecture_display()
+    number_of_changes = 0
+    number_of_choices = 0
+    simultaneous_check = True
+    while simultaneous_check:
+        work_iteration = dc(work_sys)
+        cost_iteration = []
+
+        # Selection
+        if print_check:
+            print('Selection')
+        selection_result = greedy_selection(work_iteration, number_of_changes_limit=number_of_changes_per_iteration, multiprocess_check=multiprocess_check, print_check=print_check)
+        cost_iteration.append(selection_result.trajectory.cost.predicted[-1])
+        print(cost_iteration)
+        number_of_choices += selection_result.trajectory.number_of_choices[-1]
+        if print_check:
+            selection_result.architecture_display()
+
+        # Rejection
+        if print_check:
+            print('Rejection')
+        rejection_result = greedy_rejection(work_iteration, number_of_changes_limit=number_of_changes_per_iteration, multiprocess_check=multiprocess_check, print_check=print_check)
+        cost_iteration.append(rejection_result.trajectory.cost.predicted[-1])
+        print(cost_iteration)
+        number_of_choices += rejection_result.trajectory.number_of_choices[-1]
+        if print_check:
+            rejection_result.architecture_display()
+
+        # Swap
+        if print_check:
+            print('Swap')
+        swap_force_select = dc(work_iteration)
+        swap_limit_mod = 1 if number_of_changes_per_iteration is None else number_of_changes_per_iteration
+        if number_of_changes_limit is not None:
+            swap_force_select.architecture_limit_mod(min_mod=swap_limit_mod, max_mod=swap_limit_mod)
+        swap_selection_result = greedy_selection(swap_force_select, number_of_changes_limit=2*swap_limit_mod, multiprocess_check=multiprocess_check, print_check=print_check)
+        number_of_choices += swap_selection_result.trajectory.number_of_choices[-1]
+        if print_check:
+            print('Swap force select')
+            swap_selection_result.architecture_display()
+        swap_force_reject = swap_selection_result
+        if number_of_changes_limit is not None:
+            swap_force_reject.architecture_limit_mod(min_mod=-swap_limit_mod, max_mod=-swap_limit_mod)
+        swap_result = greedy_rejection(swap_force_reject, number_of_changes_limit=swap_limit_mod, multiprocess_check=multiprocess_check, print_check=print_check)
+        cost_iteration.append(swap_result.trajectory.cost.predicted[-1])
+        print(cost_iteration)
+        number_of_choices += swap_result.trajectory.number_of_choices[-1]
+        if print_check:
+            print('Swap force reject')
+            swap_result.architecture_display()
+            print('Cost at iteration:', cost_iteration)
+
+        idx = np.argmin(np.array(cost_iteration))
+        if idx == 0:
+            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, selection_result)
+        elif idx == 1:
+            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, rejection_result)
+        elif idx == 2:
+            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, swap_result)
+        else:
+            raise Exception('Check index of min cost')
+        if simultaneous_check:
+            number_of_changes += 1
+            if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
+                simultaneous_check = False
+
+        work_sys.architecture_display()
+        simultaneous_check = False
+
+    # return_sys = dc(S)
+    # return_sys.architecture_duplicate(work_sys)
+    # return_sys.prediction_cost_wrapper()
+    # return_sys.trajectory.computation_time.append(time.time() - t_start)
+    # return_sys.trajectory.number_of_choices.append(number_of_choices)
+    # if print_check:
+    #     print('Final architecture')
+    #     return_sys.architecture_display()
+    #     print('Computation time: ', return_sys.trajectory.computation_time[-1])
+    # return return_sys
+
+
+def arch_update_or_terminate(S, S_ref):
+    update_check = True
+    if S.architecture_compare(S_ref):
+        update_check = False
+    else:
+        S.architecture_duplicate(S_ref)
+        S.prediction_cost_wrapper()
+    return update_check, S
+
+
+
+
+

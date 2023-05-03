@@ -1,22 +1,27 @@
 import numpy as np
+import time
 import functionfile_speedygreedy as ff
 
 
 if __name__ == "__main__":
+    print('Code run start')
 
     exp = ff.Experiment()
 
     # exp.initialize_table()
 
-    S = ff.initialize_system_from_experiment_number(2)
+    S = ff.initialize_system_from_experiment_number(4)
 
-    print(S.A.open_loop_eig_vals)
+    S = ff.greedy_selection(S, print_check=True)
+    print(S.trajectory.cost.predicted)
+    print(S.trajectory.cost.running)
+    print(S.trajectory.cost.switching)
+    print(S.trajectory.cost.control)
 
-    S.prediction_control_gain()
-    S.prediction_estimation_gain()
+    # S = ff.greedy_rejection(S, print_check=True)
+    # print(S.trajectory.computation_time)
 
-    print(len(S.B.recursion_matrix))
-    print(len(S.C.recursion_matrix))
+    # ff.greedy_simultaneous(S, number_of_changes_limit=1, number_of_changes_per_iteration=1, print_check=True)
+    # ff.greedy_simultaneous(S, number_of_changes_limit=1, number_of_changes_per_iteration=1, print_check=True)
 
-
-    print('Code done')
+    print('Code run done')
