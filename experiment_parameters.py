@@ -12,16 +12,23 @@ if __name__ == "__main__":
 
     S = ff.initialize_system_from_experiment_number(4)
 
-    S = ff.greedy_selection(S, print_check=True)
-    print(S.trajectory.cost.predicted)
-    print(S.trajectory.cost.running)
-    print(S.trajectory.cost.switching)
-    print(S.trajectory.cost.control)
+    # print(S.B.min)
+    # print(S.B.max)
+    # print(S.C.min)
+    # print(S.C.max)
+    #
+    # S.architecture_limit_mod()
+    #
+    # print(S.B.min)
+    # print(S.B.max)
+    # print(S.C.min)
+    # print(S.C.max)
 
-    # S = ff.greedy_rejection(S, print_check=True)
-    # print(S.trajectory.computation_time)
+    # S = ff.greedy_selection(S, print_check=True, multiprocess_check=True)
+    # S = ff.greedy_rejection(S, print_check=True, multiprocess_check=True)
 
-    # ff.greedy_simultaneous(S, number_of_changes_limit=1, number_of_changes_per_iteration=1, print_check=True)
-    # ff.greedy_simultaneous(S, number_of_changes_limit=1, number_of_changes_per_iteration=1, print_check=True)
+    S = ff.greedy_simultaneous(S, print_check=True)
+
+    S.cost_display_stage_components()
 
     print('Code run done')

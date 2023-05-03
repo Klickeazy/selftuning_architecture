@@ -41,7 +41,7 @@ if socket.gethostname() == 'melap257805':
 else:
     datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
 
-image_save_folder_path = 'Images/'
+image_save_folder_path = '../Images/'
 
 
 class ArchitectureError(Exception):
