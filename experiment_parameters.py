@@ -10,7 +10,9 @@ if __name__ == "__main__":
 
     # exp.initialize_table()
 
-    S = ff.initialize_system_from_experiment_number(4)
+    S = ff.initialize_system_from_experiment_number(6)
+    print(S.model_name)
+    print('OL modes:', S.A.open_loop_eig_vals)
 
     # print(S.B.min)
     # print(S.B.max)
@@ -27,7 +29,10 @@ if __name__ == "__main__":
     # S = ff.greedy_selection(S, print_check=True, multiprocess_check=True)
     # S = ff.greedy_rejection(S, print_check=True, multiprocess_check=True)
 
-    S = ff.greedy_simultaneous(S, print_check=True)
+    S.architecture_display_active_set()
+    S = ff.greedy_simultaneous(S, print_check=True, swap_only=False)
+    print(S.trajectory.computation_time)
+    S.architecture_display_active_set()
 
     S.cost_display_stage_components()
 

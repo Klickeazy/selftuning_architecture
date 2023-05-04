@@ -433,6 +433,7 @@ class System:
 
                 if self.A.network_model == 'eval_squeeze':
                     e = 2 * self.A.network_parameter * (0.5 - np.random.default_rng().random(self.number_of_nodes))
+                    e = [1+k if coin_toss() else 1-k for k in e]
                 elif self.A.network_model == 'eval_bound':
                     e = 1 - self.A.network_parameter * np.random.default_rng().random(self.number_of_nodes)
                 else:
@@ -822,7 +823,7 @@ class System:
 
 
 def coin_toss():
-    return np.random.default_rng().random() > 0
+    return np.random.default_rng().random() > 0.5
 
 
 def compare_lists(list1, list2):
