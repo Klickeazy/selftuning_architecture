@@ -177,7 +177,7 @@ def test_all_experiments():
     Exp = Experiment()
     print('Experiments No_s:', [k for k in Exp.experiments_list])
     for i in tqdm(Exp.experiments_list):
-        S_test = initialize_system_from_experiment_number(i)
+        _ = initialize_system_from_experiment_number(i)
     print('Testing done')
 
 
@@ -211,13 +211,13 @@ class System:
             self.A_mat = np.zeros((0, 0))           # Open-loop dynamics matrix
 
     class Architecture:
-        def __init__(self, architecture_type):
+        def __init__(self):
             # Parameters assigned from function file
-            self.second_order_architecture_type = 0 # Type of second-order architecture - which states do it control or estimate
-            self.min = 1                            # Minimum architecture bounds
-            self.max = 1                            # Maximum architecture bounds
-            self.R2 = 0                             # Cost on running architecture
-            self.R3 = 0                             # Cost on switching architecture
+            self.second_order_architecture_type = 0  # Type of second-order architecture - which states do it control or estimate
+            self.min = 1                             # Minimum architecture bounds
+            self.max = 1                             # Maximum architecture bounds
+            self.R2 = 0                              # Cost on running architecture
+            self.R3 = 0                              # Cost on switching architecture
 
             # Calculated terms
             self.available_indices = []             # Indices of available architecture
@@ -246,8 +246,8 @@ class System:
             self.disturbance_magnitude = 0          # Scaling factor of un-modelled disturbances
 
             # Calculated terms
-            self.W = np.zeros((0,0))                # Process noise covariance
-            self.V = np.zeros((0,0))                # Measurement noise covariance
+            self.W = np.zeros((0, 0))                # Process noise covariance
+            self.V = np.zeros((0, 0))                # Measurement noise covariance
             self.w_gen = 0                          # Realization of process noise
             self.v_gen = 0                          # Realization of measurement noise
 
@@ -302,8 +302,8 @@ class System:
         self.number_of_nodes = 20                   # Number of nodes in the network
         self.number_of_states = 20                  # Number of state in the network (affected by second_order dynamics)
         self.A = self.Dynamics()
-        self.B = self.Architecture('B')
-        self.C = self.Architecture('C')
+        self.B = self.Architecture()
+        self.C = self.Architecture()
         self.disturbance = self.Disturbance()
         self.sim = self.Simulation()
         self.trajectory = self.Trajectory()
@@ -954,7 +954,7 @@ def greedy_rejection(S, number_of_changes_limit=None, multiprocess_check=True, p
     return return_sys
 
 
-def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_iteration=1, multiprocess_check=True, print_check=False, print_check_inner=False, t_start=time.time()):
+def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_iteration=1, multiprocess_check=True, print_check=False, print_check_inner=False, t_start=time.time(), swap_only=True):
     if not isinstance(S, System):
         raise ClassError
     work_sys = dc(S)
@@ -971,24 +971,6 @@ def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_i
             work_sys.architecture_display_active_set()
         work_iteration = dc(work_sys)
         cost_iteration = []
-
-        # Selection
-        selection_result = greedy_selection(work_iteration, number_of_changes_limit=number_of_changes_per_iteration, multiprocess_check=multiprocess_check, print_check=print_check_inner)
-        cost_iteration.append(selection_result.trajectory.cost.predicted[-1])
-        number_of_choices += selection_result.trajectory.number_of_choices[-1]
-        if print_check:
-            print('\nSelection')
-            selection_result.architecture_display_active_set()
-            selection_result.cost_display_stage_components()
-
-        # Rejection
-        rejection_result = greedy_rejection(work_iteration, number_of_changes_limit=number_of_changes_per_iteration, multiprocess_check=multiprocess_check, print_check=print_check_inner)
-        cost_iteration.append(rejection_result.trajectory.cost.predicted[-1])
-        number_of_choices += rejection_result.trajectory.number_of_choices[-1]
-        if print_check:
-            print('\nRejection')
-            rejection_result.architecture_display_active_set()
-            rejection_result.cost_display_stage_components()
 
         # Swap
         if print_check:
@@ -1012,17 +994,42 @@ def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_i
             swap_result.architecture_display_active_set()
             swap_result.cost_display_stage_components()
 
+        if not swap_only:
+            # Selection
+            selection_result = greedy_selection(work_iteration, number_of_changes_limit=number_of_changes_per_iteration,
+                                                multiprocess_check=multiprocess_check, print_check=print_check_inner)
+            cost_iteration.append(selection_result.trajectory.cost.predicted[-1])
+            number_of_choices += selection_result.trajectory.number_of_choices[-1]
+            if print_check:
+                print('\nSelection')
+                selection_result.architecture_display_active_set()
+                selection_result.cost_display_stage_components()
+
+            # Rejection
+            rejection_result = greedy_rejection(work_iteration, number_of_changes_limit=number_of_changes_per_iteration,
+                                                multiprocess_check=multiprocess_check, print_check=print_check_inner)
+            cost_iteration.append(rejection_result.trajectory.cost.predicted[-1])
+            number_of_choices += rejection_result.trajectory.number_of_choices[-1]
+            if print_check:
+                print('\nRejection')
+                rejection_result.architecture_display_active_set()
+                rejection_result.cost_display_stage_components()
+
+        else:
+            selection_result = None
+            rejection_result = None
+
         if print_check:
             print('\nCosts at iteration:', cost_iteration)
         idx = np.argmin(np.array(cost_iteration))
         if idx == 0:
-            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, selection_result)
-        elif idx == 1:
-            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, rejection_result)
-        elif idx == 2:
             simultaneous_check, work_sys = arch_update_or_terminate(work_sys, swap_result)
+        elif idx == 1 and not swap_only:
+            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, selection_result)
+        elif idx == 2 and not swap_only:
+            simultaneous_check, work_sys = arch_update_or_terminate(work_sys, rejection_result)
         else:
-            raise Exception('Check index of min cost')
+            raise Exception('Check index of min cost or swap parameters')
         if simultaneous_check:
             number_of_changes += 1
             if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
@@ -1055,8 +1062,3 @@ def arch_update_or_terminate(S, S_ref):
         S.architecture_update_all_from_active_set()
         S.cost_prediction_wrapper()
     return update_check, S
-
-
-
-
-
