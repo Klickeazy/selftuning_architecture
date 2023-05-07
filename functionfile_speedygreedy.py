@@ -209,6 +209,7 @@ class System:
             self.adjacency_matrix = 0               # Adjacency matrix
             self.number_of_non_stable_modes = 0     # Number of unstable modes with magnitude >= 1
             self.A_mat = np.zeros((0, 0))           # Open-loop dynamics matrix
+            self.A_enhanced_mat = np.zeros((0, 0))  # Open-loop enhanced dynamics matrix for current t
 
     class Architecture:
         def __init__(self):
@@ -246,10 +247,10 @@ class System:
             self.disturbance_magnitude = 0          # Scaling factor of un-modelled disturbances
 
             # Calculated terms
-            self.W = np.zeros((0, 0))                # Process noise covariance
-            self.V = np.zeros((0, 0))                # Measurement noise covariance
-            self.w_gen = 0                          # Realization of process noise
-            self.v_gen = 0                          # Realization of measurement noise
+            self.W = np.zeros((0, 0))                   # Process noise covariance
+            self.V = np.zeros((0, 0))                   # Measurement noise covariance
+            self.w_gen = np.zeros((0, 0))               # Realization of process noise
+            self.v_gen = np.zeros((0, 0))               # Realization of measurement noise
 
     class Simulation:
         def __init__(self):
@@ -721,12 +722,15 @@ class System:
         Q_enhanced[self.sim.t_predict] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
                                                    [np.zeros((self.number_of_states, self.number_of_states)), np.zeros((self.number_of_states, self.number_of_states))]])
 
+        self.A.A_enhanced_mat = A_enhanced_mat[0]
+
         self.trajectory.cost.predicted_matrix = {self.sim.t_predict: Q_enhanced[self.sim.t_predict]}
         self.trajectory.cost.control = 0
 
         for t in range(self.sim.t_predict-1, -1, -1):
             self.trajectory.cost.control += np.trace(self.trajectory.cost.predicted_matrix[t+1] @ W_enhanced[t])
             self.trajectory.cost.predicted_matrix[t] = A_enhanced_mat[t].T @ self.trajectory.cost.predicted_matrix[t+1] @ A_enhanced_mat[t]
+
         if self.trajectory.cost.metric_control == 1:
             x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[-1], (1, 2)))
             self.trajectory.cost.control += (x_estimate_stack.T @ self.trajectory.cost.predicted_matrix[0] @ x_estimate_stack)
@@ -735,14 +739,34 @@ class System:
         else:
             raise Exception('Check control cost metric')
 
-    def cost_prediction_wrapper(self, arch=None, gain_update_check=True):
+    def cost_true(self):
+        Q_mat = np.block([[self.B.Q, np.zeros((self.number_of_nodes, self.number_of_nodes))],
+                          [np.zeros((self.number_of_nodes, self.number_of_nodes)), self.B.gain[0].T @ self.B.R1 @ self.B.gain[0]]])
+
+        if self.trajectory.cost.metric_control == 1:
+            x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[-1], (1, 2)))
+            self.trajectory.cost.control += (x_estimate_stack.T @ Q_mat @ x_estimate_stack)
+        elif self.trajectory.cost.metric_control == 2:
+            self.trajectory.cost.control += np.max(np.linalg.eigvals(self.trajectory.cost.predicted_matrix[0]))
+        else:
+            raise Exception('Check control cost metric')
+
+
+    def cost_prediction_wrapper(self, arch=None, gain_update_check=True, update_trajectory_check=False):
         if gain_update_check:
-            self.prediction_gains(arch)
+            self.prediction_gains(arch, update_trajectory_check)
 
         self.cost_prediction()
         self.cost_architecture_running()
         self.cost_architecture_switching()
         self.trajectory.cost.predicted.append(self.trajectory.cost.control + self.trajectory.cost.running + self.trajectory.cost.switching)
+
+    def cost_true_wrapper(self):
+        self.cost_prediction()
+        self.cost_architecture_running()
+        self.cost_architecture_switching()
+        self.trajectory.cost.true.append(self.trajectory.cost.control + self.trajectory.cost.running )
+
 
     def cost_display_stage_components(self):
         print('Running:', self.trajectory.cost.running)
@@ -811,6 +835,19 @@ class System:
     def cost_prediction_over_possible_architecture_changes(self, architecture_change_parameters):
         S_temp = dc(self)
         return S_temp.cost_prediction_for_architecture_change(architecture_change_parameters)
+
+    def simulate_one_step_update(self, t_step, S_prev):
+        self.architecture_duplicate_active_set_from_system(S_prev, update_check=True)
+        self.cost_prediction_wrapper(gain_update_check=True, update_trajectory_check=True)
+
+        self.trajectory.X_enhanced.append((self.A.A_enhanced_mat[0] @ self.trajectory.X_enhanced[-1]) +
+                                          (np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_nodes, len(self.C.active_set)))],
+                                                    [np.zeros((self.number_of_states, self.number_of_nodes)), self.A.A_mat @ self.C.gain[0]]]) @
+                                          np.squeeze(np.concat(self.disturbance.w_gen[:, t_step], self.disturbance.v_gen[self.C.active_set, t_step]))))
+
+        self.trajectory.x.append(self.trajectory.X_enhanced[:self.number_of_states, -1])
+        self.trajectory.x_estimate.append(self.trajectory.X_enhanced[self.number_of_states:, -1])
+        self.trajectory.error_2norm.append(np.linalg.norm(self.trajectory.x_estimate[-1]))
 
     def visualizer_network_matrix(self):
         A_mat = self.A.A_mat > 0
@@ -1054,6 +1091,18 @@ def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_i
     return return_sys
 
 
+def optimize_initial_architecture(S, print_check=False):
+    if not isinstance(S, System):
+        raise ClassError
+
+    if print_check:
+        print('Optimizing design-time fixed architecture')
+    S_opt = dc(S)
+    S_opt = greedy_simultaneous(S_opt)
+    S.architecture_duplicate_active_set_from_system(S_opt, update_check=True)
+    return S
+
+
 def arch_update_or_terminate(S, S_ref):
     update_check = True
     if S.architecture_compare_active_set_to_system(S_ref):
@@ -1063,3 +1112,18 @@ def arch_update_or_terminate(S, S_ref):
         S.architecture_update_all_from_active_set()
         S.cost_prediction_wrapper()
     return update_check, S
+
+
+def simulate_fixed_architecture(S, print_check=False, optimize_fixed_architecture=True, multiprocess_check=True):
+    if not isinstance(S, System):
+        raise ClassError
+
+    if optimize_fixed_architecture:
+        S = optimize_initial_architecture(S, print_check=print_check)
+
+    if print_check:
+        print('Simulating Fixed Architecture')
+    for t in tqdm(range(0, S.sim.t_simulate), ncols=100):
+        S.cost_true()
+        S.simulate_one_step_update()
+    return S

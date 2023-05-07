@@ -14,6 +14,9 @@ if __name__ == "__main__":
     print(S.model_name)
     print('OL modes:', S.A.open_loop_eig_vals)
 
+    S.prediction_estimation_gain()
+    print(np.shape(S.C.gain[0]))
+
     # print(S.B.min)
     # print(S.B.max)
     # print(S.C.min)
@@ -29,11 +32,11 @@ if __name__ == "__main__":
     # S = ff.greedy_selection(S, print_check=True, multiprocess_check=True)
     # S = ff.greedy_rejection(S, print_check=True, multiprocess_check=True)
 
-    S.architecture_display_active_set()
-    S = ff.greedy_simultaneous(S, print_check=True, swap_only=False)
-    print(S.trajectory.computation_time)
-    S.architecture_display_active_set()
-
-    S.cost_display_stage_components()
+    # S.architecture_display_active_set()
+    # S = ff.greedy_simultaneous(S, print_check=True, swap_only=False)
+    # print(S.trajectory.computation_time)
+    # S.architecture_display_active_set()
+    #
+    # S.cost_display_stage_components()
 
     print('Code run done')
