@@ -1013,11 +1013,9 @@ def greedy_simultaneous(sys, iterations=None, changes_per_iteration=1, fixed_set
         sys_swap.architecture_limit_modifier(min_mod=changes_per_iteration, max_mod=changes_per_iteration)
         sys_swap = greedy_architecture_selection(sys_swap, number_of_changes=changes_per_iteration*2, policy=policy, t_start=t_start, no_select=False, print_check=print_check, design_cost=design_cost)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
-        # print('1:', sys_swap.trajectory['cost']['predicted'][-1])
         sys_swap.architecture_limit_modifier(min_mod=-changes_per_iteration, max_mod=-changes_per_iteration)
         sys_swap = greedy_architecture_rejection(sys_swap, number_of_changes=changes_per_iteration*2, policy=policy, t_start=t_start, print_check=print_check, design_cost=design_cost)['work_set']
         sys_swap.cost_wrapper_enhanced_prediction()
-        # print('2:', sys_swap.trajectory['cost']['predicted'][-1])
         iteration_cases.append(sys_swap)
         if not design_cost:
             values.append(iteration_cases[-1].trajectory['cost']['predicted'][-1])

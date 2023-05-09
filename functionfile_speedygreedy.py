@@ -259,10 +259,11 @@ class System:
             self.test_model = None                  # Simulation model of actuators
 
             # Constant parameters
-            self.t_simulate = int(100)              # Simulation time horizon
+            self.t_simulate = int(50)              # Simulation time horizon
             self.plot_parameters = {'fixed': {'c': 'tab:blue', 'ls': 'dotted'},
                                     'tuning': {'c': 'tab:orange', 'ls': 'solid'}}
             self.network_matrix = np.zeros((0, 0))
+            self.network_plot_parameters = {}
 
     class Trajectory:
         def __init__(self):
@@ -311,7 +312,7 @@ class System:
 
         self.model_name = ''
 
-    def model_namer(self):
+    def model_namer(self, name_extension=None):
         self.model_name = 'model_n' + str(int(self.number_of_nodes)) + '_net' + self.A.network_model
 
         if self.A.rho is None:
@@ -329,6 +330,9 @@ class System:
 
         if self.sim.test_model is not None:
             self.model_name = self.model_name + '_' + self.sim.test_model
+
+        if name_extension is not None:
+            self.model_name = self.model_name + '_' + name_extension
 
     def initialize_system_from_experiment_parameters(self, experiment_parameters, experiment_keys):
 
@@ -352,7 +356,9 @@ class System:
         self.rescale_wrapper()
 
         self.sim.t_predict = parameters['prediction_time_horizon']
-        self.sim.test_model = 'simulation_model'
+
+        parameters['simulation_model'] = None if parameters['simulation_model'] == 'None' else parameters['simulation_model']
+        parameters['disturbance_model'] = None if parameters['disturbance_model'] == 'None' else parameters['disturbance_model']
 
         self.disturbance.W_scaling = parameters['W_scaling']
         self.disturbance.V_scaling = parameters['V_scaling']
@@ -564,17 +570,17 @@ class System:
     def initialize_trajectory(self):
         self.trajectory.X0_covariance = np.identity(self.number_of_states) * self.trajectory.X0_scaling
 
-        self.trajectory.x = [np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)]
+        self.trajectory.x = np.array([np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)])
 
-        self.trajectory.x_estimate = [np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)]
+        self.trajectory.x_estimate = np.array([np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)])
 
-        self.trajectory.X_enhanced = [np.squeeze(np.concatenate((self.trajectory.x[-1], self.trajectory.x_estimate[-1])))]
+        self.trajectory.X_enhanced = np.array([np.squeeze(np.concatenate((self.trajectory.x[-1], self.trajectory.x_estimate[-1])))])
 
         self.trajectory.control_matrix = []
         self.trajectory.estimation_matrix = [np.identity(self.number_of_states)]
 
-        self.trajectory.error = [self.trajectory.x[-1] - self.trajectory.x_estimate[-1]]
-        self.trajectory.error_2norm = [np.linalg.norm(self.trajectory.error[-1])]
+        self.trajectory.error = np.array([self.trajectory.x[-1] - self.trajectory.x_estimate[-1]])
+        self.trajectory.error_2norm = np.array([np.linalg.norm(self.trajectory.error[-1])])
 
     def architecture_limit_set(self, arch=None, min_set=None, max_set=None):
         arch = self.architecture_iterator(arch)
@@ -751,7 +757,6 @@ class System:
         else:
             raise Exception('Check control cost metric')
 
-
     def cost_prediction_wrapper(self, arch=None, gain_update_check=True, update_trajectory_check=False):
         if gain_update_check:
             self.prediction_gains(arch, update_trajectory_check)
@@ -761,12 +766,13 @@ class System:
         self.cost_architecture_switching()
         self.trajectory.cost.predicted.append(self.trajectory.cost.control + self.trajectory.cost.running + self.trajectory.cost.switching)
 
-    def cost_true_wrapper(self):
-        self.cost_prediction()
+    def cost_true_wrapper(self, arch=None, gain_update_check=True):
+        if gain_update_check:
+            self.prediction_gains(arch)
+        self.cost_true()
         self.cost_architecture_running()
         self.cost_architecture_switching()
         self.trajectory.cost.true.append(self.trajectory.cost.control + self.trajectory.cost.running )
-
 
     def cost_display_stage_components(self):
         print('Running:', self.trajectory.cost.running)
@@ -840,14 +846,16 @@ class System:
         self.architecture_duplicate_active_set_from_system(S_prev, update_check=True)
         self.cost_prediction_wrapper(gain_update_check=True, update_trajectory_check=True)
 
-        self.trajectory.X_enhanced.append((self.A.A_enhanced_mat[0] @ self.trajectory.X_enhanced[-1]) +
-                                          (np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_nodes, len(self.C.active_set)))],
-                                                    [np.zeros((self.number_of_states, self.number_of_nodes)), self.A.A_mat @ self.C.gain[0]]]) @
-                                          np.squeeze(np.concat(self.disturbance.w_gen[:, t_step], self.disturbance.v_gen[self.C.active_set, t_step]))))
+        # print('1:', np.shape(self.trajectory.X_enhanced))
 
-        self.trajectory.x.append(self.trajectory.X_enhanced[:self.number_of_states, -1])
-        self.trajectory.x_estimate.append(self.trajectory.X_enhanced[self.number_of_states:, -1])
-        self.trajectory.error_2norm.append(np.linalg.norm(self.trajectory.x_estimate[-1]))
+        self.trajectory.X_enhanced = np.append(self.trajectory.X_enhanced, [(self.A.A_enhanced_mat[0] @ self.trajectory.X_enhanced[-1, :]) +
+                                               (np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_nodes, len(self.C.active_set)))],
+                                                          [np.zeros((self.number_of_states, self.number_of_nodes)), self.A.A_mat @ self.C.gain[0]]]) @
+                                                np.squeeze(np.hstack((self.disturbance.w_gen[t_step, :], self.disturbance.v_gen[t_step, self.C.active_set]))))], axis=0)
+
+        self.trajectory.x = np.append(self.trajectory.x, [self.trajectory.X_enhanced[-1, :self.number_of_states]], axis=0)
+        self.trajectory.x_estimate = np.append(self.trajectory.x_estimate, [self.trajectory.X_enhanced[-1, self.number_of_states:]], axis=0)
+        self.trajectory.error_2norm = np.append(self.trajectory.error_2norm, [np.linalg.norm(self.trajectory.x_estimate[-1])], axis=0)
 
     def visualizer_network_matrix(self):
         A_mat = self.A.A_mat > 0
@@ -857,6 +865,49 @@ class System:
         self.sim.network_matrix = np.block([[A_mat, B_mat, C_mat.T],
                                             [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))), np.zeros((len(self.B.active_set), len(self.C.active_set)))],
                                             [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))), np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
+
+    def visualizer_architecture_at_t(self, time_step):
+        self.B.active_set = self.B.history_active_set[time_step]
+        self.C.active_set = self.C.history_active_set[time_step]
+        self.architecture_update_to_matrix_from_active_set()
+
+    def network_node_relabel(self, G):
+        node_labels = {}
+        color_map = []
+        node_color = {'node': 'C9', 'actuator': 'C1', 'sensor': 'C2'}
+        for i in range(0, self.number_of_nodes):
+            node_labels[i] = str(i + 1)
+            color_map.append(node_color['node'])
+        for i in range(0, len(self.B.active_set)):
+            node_labels[i + self.number_of_nodes] = "B" + str(i + 1)
+            color_map.append(node_color['actuator'])
+        for i in range(0, len(self.C.active_set)):
+            node_labels[i + self.number_of_nodes + len(self.B.active_set)] = "C" + str(i + 1)
+            color_map.append(node_color['sensor'])
+        netx.relabel_nodes(G, node_labels, copy=False)
+        return {'G': G, 'c_map': color_map}
+
+    def full_network_position(self):
+        S_full = dc(self)
+        S_full.B.active_set = self.B.available_indices
+        S_full.C.active_set = self.C.available_indices
+        S_full.architecture_update_to_matrix_from_active_set()
+        S_full.visualizer_network_matrix()
+
+        G_full = netx.from_numpy_array(S_full.sim.network_matrix)
+        G_R = S_full.network_node_relabel(G_full)
+        # G_full = G_R['G']
+
+        G_A = netx.from_numpy_array(S_full.A.A_mat)
+        G_A = S_full.network_node_relabel(G_A)['G']
+
+        core_circ_pos = netx.circular_layout(G_A)
+        # node_pos = netx.spring_layout(G_full, pos=core_circ_pos, fixed=[str(i+1) for i in range(0, S_full.number_of_nodes)])
+        # x = [node_pos[k][0] for k in node_pos]
+        # y = [node_pos[k][1] for k in node_pos]
+        self.sim.network_plot_parameters['node_pos'] = core_circ_pos
+        self.sim.network_plot_parameters['lim'] = {'x': [-1.5, 1.5],
+                                                   'y': [-1.5, 1.5]}
 
 
 def coin_toss():
@@ -1091,18 +1142,6 @@ def greedy_simultaneous(S, number_of_changes_limit=None, number_of_changes_per_i
     return return_sys
 
 
-def optimize_initial_architecture(S, print_check=False):
-    if not isinstance(S, System):
-        raise ClassError
-
-    if print_check:
-        print('Optimizing design-time fixed architecture')
-    S_opt = dc(S)
-    S_opt = greedy_simultaneous(S_opt)
-    S.architecture_duplicate_active_set_from_system(S_opt, update_check=True)
-    return S
-
-
 def arch_update_or_terminate(S, S_ref):
     update_check = True
     if S.architecture_compare_active_set_to_system(S_ref):
@@ -1114,16 +1153,121 @@ def arch_update_or_terminate(S, S_ref):
     return update_check, S
 
 
-def simulate_fixed_architecture(S, print_check=False, optimize_fixed_architecture=True, multiprocess_check=True):
+def optimize_initial_architecture(S, print_check=False, multiprocess_check=True):
     if not isinstance(S, System):
         raise ClassError
 
-    if optimize_fixed_architecture:
-        S = optimize_initial_architecture(S, print_check=print_check)
+    S_opt = dc(S)
+    S_opt.sim.t_predict *= 5
+    if print_check:
+        print('Optimizing design-time fixed architecture')
+        S_opt.architecture_display_active_set()
+
+    S_opt = greedy_simultaneous(S_opt, multiprocess_check=multiprocess_check, print_check=print_check)
+
+    if print_check:
+        print('Optimized architecture')
+        S_opt.architecture_display_active_set()
+
+    S.architecture_duplicate_active_set_from_system(S_opt, update_check=True)
+    return S
+
+
+def simulate_fixed_architecture(S_in, print_check=False):
+    if not isinstance(S_in, System):
+        raise ClassError
+
+    S = dc(S_in)
+    S.sim.t_predict *= 5
+    S.prediction_gains()
 
     if print_check:
         print('Simulating Fixed Architecture')
-    for t in tqdm(range(0, S.sim.t_simulate), ncols=100):
-        S.cost_true()
-        S.simulate_one_step_update()
+    for t in tqdm(range(0, S.sim.t_simulate-1), ncols=100):
+        S.cost_true_wrapper()
+        S.simulate_one_step_update(t, S)
+
+    S.model_namer('fixed')
     return S
+
+
+def simulate_self_tuning_architecture(S_in, number_of_changes_limit=None, print_check=False, multiprocess_check=True):
+    if not isinstance(S_in, System):
+        raise ClassError
+
+    S = dc(S_in)
+    if print_check:
+        print('Simulating Fixed Architecture')
+    for t in tqdm(range(0, 3), ncols=100):
+        S_opt = dc(S)
+        S_opt = greedy_simultaneous(S_opt, number_of_changes_limit=number_of_changes_limit, multiprocess_check=multiprocess_check, print_check=print_check)
+        S.architecture_duplicate_active_set_from_system(S_opt, update_check=True)
+        S.cost_true_wrapper()
+        S.simulate_one_step_update(t, S)
+
+    S.model_namer('tuning')
+    return S
+
+
+def data_to_memory_gen_model(S):
+    shelve_filename = datadump_folder_path + 'gen_' + S.model_name
+    print('\nShelving gen model: ', shelve_filename)
+    with shelve.open(shelve_filename, writeback=True) as shelve_data:
+        shelve_data['System'] = S
+
+
+def data_from_memory_gen_model(model):
+    shelve_filename = datadump_folder_path + 'gen_' + model
+    print('\nReading gen model: ', shelve_filename)
+    with shelve.open(shelve_filename, flag='r') as shelve_data:
+        S = shelve_data['System']
+    if not isinstance(S, System):
+        raise Exception('System model error')
+    return S
+
+
+def data_to_memory_sim_model(S, S_fixed, S_tuning):
+    shelve_filename = datadump_folder_path + 'sim_' + S.model_name
+    print('\nShelving sim model:', shelve_filename)
+    with shelve.open(shelve_filename, writeback=True) as shelve_data:
+        shelve_data['System'] = S
+        shelve_data['Fixed'] = S_fixed
+        shelve_data['SelfTuning'] = S_tuning
+
+
+def data_from_memory_sim_model(model):
+    shelve_filename = datadump_folder_path + 'sim_' + model
+    print('\nReading sim model: ', shelve_filename)
+    with shelve.open(shelve_filename, flag='r') as shelve_data:
+        S = shelve_data['System']
+        S_fixed = shelve_data['Fixed']
+        S_tuning = shelve_data['SelfTuning']
+    if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
+        raise Exception('Data type mismatch')
+    return S, S_fixed, S_tuning
+
+
+def data_to_memory_statistics(S, S_fixed, S_tuning, model_id, print_check=False):
+    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name
+    if not os.path.isdir(shelve_filename):
+        os.makedirs(shelve_filename)
+    shelve_filename = shelve_filename + '/model_' + str(model_id)
+    with shelve.open(shelve_filename, writeback=True) as shelve_data:
+        shelve_data['System'] = S
+        shelve_data['Fixed'] = S_fixed
+        shelve_data['SelfTuning'] = S_tuning
+    if print_check:
+        print('\nShelving model:', shelve_filename)
+
+
+def data_from_memory_statistics(model_type, model_id, print_check=False):
+    shelve_filename = datadump_folder_path + 'statistics/' + model_type + '/model_' + str(model_id)
+    with shelve.open(shelve_filename, flag='r') as shelve_data:
+        S = shelve_data['System']
+        S_fixed = shelve_data['Fixed']
+        S_tuning = shelve_data['SelfTuning']
+    if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
+        raise Exception('Data type mismatch')
+    if print_check:
+        print('\nModel read done: ', shelve_filename)
+    return S, S_fixed, S_tuning

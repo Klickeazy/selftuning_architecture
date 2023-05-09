@@ -2,41 +2,62 @@ import numpy as np
 import time
 import functionfile_speedygreedy as ff
 
+import matplotlib.pyplot as plt
+
 
 if __name__ == "__main__":
     print('Code run start')
 
-    exp = ff.Experiment()
+    exp_section = 3
+    exp_no = 7
+    multiprocess_check = False
 
-    # exp.initialize_table()
+    if exp_section == 1:
+        exp = ff.Experiment()
+        S = ff.initialize_system_from_experiment_number(exp_no)
+        S = ff.optimize_initial_architecture(S, print_check=True)
+        ff.data_to_memory_gen_model(S)
 
-    S = ff.initialize_system_from_experiment_number(6)
-    print(S.model_name)
-    print('OL modes:', S.A.open_loop_eig_vals)
+    elif exp_section == 2:
+        exp = ff.Experiment()
+        S = ff.initialize_system_from_experiment_number(exp_no)
+        S = ff.data_from_memory_gen_model(S.model_name)
+        print(S.A.open_loop_eig_vals)
+        S_fix = ff.simulate_fixed_architecture(S, print_check=True)
+        S_tune = ff.simulate_self_tuning_architecture(S, number_of_changes_limit=None, print_check=True, multiprocess_check=multiprocess_check)
+        ff.data_to_memory_sim_model(S, S_fix, S_tune)
 
-    S.prediction_estimation_gain()
-    print(np.shape(S.C.gain[0]))
+        # print(S_tune.trajectory.cost.true)
+        # print(S_tune.trajectory.cost.predicted)
 
-    # print(S.B.min)
-    # print(S.B.max)
-    # print(S.C.min)
-    # print(S.C.max)
-    #
-    # S.architecture_limit_mod()
-    #
-    # print(S.B.min)
-    # print(S.B.max)
-    # print(S.C.min)
-    # print(S.C.max)
+    elif exp_section == 3:
+        exp = ff.Experiment()
+        S = ff.initialize_system_from_experiment_number(exp_no)
+        S, S_fix, S_tune = ff.data_from_memory_sim_model(S.model_name)
 
-    # S = ff.greedy_selection(S, print_check=True, multiprocess_check=True)
-    # S = ff.greedy_rejection(S, print_check=True, multiprocess_check=True)
+        for i in range(0, S.number_of_states):
+            plt.plot(range(0, S_fix.sim.t_simulate), S_fix.trajectory.x[:, i], c='tab:blue')
+            plt.plot(range(0, S_tune.sim.t_simulate), S_tune.trajectory.x[:, i], c='tab:green')
+        # plt.legend()
+        plt.show()
 
-    # S.architecture_display_active_set()
-    # S = ff.greedy_simultaneous(S, print_check=True, swap_only=False)
-    # print(S.trajectory.computation_time)
-    # S.architecture_display_active_set()
-    #
-    # S.cost_display_stage_components()
+        # fix_norm = [np.linalg.norm(S_fix.trajectory.x[t, :]) for t in range(0, S_fix.sim.t_simulate)]
+        # tune_norm = [np.linalg.norm(S_tune.trajectory.x[t, :]) for t in range(0, S_tune.sim.t_simulate)]
+        #
+        # plt.plot(range(0, S_fix.sim.t_simulate), fix_norm, c='tab:blue')
+        # plt.plot(range(0, S_tune.sim.t_simulate), tune_norm, c='tab:green')
+        # plt.show()
+
+        print(S_tune.B.history_active_set)
+        print(S_tune.C.history_active_set)
+
+        # print(S_fix.trajectory.x)
+        # print(S_tune.trajectory.x)
+        # print(S_fix.trajectory.estimation_matrix[0])
+        # print(S_fix.trajectory.estimation_matrix[1])
+        # print(S_fix.trajectory.estimation_matrix[2])
+
+    else:
+        raise Exception('Code not defined')
 
     print('Code run done')

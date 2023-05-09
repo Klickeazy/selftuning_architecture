@@ -1,47 +1,34 @@
-import greedy_architecture_combined as gac
-import shelve
-import numpy as np
-from copy import deepcopy as dc
-import control
-import socket
-import pandas as pd
-
-if socket.gethostname() == 'melap257805':
-    datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-else:
-    datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+import functionfile_speedygreedy as ff
 
 
-# parameter_keys = ['number_of_nodes', 'network_model', 'second_order']
-# # 'second_order_network', 'initial_architecture_size', 'second_order_architecture', 'disturbance_model', 'simulation_model', 'architecture_constraint', 'rho', 'network_parameter', 'disturbance_step']
-#
-# data = {
-#     "number_of_nodes": [20, 30, 50],
-#     "network_model": ['rand', 'ER', 'BA'],
-#     "second_order": [False, True, False]
-# }
-#
-# df = pd.DataFrame(data)
-#
-# # Save the DataFrame as a CSV file
-# df.to_csv(datadump_folder_path+"experiment_parameters.csv")
+if __name__ == "__main__":
 
-# parameter_keys = ['number_of_nodes', 'network_model', 'second_order', 'second_order_network', 'initial_architecture_size', 'second_order_architecture', 'disturbance_model', 'disturbance_step', 'disturbance_number', 'disturbance_magnitude', 'simulation_model', 'architecture_constraint', 'rho', 'network_parameter']
-#
-# parameter_values = [20, 'rand', False, 0, 2, None, None, None, None, None, None, 3, 3, None]
+    exp_section = 2
+    exp_no = 7
+    multiprocess_check = False
 
-# p = pd.read_csv(datadump_folder_path + "parameter_table.csv")
-#
-# data = p.iloc[0]
-# print([k for k in data])
+    if exp_section == 1:
+        exp = ff.Experiment()
+        S = ff.initialize_system_from_experiment_number(exp_no)
+        S = ff.optimize_initial_architecture(S, print_check=True)
+        ff.data_to_memory_gen_model(S)
 
-values = [20, 'rand', False, 0, 2, None, 1, 1, None, None, None, None, None, 3, 3, None, 10]
-keys = ['number_of_nodes', 'network_model', 'second_order', 'second_order_network', 'initial_architecture_size', 'second_order_architecture', 'disturbance_model', 'disturbance_step', 'disturbance_number', 'disturbance_magnitude', 'simulation_model', 'architecture_constraint_min', 'architecture_constraint_max', 'rho', 'network_parameter', 'prediction_time_horizon']
+    elif exp_section == 2:
+        exp = ff.Experiment()
+        S = ff.initialize_system_from_experiment_number(exp_no)
+        S = ff.data_from_memory_gen_model(S.model_name)
 
-print('Keys: ', len(keys))
-print('Values: ', len(values))
+        # S_fix = ff.simulate_fixed_architecture(S, print_check=True)
+        # print(S_fix.model_name)
+        # print(S_fix.trajectory.cost.true)
 
-for i in range(0, min(len(values), len(keys))):
-    print(keys[i], ':', values[i])
+        S_tune = ff.simulate_self_tuning_architecture(S, number_of_changes_limit=1, multiprocess_check=False, print_check=True)
+        print(S_tune.model_name)
+        print(S_tune.trajectory.cost.true)
+        print(S_tune.B.history_active_set)
+        print(S_tune.C.history_active_set)
 
-print("Code run done")
+    else:
+        raise Exception('Code not defined')
+
+    print('Code run done')
