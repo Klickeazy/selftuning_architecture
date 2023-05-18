@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     print('Code run start')
 
-    exp_section = 3
+    exp_section = 2
     exp_no = 7
     multiprocess_check = False
 
