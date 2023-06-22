@@ -1,6 +1,6 @@
 import numpy as np
 import time
-import functionfile_speedygreedy as ff
+import functionfile_speedygreedy_old as ff
 
 import matplotlib.pyplot as plt
 
@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     print('Code run start')
 
-    exp_section = 2
+    exp_section = 3
     exp_no = 7
     multiprocess_check = False
 
@@ -22,9 +22,8 @@ if __name__ == "__main__":
         exp = ff.Experiment()
         S = ff.initialize_system_from_experiment_number(exp_no)
         S = ff.data_from_memory_gen_model(S.model_name)
-        print(S.A.open_loop_eig_vals)
-        S_fix = ff.simulate_fixed_architecture(S, print_check=True)
-        S_tune = ff.simulate_self_tuning_architecture(S, number_of_changes_limit=None, print_check=True, multiprocess_check=multiprocess_check)
+        S_fix = ff.simulate_fixed_architecture(S)
+        S_tune = ff.simulate_self_tuning_architecture(S, number_of_changes_limit=None, multiprocess_check=multiprocess_check)
         ff.data_to_memory_sim_model(S, S_fix, S_tune)
 
         # print(S_tune.trajectory.cost.true)
