@@ -204,6 +204,20 @@ def initialize_system_from_experiment_number(exp_no: int = 1):
     return S
 
 
+class PlotParameters:
+    def __init__(self):
+        self.predicted_cost, self.true_cost = [], []
+        self.x_2norm, self.x_estimate_2norm, self.error_2norm = [], [], []
+        self.network_state_graph, self.network_state_locations = netx.Graph(), {}
+        self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
+        self.node_color_parameters = \
+            {'fixed': {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'mark': 'o', 'col': 'k', 'ms': 20},
+             'selftuning': {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'mark': 'x', 'col': 'tab:blue', 'ms': 20}}
+        self.network_plot_limits = []
+        self.B_history = [[], []]
+        self.C_history = [[], []]
+
+
 class System:
     class Dynamics:
         def __init__(self):
@@ -336,19 +350,6 @@ class System:
             for var, value in vars(self).items():
                 print(f"{var} = {value}")
 
-    class PlotParameters:
-        def __init__(self):
-            self.predicted_cost, self.true_cost = [], []
-            self.x_2norm, self.x_estimate_2norm, self.error_2norm = [], [], []
-            self.network_state_graph, self.network_state_locations = netx.Graph(), {}
-            self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
-            self.node_color_parameters = \
-                {'fixed': {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'mark': 'o', 'col': 'k', 'ms': 20},
-                 'selftuning': {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'mark': 'x', 'col': 'tab:blue', 'ms': 20}}
-            self.network_plot_limits = []
-            self.B_history = [[], []]
-            self.C_history = [[], []]
-
     def __init__(self):
         self.number_of_nodes = 20  # Number of nodes in the network
         self.number_of_states = 20  # Number of state in the network (affected by second_order dynamics)
@@ -358,7 +359,7 @@ class System:
         self.disturbance = self.Disturbance()
         self.sim = self.Simulation()
         self.trajectory = self.Trajectory()
-        self.plot = self.PlotParameters()
+        self.plot = None
 
         self.model_name = ''
 
@@ -946,7 +947,9 @@ class System:
         S_full.C.active_set = dc(S_full.C.available_indices)
         S_full.architecture_update_to_matrix_from_active_set()
         S_full.generate_network_architecture_graph_matrix()
-        full_pos = netx.spring_layout(S_full.plot.network_architecture_graph, pos=self.plot.network_state_locations, fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
+        full_pos = netx.spring_layout(S_full.plot.network_architecture_graph,
+                                      pos=self.plot.network_state_locations,
+                                      fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
         x = [full_pos[k][0] for k in full_pos]
         y = [full_pos[k][1] for k in full_pos]
         scale = 1.5
@@ -979,7 +982,9 @@ class System:
             ax = ax_in
 
         node_color_array = [self.plot.node_color_parameters[self.sim.test_model]['node']]*self.number_of_states
-        netx.draw_networkx(self.plot.network_state_graph, pos=self.plot.network_state_locations, ax=ax, node_color=node_color_array)
+        netx.draw_networkx(self.plot.network_state_graph,
+                           ax=ax, node_color=node_color_array,
+                           pos=self.plot.network_state_locations)
         ax.set_xlim(self.plot.network_plot_limits[0])
         ax.set_ylim(self.plot.network_plot_limits[1])
 
@@ -1077,7 +1082,7 @@ class System:
                     ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate,
                               colors=['k'] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
 
-        ax.set_ylim([0, self.number_of_states + 1])
+        ax.set_ylim([0, self.number_of_states + 2])
 
         if ax_in is None:
             plt.show()
@@ -1102,12 +1107,15 @@ class System:
 
         if cost_type == 'true':
             cost = list(itertools.accumulate([self.trajectory.cost.true[i] for i in range(0, self.sim.t_simulate)]))
+            ls = 'solid'
         elif cost_type == 'predict':
-            cost = list(itertools.accumulate([self.trajectory.cost.predicted[i] for i in range(0, self.sim.t_simulate)]))
+            cost = list([self.trajectory.cost.predicted[i] for i in range(0, self.sim.t_simulate)])
+            ls = 'dotted'
         else:
             raise Exception('Check argument')
 
-        ax.plot(range(0, self.sim.t_simulate), cost, label=self.sim.test_model, c=self.plot.node_color_parameters[self.sim.test_model]['col'])
+        ax.plot(range(0, self.sim.t_simulate), cost, label=self.sim.test_model + ' ' + cost_type,
+                c=self.plot.node_color_parameters[self.sim.test_model]['col'], linestyle=ls)
 
         if ax_in is None:
             ax.set_xlabel(r'Time $t$')
@@ -1298,7 +1306,7 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
     return work_sys
 
 
-def simulate_fixed_architecture(S: System, print_check: bool = False):
+def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check: bool = True):
     S_fix = dc(S)
     S_fix.sim.test_model = "fixed"
     S_fix.model_namer()
@@ -1306,9 +1314,14 @@ def simulate_fixed_architecture(S: System, print_check: bool = False):
     if print_check:
         print('Simulating Fixed Architecture')
 
-    for _ in tqdm(range(0, S_fix.sim.t_simulate), ncols=50):
-        S_fix.cost_true_wrapper()
-        S_fix.one_step_system_update()
+    if tqdm_check:
+        for _ in tqdm(range(0, S_fix.sim.t_simulate), ncols=100, desc='Fixed'):
+            S_fix.cost_true_wrapper()
+            S_fix.one_step_system_update()
+    else:
+        for _ in range(0, S_fix.sim.t_simulate):
+            S_fix.cost_true_wrapper()
+            S_fix.one_step_system_update()
 
     if print_check:
         print('Fixed Architecture Simulation: DONE')
@@ -1316,7 +1329,7 @@ def simulate_fixed_architecture(S: System, print_check: bool = False):
     return S_fix
 
 
-def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False):
+def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
     S_self_tuning = dc(S)
     S_self_tuning.sim.test_model = "selftuning"
     S_self_tuning.model_namer()
@@ -1324,10 +1337,16 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
     if print_check:
         print('Simulating Self-Tuning Architecture')
 
-    for _ in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=50):
-        S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
-        S_self_tuning.cost_true_wrapper()
-        S_self_tuning.one_step_system_update()
+    if tqdm_check:
+        for _ in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=100, desc='Self-Tuning'):
+            S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+            S_self_tuning.cost_true_wrapper()
+            S_self_tuning.one_step_system_update()
+    else:
+        for _ in range(0, S_self_tuning.sim.t_simulate):
+            S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+            S_self_tuning.cost_true_wrapper()
+            S_self_tuning.one_step_system_update()
 
     if print_check:
         print('Self-Tuning Architecture Simulation: DONE')
@@ -1360,13 +1379,14 @@ def optimize_initial_architecture(S: System, print_check: bool = False):
     return S
 
 
-def simulate_experiment(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False):
+def simulate_experiment(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
     S = initialize_system_from_experiment_number(exp_no)
 
     S = optimize_initial_architecture(S, print_check=True)
 
-    S_fix = simulate_fixed_architecture(S, print_check=print_check)
-    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=number_of_changes_limit, print_check=print_check)
+    print('\n')
+    S_fix = simulate_fixed_architecture(S, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=number_of_changes_limit, print_check=print_check, tqdm_check=tqdm_check)
 
     system_model_to_memory_sim_model(S, S_fix, S_tuning)
     return S, S_fix, S_tuning
@@ -1413,6 +1433,9 @@ def system_model_from_memory_sim_model(model):  # Retrieve simulated models
         S_tuning = shelve_data['selftuning']
     if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
         raise Exception('Data type mismatch')
+    S.plot = PlotParameters()
+    S_fixed.plot = PlotParameters()
+    S_tuning.plot = PlotParameters()
     return S, S_fixed, S_tuning
 
 
@@ -1455,11 +1478,13 @@ def plot_comparison(exp_no: int = 1):
 
     S_fix.plot_cost(ax_in=ax_cost)
     S_tuning.plot_cost(ax_in=ax_cost)
-    ax_cost.legend(loc='upper left')
+    S_fix.plot_cost(ax_in=ax_cost, cost_type='predict')
+    S_tuning.plot_cost(ax_in=ax_cost, cost_type='predict')
+    ax_cost.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
     ax_cost.tick_params(axis="x", labelbottom=False)
     ax_cost.set_ylabel('True Cost\n'+r'$J_t$')
-    # ax_cost.ticklabel_format(axis='y', style='sci', scilimits=[-2, 2])
-    ax_cost.set_yscale('log')
+    ax_cost.ticklabel_format(axis='y', style='sci', scilimits=[-2, 2])
+    # ax_cost.set_yscale('log')
 
     S_fix.plot_architecture_history(arch='B', ax_in=ax_B)
     S_tuning.plot_architecture_history(arch='B', ax_in=ax_B)
