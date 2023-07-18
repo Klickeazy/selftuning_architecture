@@ -1,6 +1,4 @@
-import numpy as np
-import time
-import functionfile_speedygreedy_old as ff
+from CodeHistory import functionfile_speedygreedy_old as ff
 
 import matplotlib.pyplot as plt
 

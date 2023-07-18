@@ -1,6 +1,5 @@
-import greedy_architecture_combined as gac
+from CodeHistory import greedy_architecture_combined as gac
 import numpy as np
-from copy import deepcopy as dc
 
 if __name__ == "__main__":
 

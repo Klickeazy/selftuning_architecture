@@ -1,7 +1,4 @@
-import matplotlib.pyplot as plt
-import numpy as np
-
-import greedy_architecture_combined as gac
+from CodeHistory import greedy_architecture_combined as gac
 
 if __name__ == "__main__":
     S = gac.System(graph_model={'number_of_nodes': 10, 'rho': 1.5}, architecture={'rand': 4})

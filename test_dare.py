@@ -1,4 +1,4 @@
-import greedy_architecture_combined as gac
+from CodeHistory import greedy_architecture_combined as gac
 import numpy as np
 import scipy as scp
 import control as ctrl
