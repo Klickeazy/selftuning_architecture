@@ -3,7 +3,7 @@ import networkx as netx
 
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
+import matplotlib.gridspec as gs
 
 import time
 from copy import deepcopy as dc
@@ -205,14 +205,15 @@ def initialize_system_from_experiment_number(exp_no: int = 1):
 
 
 class PlotParameters:
-    def __init__(self):
+    def __init__(self, sys_stage: int = 0):
+        self.plot_system = sys_stage
         self.predicted_cost, self.true_cost = [], []
         self.x_2norm, self.x_estimate_2norm, self.error_2norm = [], [], []
         self.network_state_graph, self.network_state_locations = netx.Graph(), {}
         self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
-        self.node_color_parameters = \
-            {'fixed': {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'mark': 'o', 'col': 'k', 'ms': 20},
-             'selftuning': {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'mark': 'x', 'col': 'tab:blue', 'ms': 20}}
+        self.plot_parameters = \
+            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:orange', 'ms': 20, 'ls': 'solid'},
+             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:blue', 'ms': 20, 'ls': 'dotted'}}
         self.network_plot_limits = []
         self.B_history = [[], []]
         self.C_history = [[], []]
@@ -302,7 +303,7 @@ class System:
             self.multiprocess_check = False  # Boolean to determine if multiprocess mapping is used or not for choices
 
             # Constant parameters
-            self.t_simulate = int(50)  # Simulation time horizon
+            self.t_simulate = int(100)  # Simulation time horizon
             self.t_current = 0  # Current time-step of simulation
 
         def display_values(self):
@@ -362,6 +363,7 @@ class System:
         self.plot = None
 
         self.model_name = ''
+        self.plot_name = None
 
     def initialize_system_from_experiment_parameters(self, experiment_parameters, experiment_keys):
 
@@ -981,7 +983,7 @@ class System:
         else:
             ax = ax_in
 
-        node_color_array = [self.plot.node_color_parameters[self.sim.test_model]['node']]*self.number_of_states
+        node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['node']] * self.number_of_states
         netx.draw_networkx(self.plot.network_state_graph,
                            ax=ax, node_color=node_color_array,
                            pos=self.plot.network_state_locations)
@@ -1002,6 +1004,16 @@ class System:
         self.generate_network_architecture_graph_matrix()
         self.plot.network_architecture_locations = netx.spring_layout(self.plot.network_architecture_graph, pos=self.plot.network_state_locations, fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
 
+    def generate_architecture_history_points(self):
+        for t in self.B.history_active_set:
+            for a in self.B.history_active_set[t]:
+                self.plot.B_history[0].append(t)
+                self.plot.B_history[1].append(a+1)
+        for t in self.C.history_active_set:
+            for a in self.C.history_active_set[t]:
+                self.plot.C_history[0].append(t)
+                self.plot.C_history[1].append(a+1)
+
     def plot_network_architecture(self, t: int = None, ax_in=None):
         if ax_in is None:
             fig = plt.figure()
@@ -1013,8 +1025,8 @@ class System:
         self.generate_network_graph_architecture_locations(t)
 
         self.generate_network_architecture_graph_matrix(mA=0)
-        node_color_array = [self.plot.node_color_parameters[self.sim.test_model]['B']] * len(self.B.active_set)
-        node_color_array.extend([self.plot.node_color_parameters[self.sim.test_model]['C']] * len(self.C.active_set))
+        node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['B']] * len(self.B.active_set)
+        node_color_array.extend([self.plot.plot_parameters[self.plot.plot_system]['C']] * len(self.C.active_set))
 
         architecture_list = ["B"+str(i) for i in range(1, 1+len(self.B.active_set))] + ["C"+str(i) for i in range(1, 1+len(self.C.active_set))]
         architecture_labels = {"B"+str(i): "B"+str(i) for i in range(1, 1+len(self.B.active_set))}
@@ -1069,33 +1081,31 @@ class System:
         for a in arch:
             if a == 'B':
                 if self.sim.test_model == 'selftuning':
-                    ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.sim.test_model,
-                               s=10, marker='o', c='tab:blue')
-                else:
-                    ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate,
+                    ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.plot_name,
+                               s=10, alpha=0.7,
+                               marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
+                               c=self.plot.plot_parameters[self.plot.plot_system]['c'])
+                elif self.sim.test_model == "fixed":
+                    ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate, alpha=0.7,
                               colors=['k']*len(self.B.history_active_set[0]), linestyles='dashed', linewidth=1)
+                else:
+                    raise Exception('Invalid test model')
             else:  # a=='C'
                 if self.sim.test_model == 'selftuning':
-                    ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.sim.test_model,
-                               s=10, marker='o', c='tab:blue')
-                else:
-                    ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate,
+                    ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.plot_name,
+                               s=10, alpha=0.7,
+                               marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
+                               c=self.plot.plot_parameters[self.plot.plot_system]['c'])
+                elif self.sim.test_model == "fixed":
+                    ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate, alpha=0.7,
                               colors=['k'] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
+                else:
+                    raise Exception('Invalid test model')
 
         ax.set_ylim([0, self.number_of_states + 2])
 
         if ax_in is None:
             plt.show()
-
-    def generate_architecture_history_points(self):
-        for t in self.B.history_active_set:
-            for a in self.B.history_active_set[t]:
-                self.plot.B_history[0].append(t)
-                self.plot.B_history[1].append(a+1)
-        for t in self.C.history_active_set:
-            for a in self.C.history_active_set[t]:
-                self.plot.C_history[0].append(t)
-                self.plot.C_history[1].append(a+1)
 
     def plot_cost(self, cost_type='true', ax_in=None):
         if ax_in is None:
@@ -1114,12 +1124,28 @@ class System:
         else:
             raise Exception('Check argument')
 
-        ax.plot(range(0, self.sim.t_simulate), cost, label=self.sim.test_model + ' ' + cost_type,
-                c=self.plot.node_color_parameters[self.sim.test_model]['col'], linestyle=ls)
+        ax.plot(range(0, self.sim.t_simulate), cost, label=self.plot_name + ' ' + cost_type,
+                c=self.plot.plot_parameters[self.plot.plot_system]['c'], linestyle=ls, alpha=0.7)
 
         if ax_in is None:
             ax.set_xlabel(r'Time $t$')
             ax.set_ylabel(r'Cost')
+            plt.show()
+
+    def plot_openloop_eigvals(self, ax_in=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(1, 1)
+            ax = fig.add_subplot(grid[0, 0])
+        else:
+            ax = ax_in
+
+        ax.scatter(range(1, self.number_of_states+1), np.sort(np.abs(self.A.open_loop_eig_vals)),
+                   marker='x', c='black', alpha=0.7)
+
+        if ax_in is None:
+            ax.set_xlabel('Mode')
+            ax.set_ylabel(r'$|\lambda_i(A)|$')
             plt.show()
 
 
@@ -1338,13 +1364,15 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
         print('Simulating Self-Tuning Architecture')
 
     if tqdm_check:
-        for _ in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=100, desc='Self-Tuning'):
-            S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+        for t in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=100, desc='Self-Tuning'):
+            if t > 0:
+                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
             S_self_tuning.cost_true_wrapper()
             S_self_tuning.one_step_system_update()
     else:
-        for _ in range(0, S_self_tuning.sim.t_simulate):
-            S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+        for t in range(0, S_self_tuning.sim.t_simulate):
+            if t > 0:
+                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
             S_self_tuning.cost_true_wrapper()
             S_self_tuning.one_step_system_update()
 
@@ -1379,64 +1407,85 @@ def optimize_initial_architecture(S: System, print_check: bool = False):
     return S
 
 
-def simulate_experiment(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
+def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
     S = initialize_system_from_experiment_number(exp_no)
 
     S = optimize_initial_architecture(S, print_check=True)
 
     print('\n')
     S_fix = simulate_fixed_architecture(S, print_check=print_check, tqdm_check=tqdm_check)
+    S_fix.plot_name = 'fixed arch'
+
     S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=number_of_changes_limit, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning.plot_name = 'selftuning arch'
 
     system_model_to_memory_sim_model(S, S_fix, S_tuning)
     return S, S_fix, S_tuning
 
 
+def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True):
+    S = initialize_system_from_experiment_number(exp_no)
+
+    S = optimize_initial_architecture(S, print_check=True)
+
+    print('\n')
+
+    S_tuning_1change = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_1change.plot_name = 'selftuning 1change'
+
+    S_tuning_bestchange = simulate_self_tuning_architecture(S, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_bestchange.plot_name = 'selftuning bestchange'
+
+    system_model_to_memory_sim_model(S, S_tuning_1change, S_tuning_bestchange)
+
+    return S, S_tuning_1change, S_tuning_bestchange
+
+
 def retrieve_experiment(exp_no: int = 1):
     S = initialize_system_from_experiment_number(exp_no)
-    S, S_fix, S_tuning = system_model_from_memory_sim_model(S.model_name)
-    return S, S_fix, S_tuning
+    S, S_1, S_2 = system_model_from_memory_sim_model(S.model_name)
+    return S, S_1, S_2
 
 
 def system_model_to_memory_gen_model(S: System):  # Store model generated from experiment parameters
     shelve_filename = datadump_folder_path + 'gen_' + S.model_name
     print('\nShelving gen model: ', shelve_filename)
     with shelve.open(shelve_filename, writeback=True) as shelve_data:
-        shelve_data['system'] = S
+        shelve_data['s'] = S
 
 
 def system_model_from_memory_gen_model(model):  # Retrieve model generated from experiment parameters
     shelve_filename = datadump_folder_path + 'gen_' + model
     print('\nReading gen model: ', shelve_filename)
     with shelve.open(shelve_filename, flag='r') as shelve_data:
-        S = shelve_data['system']
+        S = shelve_data['s']
     if not isinstance(S, System):
         raise Exception('System model error')
     return S
 
 
-def system_model_to_memory_sim_model(S: System, S_fixed: System, S_tuning: System):  # Store simulated models
+def system_model_to_memory_sim_model(S: System, S_1: System, S_2: System):  # Store simulated models
     shelve_filename = datadump_folder_path + 'sim_' + S.model_name
     print('\nShelving sim model:', shelve_filename)
     with shelve.open(shelve_filename, writeback=True) as shelve_data:
-        shelve_data['system'] = S
-        shelve_data['fixed'] = S_fixed
-        shelve_data['selftuning'] = S_tuning
+        shelve_data['s'] = S
+        shelve_data['s1'] = S_1
+        shelve_data['s2'] = S_2
 
 
 def system_model_from_memory_sim_model(model):  # Retrieve simulated models
     shelve_filename = datadump_folder_path + 'sim_' + model
     print('\nReading sim model: ', shelve_filename)
     with shelve.open(shelve_filename, flag='r') as shelve_data:
-        S = shelve_data['system']
-        S_fixed = shelve_data['fixed']
-        S_tuning = shelve_data['selftuning']
-    if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
+        S = shelve_data['s']
+        S_1 = shelve_data['s1']
+        S_2 = shelve_data['s2']
+    if not isinstance(S, System) or not isinstance(S_1, System) or not isinstance(S_2, System):
         raise Exception('Data type mismatch')
     S.plot = PlotParameters()
-    S_fixed.plot = PlotParameters()
-    S_tuning.plot = PlotParameters()
-    return S, S_fixed, S_tuning
+    S_1.plot = PlotParameters(1)
+    S_2.plot = PlotParameters(2)
+    return S, S_1, S_2
 
 
 # def system_model_to_memory_statistics(S, S_fixed, S_tuning, model_id, print_check=False):
@@ -1465,37 +1514,61 @@ def system_model_from_memory_sim_model(model):  # Retrieve simulated models
 #     return S, S_fixed, S_tuning
 
 
-def plot_comparison(exp_no: int = 1):
+def plot_comparison_exp_no(exp_no: int = 1):
+
+    S, S_1, S_2 = retrieve_experiment(exp_no)
+
+    plot_comparison_systems(S, S_1, S_2)
+    
+    
+def plot_comparison_systems(S, S_1, S_2):
+
+    if S_1.plot is None:
+        S_1.plot = PlotParameters()
+
+    if S_2.plot is None:
+        S_2.plot = PlotParameters()
 
     fig = plt.figure(tight_layout=True)
-    grid = fig.add_gridspec(3, 1)
+    outer_grid = gs.GridSpec(2, 1, figure=fig, height_ratios=[3, 1])
 
-    ax_cost = fig.add_subplot(grid[0, 0])
-    ax_B = fig.add_subplot(grid[1, 0], sharex=ax_cost)
-    ax_C = fig.add_subplot(grid[2, 0], sharex=ax_cost)
+    time_grid = gs.GridSpecFromSubplotSpec(3, 1, subplot_spec=outer_grid[0, 0])
+    eval_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[1, 0])
 
-    S, S_fix, S_tuning = retrieve_experiment(exp_no)
-
-    S_fix.plot_cost(ax_in=ax_cost)
-    S_tuning.plot_cost(ax_in=ax_cost)
-    S_fix.plot_cost(ax_in=ax_cost, cost_type='predict')
-    S_tuning.plot_cost(ax_in=ax_cost, cost_type='predict')
+    ax_cost = fig.add_subplot(time_grid[0, 0])
+    ax_B = fig.add_subplot(time_grid[1, 0], sharex=ax_cost)
+    ax_C = fig.add_subplot(time_grid[2, 0], sharex=ax_cost)
+    ax_eval = fig.add_subplot(eval_grid[0, 0])
+    
+    S_1.plot_cost(ax_in=ax_cost)
+    S_2.plot_cost(ax_in=ax_cost)
+    S_1.plot_cost(ax_in=ax_cost, cost_type='predict')
+    S_2.plot_cost(ax_in=ax_cost, cost_type='predict')
     ax_cost.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
     ax_cost.tick_params(axis="x", labelbottom=False)
-    ax_cost.set_ylabel('True Cost\n'+r'$J_t$')
-    ax_cost.ticklabel_format(axis='y', style='sci', scilimits=[-2, 2])
-    # ax_cost.set_yscale('log')
+    ax_cost.set_ylabel('Cost\n'+r'$J_t$')
+    # ax_cost.ticklabel_format(axis='y', style='sci', scilimits=[-2, 2])
+    ax_cost.set_yscale('log')
+    ax_cost.grid(visible=True, which='major', axis='x')
 
-    S_fix.plot_architecture_history(arch='B', ax_in=ax_B)
-    S_tuning.plot_architecture_history(arch='B', ax_in=ax_B)
-    ax_B.set_ylabel('Actuator Position\n'+r'$S_t$')
+    S_1.plot_architecture_history(arch='B', ax_in=ax_B)
+    S_2.plot_architecture_history(arch='B', ax_in=ax_B)
+    ax_B.set_ylabel('Actuator\nPosition\n'+r'$S_t$')
     ax_B.tick_params(axis="x", labelbottom=False)
+    ax_B.grid(visible=True, which='major', axis='x')
     # ax_B.legend()
 
-    S_fix.plot_architecture_history(arch='C', ax_in=ax_C)
-    S_tuning.plot_architecture_history(arch='C', ax_in=ax_C)
-    ax_C.set_ylabel('Sensor Position\n'+r'$S_t$'+'\'')
+    S_1.plot_architecture_history(arch='C', ax_in=ax_C)
+    S_2.plot_architecture_history(arch='C', ax_in=ax_C)
+    ax_C.set_ylabel('Sensor\nPosition\n'+r'$S_t$'+'\'')
     # ax_C.legend()
     ax_C.set_xlabel('Time')
+    ax_C.grid(visible=True, which='major', axis='x')
+
+    S_1.plot_openloop_eigvals(ax_in=ax_eval)
+    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dotted')
+    ax_eval.set_xlabel('Mode')
+    ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
 
     plt.show()
+    
