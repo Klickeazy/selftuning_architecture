@@ -423,8 +423,8 @@ class System:
         self.initialize_trajectory()
         self.prediction_gains()
         self.cost_prediction_wrapper()
-
-        self.model_namer()
+        #
+        # self.model_namer()
 
     def model_namer(self, namer_type=1, name_extension: str = None):
         if namer_type == 1:
@@ -796,18 +796,18 @@ class System:
         W_enhanced = {}
         F_enhanced = {}
         Q_enhanced = {}
-        W_mat = np.block([[self.disturbance.W, np.zeros_like(self.disturbance.W)],
-                          [np.zeros_like(self.disturbance.W), self.disturbance.V]])
+        W_mat = np.block([[self.disturbance.W, np.zeros((self.number_of_states, len(self.C.active_set)))],
+                          [np.zeros((len(self.C.active_set), self.number_of_states)), self.disturbance.V[:, self.C.active_set][self.C.active_set, :]]])
         for t in range(0, self.sim.t_predict):
             BKt = self.B.active_matrix @ self.B.gain[t]
             ALtC = self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix
             A_enhanced_mat[t] = np.block([[self.A.A_mat, -BKt],
                                           [ALtC, self.A.A_mat - ALtC - BKt]])
-            F_enhanced[t] = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, self.C.number_of_available))],
-                                      [np.zeros((self.C.number_of_available, self.number_of_states)), ALtC]])
+            F_enhanced[t] = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, len(self.C.active_set)))],
+                                      [np.zeros((self.number_of_states, self.number_of_states)), self.A.A_mat @ self.C.gain[t]]])
             W_enhanced[t] = F_enhanced[t] @ W_mat @ F_enhanced[t].T
-            Q_enhanced[t] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.B.number_of_available))],
-                                      [np.zeros((self.B.number_of_available, self.number_of_states)), self.B.gain[t].T @ self.B.R1 @ self.B.gain[t]]])
+            Q_enhanced[t] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
+                                      [np.zeros((self.number_of_states, self.number_of_states)), self.B.gain[t].T @ self.B.R1 @ self.B.gain[t]]])
 
         Q_enhanced[self.sim.t_predict] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
                                                    [np.zeros((self.number_of_states, self.number_of_states)), np.zeros((self.number_of_states, self.number_of_states))]])
@@ -831,8 +831,8 @@ class System:
             raise Exception('Check control cost metric')
 
     def cost_true(self):
-        Q_mat = np.block([[self.B.Q, np.zeros((self.number_of_nodes, self.number_of_nodes))],
-                          [np.zeros((self.number_of_nodes, self.number_of_nodes)), self.B.gain[0].T @ self.B.R1 @ self.B.gain[0]]])
+        Q_mat = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
+                          [np.zeros((self.number_of_states, self.number_of_states)), self.B.gain[0].T @ self.B.R1 @ self.B.gain[0]]])
         self.trajectory.cost.control = 0
         if self.trajectory.cost.metric_control == 1:
             x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[self.sim.t_current], (1, 2)))
@@ -918,7 +918,7 @@ class System:
     def one_step_system_update(self):
         # print('1:', np.shape(self.disturbance.F_enhanced), np.shape(self.disturbance.w_gen[self.sim.t_current]), np.shape(self.disturbance.v_gen[self.sim.t_current]))
         # print('2:', np.shape(self.A.A_enhanced_mat), np.shape(self.trajectory.X_enhanced[self.sim.t_current]))
-        self.trajectory.X_enhanced[self.sim.t_current + 1] = (self.A.A_enhanced_mat @ self.trajectory.X_enhanced[self.sim.t_current]) + (self.disturbance.F_enhanced @ np.concatenate((self.disturbance.w_gen[self.sim.t_current], self.disturbance.v_gen[self.sim.t_current])))
+        self.trajectory.X_enhanced[self.sim.t_current + 1] = (self.A.A_enhanced_mat @ self.trajectory.X_enhanced[self.sim.t_current]) + (self.disturbance.F_enhanced @ np.concatenate((self.disturbance.w_gen[self.sim.t_current], self.disturbance.v_gen[self.sim.t_current][self.C.active_set])))
 
         self.trajectory.x[self.sim.t_current + 1] = self.trajectory.X_enhanced[self.sim.t_current + 1][0:self.number_of_states]
 
