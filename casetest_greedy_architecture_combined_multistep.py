@@ -14,7 +14,7 @@ if __name__ == "__main__":
     n_arch = 3
 
     test_model = 'combined'
-    # test_model = None
+    # sim_model = None
 
     # second_order = True
     second_order = False

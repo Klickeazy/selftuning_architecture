@@ -21,7 +21,7 @@ if __name__ == "__main__":
     second_order = False
 
     test_model = 'combined'  #  'process', 'sensor', 'combined', None
-    # test_model = None
+    # sim_model = None
     disturbance_step = 15
     disturbance_number = int(np.floor(n / 2))
     disturbance_magnitude = 100

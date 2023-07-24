@@ -24,7 +24,7 @@ def sys_gen(optimize_initial_architecture=True):
     sim_model = None
 
     test_model = 'combined'  #  'process', 'sensor', 'combined', None
-    # test_model = None
+    # sim_model = None
     disturbance_step = 15
     disturbance_number = int(np.floor(n / 2))
     disturbance_magnitude = 10

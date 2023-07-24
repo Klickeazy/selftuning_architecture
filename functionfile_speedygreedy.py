@@ -80,6 +80,8 @@ class Experiment:
         self.save_filename = "experiment_parameters.csv"            # File name for experiment parameters
 
         self.default_parameter_datatype_map = {'experiment_no'              : int(1),
+                                               'test_model'                 : str(None),
+                                               'test_parameter'             : int(0),
                                                'number_of_nodes'            : int(20),
                                                'network_model'              : str('rand'),
                                                'network_parameter'          : float(0),
@@ -103,7 +105,6 @@ class Experiment:
                                                'disturbance_number'         : int(0),
                                                'disturbance_magnitude'      : int(0),
                                                'prediction_time_horizon'    : int(10),
-                                               'simulation_model'           : str(None),
                                                'X0_scaling'                 : float(1),
                                                'multiprocessing'            : False}                 # Dictionary of parameter names and default value with data-type
 
@@ -299,7 +300,9 @@ class System:
             # Parameters assigned from function file
             self.experiment_number = 0  # Experiment number based on parameter sheet
             self.t_predict = int(10)  # Prediction time horizon
-            self.test_model = None  # Simulation model of actuators
+            self.sim_model = None  # Simulation model of architecture
+            self.test_model = None  # Test case
+            self.test_parameter = None  # Test case
             self.multiprocess_check = False  # Boolean to determine if multiprocess mapping is used or not for choices
 
             # Constant parameters
@@ -390,7 +393,9 @@ class System:
         self.sim.t_predict = parameters['prediction_time_horizon']
         self.sim.multiprocess_check = parameters['multiprocessing']
 
-        parameters['simulation_model'] = None if parameters['simulation_model'] == 'None' else parameters['simulation_model']
+        self.sim.test_model = None if parameters['test_model'] == 'None' else parameters['test_model']
+        self.sim.test_parameter = None if parameters['test_parameter'] == 0 else int(parameters['test_parameter'])
+
         parameters['disturbance_model'] = None if parameters['disturbance_model'] == 'None' else parameters['disturbance_model']
 
         self.disturbance.W_scaling = parameters['W_scaling']
@@ -423,8 +428,8 @@ class System:
         self.initialize_trajectory()
         self.prediction_gains()
         self.cost_prediction_wrapper()
-        #
-        # self.model_namer()
+
+        self.model_namer()
 
     def model_namer(self, namer_type=1, name_extension: str = None):
         if namer_type == 1:
@@ -440,10 +445,12 @@ class System:
             self.model_name = self.model_name + '_arch' + str(self.B.max) + '_Tp' + str(self.sim.t_predict)
             if self.disturbance.noise_model is not None:
                 self.model_name = self.model_name + '_' + self.disturbance.noise_model
+            if self.sim.sim_model is not None:
+                self.model_name = self.model_name + '_' + self.sim.sim_model
+            if self.sim.test_model is not None:
+                self.model_name = self.model_name + '_' + self.sim.test_model
         else:
             raise Exception('Not Implemented')
-        if self.sim.test_model is not None:
-            self.model_name = self.model_name + '_' + self.sim.test_model
         if name_extension is not None:
             self.model_name = self.model_name + '_' + name_extension
 
@@ -1080,23 +1087,23 @@ class System:
         arch = architecture_iterator(arch)
         for a in arch:
             if a == 'B':
-                if self.sim.test_model == 'selftuning':
+                if self.sim.sim_model == 'selftuning':
                     ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.plot_name,
                                s=10, alpha=0.7,
                                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
                                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
-                elif self.sim.test_model == "fixed":
+                elif self.sim.sim_model == "fixed":
                     ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate, alpha=0.7,
                               colors=['k']*len(self.B.history_active_set[0]), linestyles='dashed', linewidth=1)
                 else:
                     raise Exception('Invalid test model')
             else:  # a=='C'
-                if self.sim.test_model == 'selftuning':
+                if self.sim.sim_model == 'selftuning':
                     ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.plot_name,
                                s=10, alpha=0.7,
                                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
                                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
-                elif self.sim.test_model == "fixed":
+                elif self.sim.sim_model == "fixed":
                     ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate, alpha=0.7,
                               colors=['k'] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
                 else:
@@ -1147,6 +1154,12 @@ class System:
             ax.set_xlabel('Mode')
             ax.set_ylabel(r'$|\lambda_i(A)|$')
             plt.show()
+
+    def vector_from_dict_key(self, v: dict):
+        ret_list = []
+        for t in range(0, self.sim.t_simulate):
+            ret_list.append(v[t])
+        return ret_list
 
 
 def cost_mapper(S: System, choices):
@@ -1332,56 +1345,6 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
     return work_sys
 
 
-def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check: bool = True):
-    S_fix = dc(S)
-    S_fix.sim.test_model = "fixed"
-    S_fix.model_namer()
-
-    if print_check:
-        print('Simulating Fixed Architecture')
-
-    if tqdm_check:
-        for _ in tqdm(range(0, S_fix.sim.t_simulate), ncols=100, desc='Fixed'):
-            S_fix.cost_true_wrapper()
-            S_fix.one_step_system_update()
-    else:
-        for _ in range(0, S_fix.sim.t_simulate):
-            S_fix.cost_true_wrapper()
-            S_fix.one_step_system_update()
-
-    if print_check:
-        print('Fixed Architecture Simulation: DONE')
-
-    return S_fix
-
-
-def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
-    S_self_tuning = dc(S)
-    S_self_tuning.sim.test_model = "selftuning"
-    S_self_tuning.model_namer()
-
-    if print_check:
-        print('Simulating Self-Tuning Architecture')
-
-    if tqdm_check:
-        for t in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=100, desc='Self-Tuning'):
-            if t > 0:
-                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
-            S_self_tuning.cost_true_wrapper()
-            S_self_tuning.one_step_system_update()
-    else:
-        for t in range(0, S_self_tuning.sim.t_simulate):
-            if t > 0:
-                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
-            S_self_tuning.cost_true_wrapper()
-            S_self_tuning.one_step_system_update()
-
-    if print_check:
-        print('Self-Tuning Architecture Simulation: DONE')
-
-    return S_self_tuning
-
-
 def optimize_initial_architecture(S: System, print_check: bool = False):
     if print_check:
         print('Optimizing design-time architecture from:')
@@ -1407,28 +1370,79 @@ def optimize_initial_architecture(S: System, print_check: bool = False):
     return S
 
 
-def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
+def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check: bool = True):
+    S_fix = dc(S)
+    S_fix.sim.sim_model = "fixed"
+    S_fix.model_namer()
+
+    if print_check:
+        print('Simulating Fixed Architecture')
+
+    if tqdm_check:
+        for _ in tqdm(range(0, S_fix.sim.t_simulate), ncols=100, desc='Fixed', leave=False):
+            S_fix.cost_true_wrapper()
+            S_fix.one_step_system_update()
+    else:
+        for _ in range(0, S_fix.sim.t_simulate):
+            S_fix.cost_true_wrapper()
+            S_fix.one_step_system_update()
+
+    if print_check:
+        print('Fixed Architecture Simulation: DONE')
+
+    return S_fix
+
+
+def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
+    S_self_tuning = dc(S)
+    S_self_tuning.sim.sim_model = "selftuning"
+    S_self_tuning.model_namer()
+
+    if print_check:
+        print('Simulating Self-Tuning Architecture')
+
+    if tqdm_check:
+        for t in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=100, desc='Self-Tuning', leave=False):
+            if t > 0:
+                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+            S_self_tuning.cost_true_wrapper()
+            S_self_tuning.one_step_system_update()
+    else:
+        for t in range(0, S_self_tuning.sim.t_simulate):
+            if t > 0:
+                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+            S_self_tuning.cost_true_wrapper()
+            S_self_tuning.one_step_system_update()
+
+    if print_check:
+        print('Self-Tuning Architecture Simulation: DONE')
+
+    return S_self_tuning
+
+
+def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True, statics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
 
-    S = optimize_initial_architecture(S, print_check=True)
+    S = optimize_initial_architecture(S, print_check=print_check)
 
-    print('\n')
     S_fix = simulate_fixed_architecture(S, print_check=print_check, tqdm_check=tqdm_check)
     S_fix.plot_name = 'fixed arch'
 
     S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=number_of_changes_limit, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning.plot_name = 'selftuning arch'
 
-    system_model_to_memory_sim_model(S, S_fix, S_tuning)
+    if statics_model == 0:
+        system_model_to_memory_sim_model(S, S_fix, S_tuning)
+    else:
+        system_model_to_memory_statistics(S, S_fix, S_tuning, statics_model)
+
     return S, S_fix, S_tuning
 
 
-def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True):
+def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
 
-    S = optimize_initial_architecture(S, print_check=True)
-
-    print('\n')
+    S = optimize_initial_architecture(S, print_check=print_check)
 
     S_tuning_1change = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_1change.plot_name = 'selftuning 1change'
@@ -1436,9 +1450,36 @@ def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_chec
     S_tuning_bestchange = simulate_self_tuning_architecture(S, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_bestchange.plot_name = 'selftuning bestchange'
 
-    system_model_to_memory_sim_model(S, S_tuning_1change, S_tuning_bestchange)
+    if statics_model == 0:
+        system_model_to_memory_sim_model(S, S_tuning_1change, S_tuning_bestchange)
+    else:
+        system_model_to_memory_statistics(S, S_tuning_1change, S_tuning_bestchange, statics_model)
 
     return S, S_tuning_1change, S_tuning_bestchange
+
+
+def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+
+    for test_no in tqdm(range(start_idx, number_of_samples + start_idx), desc='Simulations', ncols=100):
+        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no, number_of_changes_limit=1, statics_model=test_no)
+
+
+def simulate_experiment(exp_no: int = None, print_check: bool = False):
+
+    if exp_no is None:
+        raise Exception('No experiment number provided')
+    else:
+        print('Experiment number: ', exp_no)
+
+    S = initialize_system_from_experiment_number(exp_no)
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning':
+        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no, number_of_changes_limit=S.sim.test_parameter, print_check=print_check)
+    elif S.sim.test_model == 'selftuning_number_of_changes':
+        _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no, print_check=print_check)
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
+        simulate_statistics_experiment_fixed_vs_selftuning(exp_no)
+    else:
+        raise Exception('Experiment not defined')
 
 
 def retrieve_experiment(exp_no: int = 1):
@@ -1488,30 +1529,35 @@ def system_model_from_memory_sim_model(model):  # Retrieve simulated models
     return S, S_1, S_2
 
 
-# def system_model_to_memory_statistics(S, S_fixed, S_tuning, model_id, print_check=False):
-#     shelve_filename = datadump_folder_path + 'statistics/' + S.model_name
-#     if not os.path.isdir(shelve_filename):
-#         os.makedirs(shelve_filename)
-#     shelve_filename = shelve_filename + '/model_' + str(model_id)
-#     with shelve.open(shelve_filename, writeback=True) as shelve_data:
-#         shelve_data['system'] = S
-#         shelve_data['Fixed'] = S_fixed
-#         shelve_data['SelfTuning'] = S_tuning
-#     if print_check:
-#         print('\nShelving model:', shelve_filename)
-#
-#
-# def data_from_memory_statistics(model_type, model_id, print_check=False):
-#     shelve_filename = datadump_folder_path + 'statistics/' + model_type + '/model_' + str(model_id)
-#     with shelve.open(shelve_filename, flag='r') as shelve_data:
-#         S = shelve_data['system']
-#         S_fixed = shelve_data['Fixed']
-#         S_tuning = shelve_data['SelfTuning']
-#     if not isinstance(S, System) or not isinstance(S_tuning, System) or not isinstance(S_fixed, System):
-#         raise Exception('Data type mismatch')
-#     if print_check:
-#         print('\nModel read done: ', shelve_filename)
-#     return S, S_fixed, S_tuning
+def system_model_to_memory_statistics(S: System, S_1: System, S_2: System, model_id: int, print_check: bool = False):
+    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name
+    if not os.path.isdir(shelve_filename):
+        os.makedirs(shelve_filename)
+    shelve_filename = shelve_filename + '/model_' + str(model_id)
+    with shelve.open(shelve_filename, writeback=True) as shelve_data:
+        shelve_data['s'] = S
+        shelve_data['s1'] = S_1
+        shelve_data['s2'] = S_2
+    if print_check:
+        print('\nShelving model:', shelve_filename)
+
+
+def data_from_memory_statistics(exp_no: int = None, model_id: int = None, print_check=False):
+    if exp_no is None:
+        raise Exception('Experiment not provided')
+
+    S = initialize_system_from_experiment_number(exp_no)
+
+    shelve_filename = datadump_folder_path + 'statistics/' + S.model_name + '/model_' + str(model_id)
+    with shelve.open(shelve_filename, flag='r') as shelve_data:
+        S = shelve_data['s']
+        S_1 = shelve_data['s1']
+        S_2 = shelve_data['s2']
+    if not isinstance(S, System) or not isinstance(S_1, System) or not isinstance(S_2, System):
+        raise Exception('Data type mismatch')
+    if print_check:
+        print('\nModel read done: ', shelve_filename)
+    return S, S_1, S_2
 
 
 def plot_comparison_exp_no(exp_no: int = 1):
@@ -1571,4 +1617,54 @@ def plot_comparison_systems(S, S_1, S_2):
     ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
 
     plt.show()
-    
+
+
+def element_wise_min_max(v_ref_min, v_ref_max, v):
+
+    v_ret_min = [min(e) for e in zip(v_ref_min, v)]
+    v_ret_max = [max(e) for e in zip(v_ref_max, v)]
+
+    return v_ret_min, v_ret_max
+
+
+def plot_statistics_exp_no(exp_no: int = None):
+    if exp_no is None:
+        raise Exception('Experiment not provided')
+
+    S = initialize_system_from_experiment_number(exp_no)
+
+    fig = plt.figure(tight_layout=True)
+    outer_grid = gs.GridSpec(3, 1, figure=fig, height_ratios=[1, 3, 1])
+    arch_grid = gs.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_grid[1, 0])
+
+    cost_ax = fig.add_subplot(outer_grid[0, 0])
+
+    B_ax = fig.add_subplot(arch_grid[0, 0])
+    C_ax = fig.add_subplot(arch_grid[0, 1])
+
+    eig_ax = fig.add_subplot(outer_grid[2, 0])
+
+    cost_min_1 = np.inf * np.ones(S.sim.t_simulate)
+    cost_max_1 = np.zeros(S.sim.t_simulate)
+
+    cost_min_2 = np.inf * np.ones(S.sim.t_simulate)
+    cost_max_2 = np.zeros(S.sim.t_simulate)
+
+    for model_no in tqdm(range(1, 101), ncols=100, desc='Model ID'):
+        S, S_1, S_2 = data_from_memory_statistics(exp_no, model_no)
+
+        S_1_true_cost = S_1.vector_from_dict_key(S_1.trajectory.cost.true)
+        S_2_true_cost = S_2.vector_from_dict_key(S_2.trajectory.cost.true)
+
+        cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
+        cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
+
+        eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker='x', color='tab:blue', alpha=0.01)
+
+    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color='tab:blue', alpha=0.4)
+    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color='tab:orange', alpha=0.4)
+    cost_ax.set_yscale('log')
+
+
+
+    plt.show()

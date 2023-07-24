@@ -853,7 +853,7 @@ def greedy_architecture_selection(sys, number_of_changes=None, policy="min", no_
             i['algorithm'] = 'select'
             test_sys = dc(work_iteration)
             if print_check:
-                test_sys.model_name = "test_model"
+                test_sys.model_name = "sim_model"
             test_sys.active_architecture_update(i)
             if print_check:
                 test_sys.display_active_architecture()
@@ -922,7 +922,7 @@ def greedy_architecture_rejection(sys, number_of_changes=None, policy="min", no_
         for i in choices:
             i['algorithm'] = 'reject'
             test_sys = dc(work_iteration)
-            test_sys.model_name = "test_model"
+            test_sys.model_name = "sim_model"
             test_sys.active_architecture_update(i)
             if print_check:
                 print('Choice i:', i)
