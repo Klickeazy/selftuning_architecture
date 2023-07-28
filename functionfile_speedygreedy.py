@@ -747,6 +747,15 @@ class System:
         number_of_changes = max(len(B_compare['only2']), len(B_compare['only2'])) + max(len(C_compare['only2']), len(C_compare['only2']))
         return number_of_changes
 
+    def architecture_count_number_of_sim_changes(self):
+        self.B.change_count, self.C.change_count = 0, 0
+        if self.sim.sim_model == "selftuning":
+            for t in range(1, self.sim.t_simulate):
+                compare_B = compare_lists(self.B.history_active_set[t-1], self.B.history_active_set[t])
+                compare_C = compare_lists(self.C.history_active_set[t-1], self.C.history_active_set[t])
+                self.B.change_count += max(len(compare_B['only2']), len(compare_B['only1']))
+                self.C.change_count += max(len(compare_C['only2']), len(compare_C['only1']))
+
     def architecture_display(self):
         print('B: ', self.B.active_set)
         print('C: ', self.C.active_set)
@@ -1123,10 +1132,10 @@ class System:
             ax = ax_in
 
         if cost_type == 'true':
-            cost = list(itertools.accumulate([self.trajectory.cost.true[i] for i in range(0, self.sim.t_simulate)]))
+            cost = list(itertools.accumulate(self.vector_from_dict_key(self.trajectory.cost.true)))
             ls = 'solid'
         elif cost_type == 'predict':
-            cost = list([self.trajectory.cost.predicted[i] for i in range(0, self.sim.t_simulate)])
+            cost = self.vector_from_dict_key(self.trajectory.cost.predicted)
             ls = 'dotted'
         else:
             raise Exception('Check argument')
@@ -1163,11 +1172,13 @@ class System:
 
 
 def cost_mapper(S: System, choices):
-    if S.sim.multiprocess_check:
-        with Pool(processes=os.cpu_count() - 4) as P:
-            evaluation = list(P.map(S.evaluate_cost_for_choice, choices))
-    else:
-        evaluation = list(map(S.evaluate_cost_for_choice, choices))
+    # if S.sim.multiprocess_check:
+    #     with Pool(processes=os.cpu_count() - 4) as P:
+    #         evaluation = list(P.imap(S.evaluate_cost_for_choice, choices))
+    # else:
+    #     evaluation = list(map(S.evaluate_cost_for_choice, choices))
+
+    evaluation = list(map(S.evaluate_cost_for_choice, choices))
     return evaluation
 
 
@@ -1420,7 +1431,9 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
     return S_self_tuning
 
 
-def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True, statics_model=0):
+def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+    if statistics_model > 0:
+        print(statistics_model)
     S = initialize_system_from_experiment_number(exp_no)
 
     S = optimize_initial_architecture(S, print_check=print_check)
@@ -1431,15 +1444,15 @@ def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_l
     S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=number_of_changes_limit, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning.plot_name = 'selftuning arch'
 
-    if statics_model == 0:
+    if statistics_model == 0:
         system_model_to_memory_sim_model(S, S_fix, S_tuning)
     else:
-        system_model_to_memory_statistics(S, S_fix, S_tuning, statics_model)
+        system_model_to_memory_statistics(S, S_fix, S_tuning, statistics_model)
 
     return S, S_fix, S_tuning
 
 
-def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statics_model=0):
+def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
 
     S = optimize_initial_architecture(S, print_check=print_check)
@@ -1450,18 +1463,28 @@ def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_chec
     S_tuning_bestchange = simulate_self_tuning_architecture(S, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_bestchange.plot_name = 'selftuning bestchange'
 
-    if statics_model == 0:
+    if statistics_model == 0:
         system_model_to_memory_sim_model(S, S_tuning_1change, S_tuning_bestchange)
     else:
-        system_model_to_memory_statistics(S, S_tuning_1change, S_tuning_bestchange, statics_model)
+        system_model_to_memory_statistics(S, S_tuning_1change, S_tuning_bestchange, statistics_model)
 
     return S, S_tuning_1change, S_tuning_bestchange
 
 
 def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
 
-    for test_no in tqdm(range(start_idx, number_of_samples + start_idx), desc='Simulations', ncols=100):
-        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no, number_of_changes_limit=1, statics_model=test_no)
+    idx_range = list(range(start_idx, number_of_samples + start_idx))
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.multiprocess_check:
+        arg_list = zip([exp_no] * len(idx_range), [1] * len(idx_range), [False] * len(idx_range), [True] * len(idx_range), idx_range)
+        with Pool(processes=os.cpu_count() - 4) as P:
+            # list(tqdm.tqdm(p.imap(func, iterable), total=len(iterable)))
+            # list(tqdm(P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list), desc='Simulations', ncols=100, total=len(idx_range)))
+            P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list)
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100):
+            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no, number_of_changes_limit=1, statistics_model=test_no)
 
 
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
@@ -1560,6 +1583,20 @@ def data_from_memory_statistics(exp_no: int = None, model_id: int = None, print_
     return S, S_1, S_2
 
 
+def plot_experiment(exp_no: int = None):
+    if exp_no is None:
+        raise Exception('Check experiment number')
+
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes':
+        plot_comparison_exp_no(exp_no)
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
+        plot_statistics_exp_no(exp_no)
+    else:
+        raise Exception('Experiment not defined')
+
+
 def plot_comparison_exp_no(exp_no: int = 1):
 
     S, S_1, S_2 = retrieve_experiment(exp_no)
@@ -1650,21 +1687,35 @@ def plot_statistics_exp_no(exp_no: int = None):
     cost_min_2 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_2 = np.zeros(S.sim.t_simulate)
 
+    arch_change_1 = {'B': [], 'C': []}
+    arch_change_2 = {'B': [], 'C': []}
+
     for model_no in tqdm(range(1, 101), ncols=100, desc='Model ID'):
         S, S_1, S_2 = data_from_memory_statistics(exp_no, model_no)
 
-        S_1_true_cost = S_1.vector_from_dict_key(S_1.trajectory.cost.true)
-        S_2_true_cost = S_2.vector_from_dict_key(S_2.trajectory.cost.true)
+        S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key(S_1.trajectory.cost.true)))
+        S_2_true_cost = list(itertools.accumulate(S_2.vector_from_dict_key(S_2.trajectory.cost.true)))
 
         cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
         cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
+
+        S_1.architecture_count_number_of_sim_changes()
+        arch_change_1['B'].append(S_1.B.change_count)
+        arch_change_1['C'].append(S_1.C.change_count)
+
+        S_2.architecture_count_number_of_sim_changes()
+        arch_change_2['B'].append(S_2.B.change_count)
+        arch_change_2['C'].append(S_2.C.change_count)
 
         eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker='x', color='tab:blue', alpha=0.01)
 
     cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color='tab:blue', alpha=0.4)
     cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color='tab:orange', alpha=0.4)
     cost_ax.set_yscale('log')
+    cost_ax.set_xlabel('Time')
+    cost_ax.set_ylabel('Cost')
 
-
+    B_ax.scatter(arch_change_1['B'], arch_change_1['C'], marker='x', color='tab:blue', alpha=0.1)
+    B_ax.scatter(arch_change_2['B'], arch_change_2['C'], marker='o', color='tab:orange', alpha=0.1)
 
     plt.show()
