@@ -10,7 +10,8 @@ from copy import deepcopy as dc
 import pandas as pd
 import shelve
 import itertools
-from multiprocessing import Pool
+import multiprocessing
+# from multiprocessing import Pool
 
 import os
 import socket
@@ -1432,8 +1433,6 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
 
 
 def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
-    if statistics_model > 0:
-        print(statistics_model)
     S = initialize_system_from_experiment_number(exp_no)
 
     S = optimize_initial_architecture(S, print_check=print_check)
@@ -1478,7 +1477,7 @@ def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_id
 
     if S.sim.multiprocess_check:
         arg_list = zip([exp_no] * len(idx_range), [1] * len(idx_range), [False] * len(idx_range), [True] * len(idx_range), idx_range)
-        with Pool(processes=os.cpu_count() - 4) as P:
+        with multiprocessing.Pool(processes=os.cpu_count() - 4) as P:
             # list(tqdm.tqdm(p.imap(func, iterable), total=len(iterable)))
             # list(tqdm(P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list), desc='Simulations', ncols=100, total=len(idx_range)))
             P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list)
