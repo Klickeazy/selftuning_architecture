@@ -4,6 +4,8 @@ import networkx as netx
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 
 import time
 from copy import deepcopy as dc
@@ -12,6 +14,7 @@ import shelve
 import itertools
 import multiprocessing
 # from multiprocessing import Pool
+import concurrent.futures
 
 import os
 import socket
@@ -1391,9 +1394,11 @@ def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check
         print('Simulating Fixed Architecture')
 
     if tqdm_check:
-        for _ in tqdm(range(0, S_fix.sim.t_simulate), ncols=100, desc='Fixed', leave=False):
-            S_fix.cost_true_wrapper()
-            S_fix.one_step_system_update()
+        with tqdm(total=S_fix.sim.t_simulate, ncols=100, desc='Fixed (P_ID:' + str(os.getpid()) + ')', leave=False) as pbar:
+            for _ in range(0, S_fix.sim.t_simulate):
+                S_fix.cost_true_wrapper()
+                S_fix.one_step_system_update()
+                pbar.update()
     else:
         for _ in range(0, S_fix.sim.t_simulate):
             S_fix.cost_true_wrapper()
@@ -1414,11 +1419,13 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
         print('Simulating Self-Tuning Architecture')
 
     if tqdm_check:
-        for t in tqdm(range(0, S_self_tuning.sim.t_simulate), ncols=100, desc='Self-Tuning', leave=False):
-            if t > 0:
-                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
-            S_self_tuning.cost_true_wrapper()
-            S_self_tuning.one_step_system_update()
+        with tqdm(total=S_self_tuning.sim.t_simulate, ncols=100, desc='Self-Tuning (P_ID:' + str(os.getpid()) + ')', leave=False) as pbar:
+            for t in range(0, S_self_tuning.sim.t_simulate):
+                if t > 0:
+                    S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
+                S_self_tuning.cost_true_wrapper()
+                S_self_tuning.one_step_system_update()
+                pbar.update()
     else:
         for t in range(0, S_self_tuning.sim.t_simulate):
             if t > 0:
@@ -1480,10 +1487,39 @@ def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_id
         with multiprocessing.Pool(processes=os.cpu_count() - 4) as P:
             # list(tqdm.tqdm(p.imap(func, iterable), total=len(iterable)))
             # list(tqdm(P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list), desc='Simulations', ncols=100, total=len(idx_range)))
-            P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list)
+            P.imap(simulate_experiment_fixed_vs_selftuning, arg_list)
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100):
-            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no, number_of_changes_limit=1, statistics_model=test_no)
+            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=1, statistics_model=test_no)
+
+
+def simulate_statistics_experiment_fixed_vs_selftuning2(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+
+    idx_range = list(range(start_idx, number_of_samples + start_idx))
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.multiprocess_check:
+        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+                for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(1), itertools.repeat(False), itertools.repeat(False), idx_range):
+                    pbar.update()
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
+            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=1, statistics_model=test_no)
+
+
+def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+    idx_range = list(range(start_idx, number_of_samples + start_idx))
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.multiprocess_check:
+        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+                for _ in executor.map(simulate_experiment_selftuning_number_of_changes, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                    pbar.update()
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
+            _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
@@ -1495,11 +1531,13 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
 
     S = initialize_system_from_experiment_number(exp_no)
     if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning':
-        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no, number_of_changes_limit=S.sim.test_parameter, print_check=print_check)
+        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=S.sim.test_parameter, print_check=print_check)
     elif S.sim.test_model == 'selftuning_number_of_changes':
-        _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no, print_check=print_check)
+        _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
-        simulate_statistics_experiment_fixed_vs_selftuning(exp_no)
+        simulate_statistics_experiment_fixed_vs_selftuning2(exp_no=exp_no)
+    elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
+        simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
     else:
         raise Exception('Experiment not defined')
 
@@ -1590,7 +1628,7 @@ def plot_experiment(exp_no: int = None):
 
     if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes':
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes':
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
@@ -1599,11 +1637,6 @@ def plot_experiment(exp_no: int = None):
 def plot_comparison_exp_no(exp_no: int = 1):
 
     S, S_1, S_2 = retrieve_experiment(exp_no)
-
-    plot_comparison_systems(S, S_1, S_2)
-    
-    
-def plot_comparison_systems(S, S_1, S_2):
 
     if S_1.plot is None:
         S_1.plot = PlotParameters()
@@ -1652,6 +1685,10 @@ def plot_comparison_systems(S, S_1, S_2):
     ax_eval.set_xlabel('Mode')
     ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
 
+    fig.suptitle('Experiment No: ' + str(exp_no))
+
+    plt.savefig(image_save_folder_path + 'exp' + str(exp_no) + '.pdf', format='pdf')
+
     plt.show()
 
 
@@ -1670,21 +1707,27 @@ def plot_statistics_exp_no(exp_no: int = None):
     S = initialize_system_from_experiment_number(exp_no)
 
     fig = plt.figure(tight_layout=True)
-    outer_grid = gs.GridSpec(3, 1, figure=fig, height_ratios=[1, 3, 1])
-    arch_grid = gs.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_grid[1, 0])
+    outer_grid = gs.GridSpec(2, 2, figure=fig)
+    # arch_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[1, 0])
 
-    cost_ax = fig.add_subplot(outer_grid[0, 0])
+    cost_ax = fig.add_subplot(outer_grid[0, :])
 
-    B_ax = fig.add_subplot(arch_grid[0, 0])
-    C_ax = fig.add_subplot(arch_grid[0, 1])
+    arch_ax = fig.add_subplot(outer_grid[1, 0])
 
-    eig_ax = fig.add_subplot(outer_grid[2, 0])
+    eig_ax = fig.add_subplot(outer_grid[1, 1])
 
     cost_min_1 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_1 = np.zeros(S.sim.t_simulate)
 
     cost_min_2 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_2 = np.zeros(S.sim.t_simulate)
+
+    sample_cost_1 = np.zeros(S.sim.t_simulate)
+    sample_cost_2 = np.zeros(S.sim.t_simulate)
+    sample_eig = np.zeros(S.number_of_states)
+    sample_arch_count1 = []
+    sample_arch_count2 = []
+    sample_ID = np.random.choice(range(1, 101))
 
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
@@ -1694,6 +1737,9 @@ def plot_statistics_exp_no(exp_no: int = None):
 
         S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key(S_1.trajectory.cost.true)))
         S_2_true_cost = list(itertools.accumulate(S_2.vector_from_dict_key(S_2.trajectory.cost.true)))
+
+        # cost_ax.plot(range(0, S.sim.t_simulate), S_1_true_cost, color='tab:blue', alpha=0.1)
+        # cost_ax.plot(range(0, S.sim.t_simulate), S_2_true_cost, color='tab:orange', alpha=0.1)
 
         cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
         cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
@@ -1707,14 +1753,53 @@ def plot_statistics_exp_no(exp_no: int = None):
         arch_change_2['C'].append(S_2.C.change_count)
 
         eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker='x', color='tab:blue', alpha=0.01)
+        if sample_ID == model_no:
+            sample_cost_1 = S_1_true_cost
+            sample_cost_2 = S_2_true_cost
+            sample_eig = np.sort(np.abs(S.A.open_loop_eig_vals))
+            sample_arch_count1 = [S_1.B.change_count, S_1.C.change_count]
+            sample_arch_count2 = [S_2.B.change_count, S_2.C.change_count]
 
-    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color='tab:blue', alpha=0.4)
-    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color='tab:orange', alpha=0.4)
+    c_lines = ['tab:blue', 'tab:orange', 'black']
+    lstyle = ['dotted', 'dashed']
+    mstyle = ['o', '+', 'x']
+
+    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=c_lines[0], alpha=0.4)
+    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=c_lines[1], alpha=0.4)
+    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_1, color=c_lines[2], ls=lstyle[0], linewidth=1)
+    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_2, color=c_lines[2], ls=lstyle[1], linewidth=1)
     cost_ax.set_yscale('log')
     cost_ax.set_xlabel('Time')
     cost_ax.set_ylabel('Cost')
+    cost_ax.legend(handles=[mpatches.Patch(color=c_lines[0], label=r'$S_1$'),
+                            mpatches.Patch(color=c_lines[1], label=r'$S_2$'),
+                            mlines.Line2D([], [], color=c_lines[2], ls=lstyle[0], label='Sample ' + r'$S_1$'),
+                            mlines.Line2D([], [], color=c_lines[2], ls=lstyle[1], label='Sample ' + r'$S_2$')],
+                   loc='upper left')
 
-    B_ax.scatter(arch_change_1['B'], arch_change_1['C'], marker='x', color='tab:blue', alpha=0.1)
-    B_ax.scatter(arch_change_2['B'], arch_change_2['C'], marker='o', color='tab:orange', alpha=0.1)
+    arch_ax.scatter(arch_change_1['B'], arch_change_1['C'], marker=mstyle[0], color=c_lines[0], alpha=0.05)
+    arch_ax.scatter(arch_change_2['B'], arch_change_2['C'], marker=mstyle[0], color=c_lines[1], alpha=0.05)
+    arch_ax.scatter(sample_arch_count1[0], sample_arch_count1[1], marker=mstyle[1], color=c_lines[2], alpha=1)
+    arch_ax.scatter(sample_arch_count2[0], sample_arch_count2[1], marker=mstyle[2], color=c_lines[2], alpha=1)
+    arch_ax.set_xlabel('Actuator \n change count')
+    arch_ax.set_ylabel('Sensor \n change count')
+    arch_ax.legend(handles=[mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[0], label=r'$S_1$'),
+                            mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[1], label=r'$S_2$'),
+                            mlines.Line2D([], [], marker=mstyle[1], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_1$'),
+                            mlines.Line2D([], [], marker=mstyle[2], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_2$')],
+                   loc='upper left')
+
+    eig_ax.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=c_lines[2], alpha=0.5)
+    eig_ax.hlines(1, xmin=1, xmax=S.number_of_states, colors=c_lines[2], ls=lstyle[1])
+    eig_ax.set_xlabel('Mode ' + r'$i$')
+    eig_ax.set_ylabel(r'$|\lambda_i(A)|$')
+    eig_ax.legend(handles=[
+        mlines.Line2D([], [], color=c_lines[2], marker=mstyle[0], linewidth=0, label='Modes'),
+        mlines.Line2D([], [], color=c_lines[2], marker=mstyle[2], linewidth=0, label='Sample ' + r'$S_1$, $S_2$')],
+        loc='upper left')
+
+    fig.suptitle('Experiment No: ' + str(exp_no))
+
+    plt.savefig(image_save_folder_path + 'exp' + str(exp_no) + '.pdf', format='pdf')
 
     plt.show()
