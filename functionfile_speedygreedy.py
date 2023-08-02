@@ -1708,13 +1708,18 @@ def plot_statistics_exp_no(exp_no: int = None):
 
     fig = plt.figure(tight_layout=True)
     outer_grid = gs.GridSpec(2, 2, figure=fig)
-    # arch_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[1, 0])
+    arch_grid = gs.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_grid[1, 1], wspace=0)
 
     cost_ax = fig.add_subplot(outer_grid[0, :])
 
-    arch_ax = fig.add_subplot(outer_grid[1, 0])
+    archB_ax = fig.add_subplot(arch_grid[0, 0])
+    archC_ax = fig.add_subplot(arch_grid[0, 1], sharey=archB_ax)
 
-    eig_ax = fig.add_subplot(outer_grid[1, 1])
+    eig_ax = fig.add_subplot(outer_grid[1, 0])
+
+    cstyle = ['tab:blue', 'tab:orange', 'black']
+    lstyle = ['dotted', 'dashed']
+    mstyle = ['o', '+', 'x']
 
     cost_min_1 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_1 = np.zeros(S.sim.t_simulate)
@@ -1752,7 +1757,7 @@ def plot_statistics_exp_no(exp_no: int = None):
         arch_change_2['B'].append(S_2.B.change_count)
         arch_change_2['C'].append(S_2.C.change_count)
 
-        eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker='x', color='tab:blue', alpha=0.01)
+        eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[2], color=cstyle[0], alpha=0.01)
         if sample_ID == model_no:
             sample_cost_1 = S_1_true_cost
             sample_cost_2 = S_2_true_cost
@@ -1760,43 +1765,46 @@ def plot_statistics_exp_no(exp_no: int = None):
             sample_arch_count1 = [S_1.B.change_count, S_1.C.change_count]
             sample_arch_count2 = [S_2.B.change_count, S_2.C.change_count]
 
-    c_lines = ['tab:blue', 'tab:orange', 'black']
-    lstyle = ['dotted', 'dashed']
-    mstyle = ['o', '+', 'x']
-
-    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=c_lines[0], alpha=0.4)
-    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=c_lines[1], alpha=0.4)
-    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_1, color=c_lines[2], ls=lstyle[0], linewidth=1)
-    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_2, color=c_lines[2], ls=lstyle[1], linewidth=1)
+    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
+    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4)
+    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
+    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
     cost_ax.set_yscale('log')
     cost_ax.set_xlabel('Time')
     cost_ax.set_ylabel('Cost')
-    cost_ax.legend(handles=[mpatches.Patch(color=c_lines[0], label=r'$S_1$'),
-                            mpatches.Patch(color=c_lines[1], label=r'$S_2$'),
-                            mlines.Line2D([], [], color=c_lines[2], ls=lstyle[0], label='Sample ' + r'$S_1$'),
-                            mlines.Line2D([], [], color=c_lines[2], ls=lstyle[1], label='Sample ' + r'$S_2$')],
-                   loc='upper left')
+    cost_ax.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$'),
+                            mpatches.Patch(color=cstyle[1], label=r'$M_2$'),
+                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
+                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
+                   loc='lower right', ncols=2)
 
-    arch_ax.scatter(arch_change_1['B'], arch_change_1['C'], marker=mstyle[0], color=c_lines[0], alpha=0.05)
-    arch_ax.scatter(arch_change_2['B'], arch_change_2['C'], marker=mstyle[0], color=c_lines[1], alpha=0.05)
-    arch_ax.scatter(sample_arch_count1[0], sample_arch_count1[1], marker=mstyle[1], color=c_lines[2], alpha=1)
-    arch_ax.scatter(sample_arch_count2[0], sample_arch_count2[1], marker=mstyle[2], color=c_lines[2], alpha=1)
-    arch_ax.set_xlabel('Actuator \n change count')
-    arch_ax.set_ylabel('Sensor \n change count')
-    arch_ax.legend(handles=[mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[0], label=r'$S_1$'),
-                            mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[1], label=r'$S_2$'),
-                            mlines.Line2D([], [], marker=mstyle[1], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_1$'),
-                            mlines.Line2D([], [], marker=mstyle[2], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_2$')],
-                   loc='upper left')
+    # arch_ax.scatter(arch_change_1['B'], arch_change_1['C'], marker=mstyle[0], color=c_lines[0], alpha=0.05)
+    # arch_ax.scatter(arch_change_2['B'], arch_change_2['C'], marker=mstyle[0], color=c_lines[1], alpha=0.05)
+    # arch_ax.scatter(sample_arch_count1[0], sample_arch_count1[1], marker=mstyle[1], color=c_lines[2], alpha=1)
+    # arch_ax.scatter(sample_arch_count2[0], sample_arch_count2[1], marker=mstyle[2], color=c_lines[2], alpha=1)
+    # arch_ax.set_xlabel('Actuator \n change count')
+    # arch_ax.set_ylabel('Sensor \n change count')
+    # arch_ax.legend(handles=[mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[0], label=r'$S_1$'),
+    #                         mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[1], label=r'$S_2$'),
+    #                         mlines.Line2D([], [], marker=mstyle[1], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_1$'),
+    #                         mlines.Line2D([], [], marker=mstyle[2], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_2$')],
+    #                loc='upper left')
 
-    eig_ax.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=c_lines[2], alpha=0.5)
-    eig_ax.hlines(1, xmin=1, xmax=S.number_of_states, colors=c_lines[2], ls=lstyle[1])
+    eig_ax.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.5)
+    eig_ax.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
     eig_ax.set_xlabel('Mode ' + r'$i$')
     eig_ax.set_ylabel(r'$|\lambda_i(A)|$')
     eig_ax.legend(handles=[
-        mlines.Line2D([], [], color=c_lines[2], marker=mstyle[0], linewidth=0, label='Modes'),
-        mlines.Line2D([], [], color=c_lines[2], marker=mstyle[2], linewidth=0, label='Sample ' + r'$S_1$, $S_2$')],
+        mlines.Line2D([], [], color=cstyle[2], marker=mstyle[0], linewidth=0, label='Modes'),
+        mlines.Line2D([], [], color=cstyle[2], marker=mstyle[2], linewidth=0, label='Sample')],
         loc='upper left')
+
+    archB_ax.boxplot([arch_change_1['B'], arch_change_2['B']], labels=[r'$M_1$', r'$M_2$'])
+    archC_ax.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'])
+    archC_ax.yaxis.set_tick_params(labelleft=False, left=False)
+    archB_ax.set_ylabel('Number of\nChanges')
+    archB_ax.set_title('Actuator ' + r'$S$')
+    archC_ax.set_title('Sensor ' + r'$S$' + '\'')
 
     fig.suptitle('Experiment No: ' + str(exp_no))
 
