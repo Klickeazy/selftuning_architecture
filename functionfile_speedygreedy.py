@@ -1136,10 +1136,10 @@ class System:
             ax = ax_in
 
         if cost_type == 'true':
-            cost = list(itertools.accumulate(self.vector_from_dict_key(self.trajectory.cost.true)))
+            cost = list(itertools.accumulate(self.vector_from_dict_key_cost(self.trajectory.cost.true)))
             ls = 'solid'
         elif cost_type == 'predict':
-            cost = self.vector_from_dict_key(self.trajectory.cost.predicted)
+            cost = self.vector_from_dict_key_cost(self.trajectory.cost.predicted)
             ls = 'dotted'
         else:
             raise Exception('Check argument')
@@ -1168,10 +1168,33 @@ class System:
             ax.set_ylabel(r'$|\lambda_i(A)|$')
             plt.show()
 
-    def vector_from_dict_key(self, v: dict):
+    def plot_states(self, ax_in=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(1, 1)
+            ax = fig.add_subplot(grid[0, 0])
+        else:
+            ax = ax_in
+
+        x = self.vector_from_dict_key_states(self.trajectory.x)
+        for s in range(0, self.number_of_states):
+            ax.stairs(x[s, 0:self.sim.t_simulate-1], range(0, self.sim.t_simulate), color=self.plot.plot_parameters[self.plot.plot_system]['c'], alpha=0.2)
+
+        if ax_in is None:
+            ax.set_xlabel('Mode')
+            ax.set_ylabel(r'$|\lambda_i(A)|$')
+            plt.show()
+
+    def vector_from_dict_key_cost(self, v: dict):
         ret_list = []
         for t in range(0, self.sim.t_simulate):
             ret_list.append(v[t])
+        return ret_list
+
+    def vector_from_dict_key_states(self, v: dict):
+        ret_list = np.empty((self.number_of_states, self.sim.t_simulate))
+        for t in range(0, self.sim.t_simulate):
+            ret_list[:, t] = v[t]
         return ret_list
 
 
@@ -1477,6 +1500,28 @@ def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_chec
     return S, S_tuning_1change, S_tuning_bestchange
 
 
+def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+    S = initialize_system_from_experiment_number(exp_no)
+
+    S = optimize_initial_architecture(S, print_check=print_check)
+
+    S_tuning_Tp = dc(S)
+    S_tuning_Tp = simulate_self_tuning_architecture(S_tuning_Tp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_Tp.plot_name = 'selftuning Tp' + str(S_tuning_Tp.sim.t_predict)
+
+    S_tuning_2Tp = dc(S)
+    S_tuning_2Tp.sim.t_predict *= 2
+    S_tuning_2Tp = simulate_self_tuning_architecture(S_tuning_2Tp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_2Tp.plot_name = 'selftuning Tp' + str(S_tuning_2Tp.sim.t_predict)
+
+    if statistics_model == 0:
+        system_model_to_memory_sim_model(S, S_tuning_Tp, S_tuning_2Tp)
+    else:
+        system_model_to_memory_statistics(S, S_tuning_Tp, S_tuning_2Tp, statistics_model)
+
+    return S, S_tuning_Tp, S_tuning_2Tp
+
+
 def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
 
     idx_range = list(range(start_idx, number_of_samples + start_idx))
@@ -1500,7 +1545,8 @@ def simulate_statistics_experiment_fixed_vs_selftuning2(exp_no: int = 0, start_i
 
     if S.sim.multiprocess_check:
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
                 for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(1), itertools.repeat(False), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
@@ -1514,12 +1560,28 @@ def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0,
 
     if S.sim.multiprocess_check:
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
                 for _ in executor.map(simulate_experiment_selftuning_number_of_changes, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
+
+
+def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+    idx_range = list(range(start_idx, number_of_samples + start_idx))
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.multiprocess_check:
+        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
+            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for _ in executor.map(simulate_experiment_selftuning_prediction_horizon, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                    pbar.update()
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
+            _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
@@ -1534,10 +1596,14 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=S.sim.test_parameter, print_check=print_check)
     elif S.sim.test_model == 'selftuning_number_of_changes':
         _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
+    elif S.sim.test_model == 'selftuning_prediction_time':
+        _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
         simulate_statistics_experiment_fixed_vs_selftuning2(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
         simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
+    elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
+        simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
     else:
         raise Exception('Experiment not defined')
 
@@ -1626,9 +1692,9 @@ def plot_experiment(exp_no: int = None):
 
     S = initialize_system_from_experiment_number(exp_no)
 
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes':
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time':
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes':
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon':
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
@@ -1645,14 +1711,16 @@ def plot_comparison_exp_no(exp_no: int = 1):
         S_2.plot = PlotParameters()
 
     fig = plt.figure(tight_layout=True)
-    outer_grid = gs.GridSpec(2, 1, figure=fig, height_ratios=[3, 1])
+    outer_grid = gs.GridSpec(2, 1, figure=fig, height_ratios=[4, 1])
 
-    time_grid = gs.GridSpecFromSubplotSpec(3, 1, subplot_spec=outer_grid[0, 0])
+    time_grid = gs.GridSpecFromSubplotSpec(4, 1, subplot_spec=outer_grid[0, 0])
     eval_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[1, 0])
 
     ax_cost = fig.add_subplot(time_grid[0, 0])
     ax_B = fig.add_subplot(time_grid[1, 0], sharex=ax_cost)
     ax_C = fig.add_subplot(time_grid[2, 0], sharex=ax_cost)
+    ax_state = fig.add_subplot(time_grid[3, 0], sharex=ax_cost)
+
     ax_eval = fig.add_subplot(eval_grid[0, 0])
     
     S_1.plot_cost(ax_in=ax_cost)
@@ -1677,8 +1745,25 @@ def plot_comparison_exp_no(exp_no: int = 1):
     S_2.plot_architecture_history(arch='C', ax_in=ax_C)
     ax_C.set_ylabel('Sensor\nPosition\n'+r'$S_t$'+'\'')
     # ax_C.legend()
-    ax_C.set_xlabel('Time')
+    # ax_C.set_xlabel('Time')
+    ax_C.tick_params(axis="x", labelbottom=False)
     ax_C.grid(visible=True, which='major', axis='x')
+
+    S_1.plot_states(ax_in=ax_state)
+    S_2.plot_states(ax_in=ax_state)
+    # ax_state.set_yscale('symlog', linthresh=1)
+    bmin, bmax = ax_state.get_ylim()
+    b = max(abs(bmin), abs(bmax))
+    ax_state.set_ylim(-b, b)
+    ax_state.set_xlabel('Time')
+    ax_state.set_ylabel('States')
+    ax_state.grid(visible=True, which='major', axis='x')
+
+    # x_1 = S_1.vector_from_dict_key_states(S_1.trajectory.x)
+    # x_2 = S_2.vector_from_dict_key_states(S_2.trajectory.x)
+    # print(np.shape(x_1))
+    # ax_state.stairs(range(0, S_1.sim.t_simulate), x_1)
+    # ax_state.stairs(range(0, S_2.sim.t_simulate), x_2)
 
     S_1.plot_openloop_eigvals(ax_in=ax_eval)
     ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dotted')
@@ -1740,8 +1825,8 @@ def plot_statistics_exp_no(exp_no: int = None):
     for model_no in tqdm(range(1, 101), ncols=100, desc='Model ID'):
         S, S_1, S_2 = data_from_memory_statistics(exp_no, model_no)
 
-        S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key(S_1.trajectory.cost.true)))
-        S_2_true_cost = list(itertools.accumulate(S_2.vector_from_dict_key(S_2.trajectory.cost.true)))
+        S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key_cost(S_1.trajectory.cost.true)))
+        S_2_true_cost = list(itertools.accumulate(S_2.vector_from_dict_key_cost(S_2.trajectory.cost.true)))
 
         # cost_ax.plot(range(0, S.sim.t_simulate), S_1_true_cost, color='tab:blue', alpha=0.1)
         # cost_ax.plot(range(0, S.sim.t_simulate), S_2_true_cost, color='tab:orange', alpha=0.1)
