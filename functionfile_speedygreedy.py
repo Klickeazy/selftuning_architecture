@@ -1522,6 +1522,30 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
     return S, S_tuning_Tp, S_tuning_2Tp
 
 
+def simulate_experiment_selftuning_actuator_cost(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+    S = initialize_system_from_experiment_number(exp_no)
+    S = optimize_initial_architecture(S, print_check=print_check)
+
+    if S.B.R2 == 0 or S.B.R3 == 0:
+        raise Exception('No actuator costs')
+
+    S_tuning_base_cost = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_base_cost.plot_name = 'selftuning base'
+
+    S_tuning_2cost = dc(S)
+    S_tuning_2cost.B.R2 *= 2
+    S_tuning_2cost.B.R3 *= 2
+    S_tuning_2cost = simulate_self_tuning_architecture(S_tuning_2cost, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_2cost.plot_name = 'selftuning 2xcost'
+
+    if statistics_model == 0:
+        system_model_to_memory_sim_model(S, S_tuning_base_cost, S_tuning_2cost)
+    else:
+        system_model_to_memory_statistics(S, S_tuning_base_cost, S_tuning_2cost, statistics_model)
+
+    return S, S_tuning_base_cost, S_tuning_2cost
+
+
 def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
 
     idx_range = list(range(start_idx, number_of_samples + start_idx))
@@ -1584,6 +1608,21 @@ def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0
             _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
+def simulate_statistics_experiment_selftuning_actuator_cost(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+    idx_range = list(range(start_idx, number_of_samples + start_idx))
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.multiprocess_check:
+        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
+            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for _ in executor.map(simulate_experiment_selftuning_actuator_cost, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                    pbar.update()
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
+            _, _, _ = simulate_experiment_selftuning_actuator_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
+
+
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
 
     if exp_no is None:
@@ -1598,12 +1637,17 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'selftuning_prediction_time':
         _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
+    elif S.sim.test_model == 'selftuning_actuator_cost':
+        _, _, _ = simulate_experiment_selftuning_actuator_cost(exp_no=exp_no, print_check=print_check)
+
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
         simulate_statistics_experiment_fixed_vs_selftuning2(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
         simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
         simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
+    elif S.sim.test_model == 'statistics_selftuning_actuator_cost':
+        simulate_statistics_experiment_selftuning_actuator_cost(exp_no=exp_no)
     else:
         raise Exception('Experiment not defined')
 
@@ -1692,9 +1736,9 @@ def plot_experiment(exp_no: int = None):
 
     S = initialize_system_from_experiment_number(exp_no)
 
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time':
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time' or S.sim.test_model == 'selftuning_actuator_cost':
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon':
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_actuator_cost':
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
