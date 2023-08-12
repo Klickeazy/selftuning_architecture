@@ -217,8 +217,8 @@ class PlotParameters:
         self.network_state_graph, self.network_state_locations = netx.Graph(), {}
         self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
         self.plot_parameters = \
-            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:orange', 'ms': 20, 'ls': 'solid'},
-             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:blue', 'ms': 20, 'ls': 'dotted'}}
+            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:blue', 'ms': 20, 'ls': 'solid'},
+             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:orange', 'ms': 20, 'ls': 'dashed'}}
         self.network_plot_limits = []
         self.B_history = [[], []]
         self.C_history = [[], []]
@@ -1106,8 +1106,8 @@ class System:
                                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
                                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
                 elif self.sim.sim_model == "fixed":
-                    ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate, alpha=0.7,
-                              colors=['k']*len(self.B.history_active_set[0]), linestyles='dashed', linewidth=1)
+                    ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate, alpha=1,
+                              colors=[self.plot.plot_parameters[self.plot.plot_system]['c']]*len(self.B.history_active_set[0]), linestyles='dashed', linewidth=1)
                 else:
                     raise Exception('Invalid test model')
             else:  # a=='C'
@@ -1117,8 +1117,8 @@ class System:
                                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
                                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
                 elif self.sim.sim_model == "fixed":
-                    ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate, alpha=0.7,
-                              colors=['k'] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
+                    ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate, alpha=1,
+                              colors=[self.plot.plot_parameters[self.plot.plot_system]['c']] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
                 else:
                     raise Exception('Invalid test model')
 
@@ -1140,7 +1140,7 @@ class System:
             ls = 'solid'
         elif cost_type == 'predict':
             cost = self.vector_from_dict_key_cost(self.trajectory.cost.predicted)
-            ls = 'dotted'
+            ls = 'dashed'
         else:
             raise Exception('Check argument')
 
@@ -1178,7 +1178,32 @@ class System:
 
         x = self.vector_from_dict_key_states(self.trajectory.x)
         for s in range(0, self.number_of_states):
-            ax.stairs(x[s, 0:self.sim.t_simulate-1], range(0, self.sim.t_simulate), color=self.plot.plot_parameters[self.plot.plot_system]['c'], alpha=0.2)
+            ax.stairs(x[s, 0:self.sim.t_simulate-1], range(0, self.sim.t_simulate), color=self.plot.plot_parameters[self.plot.plot_system]['c'], alpha=0.1)
+
+        if ax_in is None:
+            ax.set_xlabel('Mode')
+            ax.set_ylabel(r'$|\lambda_i(A)|$')
+            plt.show()
+
+    def plot_states_estimates_norm(self, ax_in=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(1, 1)
+            ax = fig.add_subplot(grid[0, 0])
+        else:
+            ax = ax_in
+
+        x = self.vector_from_dict_key_states(self.trajectory.x)
+        x_norm = [np.linalg.norm(x[:, i]) for i in range(0, self.sim.t_simulate)]
+        x_estimate = self.vector_from_dict_key_states(self.trajectory.x_estimate)
+        x_estimate_norm = [np.linalg.norm(x_estimate[:, i]) for i in range(0, self.sim.t_simulate)]
+
+        ax.plot(range(0, self.sim.t_simulate), x_norm, color=self.plot.plot_parameters[self.plot.plot_system]['c'], alpha=0.8)
+        ax.plot(range(0, self.sim.t_simulate), x_estimate_norm, color=self.plot.plot_parameters[self.plot.plot_system]['c'], ls='dashed', alpha=0.8)
+
+        x_lim = ax.get_xlim()
+        if x_lim[0] == 0:
+            ax.set_xlim(-10, x_lim[1])
 
         if ax_in is None:
             ax.set_xlabel('Mode')
@@ -1522,28 +1547,27 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
     return S, S_tuning_Tp, S_tuning_2Tp
 
 
-def simulate_experiment_selftuning_actuator_cost(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
-    S = optimize_initial_architecture(S, print_check=print_check)
+    # S = optimize_initial_architecture(S, print_check=print_check)
 
-    if S.B.R2 == 0 or S.B.R3 == 0:
-        raise Exception('No actuator costs')
+    S_tuning_WO_cost = dc(S)
+    S_tuning_WO_cost.B.R2, S_tuning_WO_cost.B.R3, S_tuning_WO_cost.C.R2, S_tuning_WO_cost.C.R3 = 0, 0, 0, 0
+    S_tuning_WO_cost = optimize_initial_architecture(S_tuning_WO_cost, print_check=print_check)
+    S_tuning_WO_cost = simulate_self_tuning_architecture(S_tuning_WO_cost, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_WO_cost.plot_name = 'selftuning w/o arch cost'
 
-    S_tuning_base_cost = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-    S_tuning_base_cost.plot_name = 'selftuning base'
-
-    S_tuning_2cost = dc(S)
-    S_tuning_2cost.B.R2 *= 2
-    S_tuning_2cost.B.R3 *= 2
-    S_tuning_2cost = simulate_self_tuning_architecture(S_tuning_2cost, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-    S_tuning_2cost.plot_name = 'selftuning 2xcost'
+    S_tuning_W_cost = dc(S)
+    S_tuning_W_cost = optimize_initial_architecture(S_tuning_W_cost, print_check=print_check)
+    S_tuning_W_cost = simulate_self_tuning_architecture(S_tuning_W_cost, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_W_cost.plot_name = 'selftuning w/ arch cost'
 
     if statistics_model == 0:
-        system_model_to_memory_sim_model(S, S_tuning_base_cost, S_tuning_2cost)
+        system_model_to_memory_sim_model(S, S_tuning_WO_cost, S_tuning_W_cost)
     else:
-        system_model_to_memory_statistics(S, S_tuning_base_cost, S_tuning_2cost, statistics_model)
+        system_model_to_memory_statistics(S, S_tuning_WO_cost, S_tuning_W_cost, statistics_model)
 
-    return S, S_tuning_base_cost, S_tuning_2cost
+    return S, S_tuning_WO_cost, S_tuning_W_cost
 
 
 def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
@@ -1608,7 +1632,7 @@ def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0
             _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
-def simulate_statistics_experiment_selftuning_actuator_cost(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
 
@@ -1616,12 +1640,14 @@ def simulate_statistics_experiment_selftuning_actuator_cost(exp_no: int = 0, sta
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_actuator_cost, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_selftuning_architecture_cost, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_selftuning_actuator_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
+            _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
+# def simulate_statistics_experiment_pointdistribution(exp_no: int=0):
+#         S = initialize_system_from_experiment_number(exp_no)
 
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
 
@@ -1637,8 +1663,8 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'selftuning_prediction_time':
         _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
-    elif S.sim.test_model == 'selftuning_actuator_cost':
-        _, _, _ = simulate_experiment_selftuning_actuator_cost(exp_no=exp_no, print_check=print_check)
+    elif S.sim.test_model == 'selftuning_architecture_cost':
+        _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
 
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
         simulate_statistics_experiment_fixed_vs_selftuning2(exp_no=exp_no)
@@ -1646,8 +1672,8 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
         simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
-    elif S.sim.test_model == 'statistics_selftuning_actuator_cost':
-        simulate_statistics_experiment_selftuning_actuator_cost(exp_no=exp_no)
+    elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
+        simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
     else:
         raise Exception('Experiment not defined')
 
@@ -1736,9 +1762,9 @@ def plot_experiment(exp_no: int = None):
 
     S = initialize_system_from_experiment_number(exp_no)
 
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time' or S.sim.test_model == 'selftuning_actuator_cost':
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time' or S.sim.test_model == 'selftuning_architecture_cost':
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_actuator_cost':
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost':
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
@@ -1754,7 +1780,8 @@ def plot_comparison_exp_no(exp_no: int = 1):
     if S_2.plot is None:
         S_2.plot = PlotParameters()
 
-    fig = plt.figure(tight_layout=True)
+    # fig = plt.figure(tight_layout=True)
+    fig = plt.figure(constrained_layout=True)
     outer_grid = gs.GridSpec(2, 1, figure=fig, height_ratios=[4, 1])
 
     time_grid = gs.GridSpecFromSubplotSpec(4, 1, subplot_spec=outer_grid[0, 0])
@@ -1771,7 +1798,17 @@ def plot_comparison_exp_no(exp_no: int = 1):
     S_2.plot_cost(ax_in=ax_cost)
     S_1.plot_cost(ax_in=ax_cost, cost_type='predict')
     S_2.plot_cost(ax_in=ax_cost, cost_type='predict')
-    ax_cost.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
+
+    leg1 = ax_cost.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label='True'),
+                                   mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label='Predicted')],
+                          loc='upper left', ncol=2)
+    ax_cost.add_artist(leg1)
+
+    leg2 = ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
+                                   mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
+                          loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
+    # ax_cost.add_artist(leg2)
+
     ax_cost.tick_params(axis="x", labelbottom=False)
     ax_cost.set_ylabel('Cost\n'+r'$J_t$')
     # ax_cost.ticklabel_format(axis='y', style='sci', scilimits=[-2, 2])
@@ -1793,12 +1830,19 @@ def plot_comparison_exp_no(exp_no: int = 1):
     ax_C.tick_params(axis="x", labelbottom=False)
     ax_C.grid(visible=True, which='major', axis='x')
 
-    S_1.plot_states(ax_in=ax_state)
-    S_2.plot_states(ax_in=ax_state)
-    # ax_state.set_yscale('symlog', linthresh=1)
-    bmin, bmax = ax_state.get_ylim()
-    b = max(abs(bmin), abs(bmax))
-    ax_state.set_ylim(-b, b)
+    S_1.plot_states_estimates_norm(ax_in=ax_state)
+    S_2.plot_states_estimates_norm(ax_in=ax_state)
+
+    # S_1.plot_states(ax_in=ax_state)
+    # S_2.plot_states(ax_in=ax_state)
+    # bmin, bmax = ax_state.get_ylim()
+    # b = max(abs(bmin), abs(bmax))
+    # ax_state.set_ylim(-b, b)
+
+    ax_state.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label=r'$|x_t|$'),
+                             mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label=r'$|\hat{x}_t|$')],
+                    loc='upper left', ncol=2)
+
     ax_state.set_xlabel('Time')
     ax_state.set_ylabel('States')
     ax_state.grid(visible=True, which='major', axis='x')
@@ -1859,14 +1903,16 @@ def plot_statistics_exp_no(exp_no: int = None):
     sample_cost_1 = np.zeros(S.sim.t_simulate)
     sample_cost_2 = np.zeros(S.sim.t_simulate)
     sample_eig = np.zeros(S.number_of_states)
-    sample_arch_count1 = []
-    sample_arch_count2 = []
+    # sample_arch_count1 = []
+    # sample_arch_count2 = []
     sample_ID = np.random.choice(range(1, 101))
 
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
 
-    for model_no in tqdm(range(1, 101), ncols=100, desc='Model ID'):
+    sim_range = 100 if S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' else S.number_of_states
+
+    for model_no in tqdm(range(1, sim_range+1), ncols=100, desc='Model ID'):
         S, S_1, S_2 = data_from_memory_statistics(exp_no, model_no)
 
         S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key_cost(S_1.trajectory.cost.true)))
@@ -1891,8 +1937,8 @@ def plot_statistics_exp_no(exp_no: int = None):
             sample_cost_1 = S_1_true_cost
             sample_cost_2 = S_2_true_cost
             sample_eig = np.sort(np.abs(S.A.open_loop_eig_vals))
-            sample_arch_count1 = [S_1.B.change_count, S_1.C.change_count]
-            sample_arch_count2 = [S_2.B.change_count, S_2.C.change_count]
+            # sample_arch_count1 = [S_1.B.change_count, S_1.C.change_count]
+            # sample_arch_count2 = [S_2.B.change_count, S_2.C.change_count]
 
     cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
     cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4)
