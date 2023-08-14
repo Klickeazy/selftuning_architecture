@@ -3,7 +3,7 @@ import functionfile_speedygreedy as ff
 if __name__ == "__main__":
     print('Code run start')
 
-    exp_no = 34
+    exp_no = 36
 
     ff.simulate_experiment(exp_no)
 

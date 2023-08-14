@@ -240,6 +240,7 @@ class System:
 
             # Evaluated
             self.open_loop_eig_vals = 0  # Vector of second order states
+            self.open_loop_eig_vecs = np.zeros((0, 0))
             self.adjacency_matrix = 0  # Adjacency matrix
             self.number_of_non_stable_modes = 0  # Number of unstable modes with magnitude >= 1
             self.A_mat = np.zeros((0, 0))  # Open-loop dynamics matrix
@@ -544,7 +545,11 @@ class System:
             self.A.adjacency_matrix += np.identity(self.number_of_nodes)
 
     def evaluate_modes(self):
-        self.A.open_loop_eig_vals = np.sort(np.linalg.eigvals(self.A.A_mat))
+        self.A.open_loop_eig_vals = np.sort(np.abs(np.linalg.eigvals(self.A.A_mat)))
+        _, self.A.open_loop_eig_vecs = np.linalg.eig(self.A.A_mat)
+        for i in range(0, self.number_of_states):
+            if np.linalg.norm(self.A.open_loop_eig_vecs[:, i]) != 0:
+                self.A.open_loop_eig_vecs[:, i] /= np.linalg.norm(self.A.open_loop_eig_vecs[:, i])
         self.A.number_of_non_stable_modes = len([e for e in self.A.open_loop_eig_vals if e >= 1])
 
     def rescale(self):
@@ -558,8 +563,7 @@ class System:
             if self.A.second_order_network_type == 1:
                 self.A.A_mat = np.block([
                     [self.A.A_mat, np.zeros_like(self.A.A_mat)],
-                    [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * np.identity(self.number_of_nodes)]
-                ])
+                    [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * np.identity(self.number_of_nodes)]])
             elif self.A.second_order_network_type == 2:
                 self.A.A_mat = np.block([
                     [np.identity(self.number_of_nodes), np.zeros_like(self.A.A_mat)],
@@ -641,10 +645,13 @@ class System:
                 if self.disturbance.noise_model in ['measurement', 'combined']:
                     self.disturbance.v_gen[t] = self.disturbance.disturbance_magnitude * np.array([coin_toss() for _ in range(0, self.number_of_states)])
 
-    def initialize_trajectory(self):
+    def initialize_trajectory(self, x0_idx=None):
         self.trajectory.X0_covariance = np.identity(self.number_of_states) * self.trajectory.X0_scaling
 
-        self.trajectory.x = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)}
+        if x0_idx is None:
+            self.trajectory.x = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)}
+        else:
+            self.trajectory.x = {0: self.A.open_loop_eig_vecs[:, x0_idx]}
 
         self.trajectory.x_estimate = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)}
 
@@ -1506,6 +1513,29 @@ def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_l
     return S, S_fix, S_tuning
 
 
+def simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+    S = initialize_system_from_experiment_number(exp_no)
+
+    S = system_model_from_memory_gen_model(S.model_name)
+
+    S.initialize_trajectory(statistics_model-1)
+
+    S = optimize_initial_architecture(S, print_check=print_check)
+
+    S_fix = simulate_fixed_architecture(S, print_check=print_check, tqdm_check=tqdm_check)
+    S_fix.plot_name = 'fixed arch'
+
+    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning.plot_name = 'selftuning arch'
+
+    if statistics_model == 0:
+        system_model_to_memory_sim_model(S, S_fix, S_tuning)
+    else:
+        system_model_to_memory_statistics(S, S_fix, S_tuning, statistics_model)
+
+    return S, S_fix, S_tuning
+
+
 def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
 
@@ -1570,23 +1600,23 @@ def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_chec
     return S, S_tuning_WO_cost, S_tuning_W_cost
 
 
+# def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+#
+#     idx_range = list(range(start_idx, number_of_samples + start_idx))
+#     S = initialize_system_from_experiment_number(exp_no)
+#
+#     if S.sim.multiprocess_check:
+#         arg_list = zip([exp_no] * len(idx_range), [1] * len(idx_range), [False] * len(idx_range), [True] * len(idx_range), idx_range)
+#         with multiprocessing.Pool(processes=os.cpu_count() - 4) as P:
+#             # list(tqdm.tqdm(p.imap(func, iterable), total=len(iterable)))
+#             # list(tqdm(P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list), desc='Simulations', ncols=100, total=len(idx_range)))
+#             P.imap(simulate_experiment_fixed_vs_selftuning, arg_list)
+#     else:
+#         for test_no in tqdm(idx_range, desc='Simulations', ncols=100):
+#             _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=1, statistics_model=test_no)
+
+
 def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
-
-    idx_range = list(range(start_idx, number_of_samples + start_idx))
-    S = initialize_system_from_experiment_number(exp_no)
-
-    if S.sim.multiprocess_check:
-        arg_list = zip([exp_no] * len(idx_range), [1] * len(idx_range), [False] * len(idx_range), [True] * len(idx_range), idx_range)
-        with multiprocessing.Pool(processes=os.cpu_count() - 4) as P:
-            # list(tqdm.tqdm(p.imap(func, iterable), total=len(iterable)))
-            # list(tqdm(P.starmap(simulate_experiment_fixed_vs_selftuning, arg_list), desc='Simulations', ncols=100, total=len(idx_range)))
-            P.imap(simulate_experiment_fixed_vs_selftuning, arg_list)
-    else:
-        for test_no in tqdm(idx_range, desc='Simulations', ncols=100):
-            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=1, statistics_model=test_no)
-
-
-def simulate_statistics_experiment_fixed_vs_selftuning2(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
 
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
@@ -1646,8 +1676,23 @@ def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0,
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
-# def simulate_statistics_experiment_pointdistribution(exp_no: int=0):
-#         S = initialize_system_from_experiment_number(exp_no)
+
+def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0):
+    S_temp = initialize_system_from_experiment_number(exp_no)
+    system_model_to_memory_gen_model(S_temp)
+
+    idx_range = list(range(1, 1 + S_temp.number_of_states))
+
+    if S_temp.sim.multiprocess_check:
+        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
+            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for _ in executor.map(simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                    pbar.update()
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
+            _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
+
 
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
 
@@ -1665,15 +1710,19 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'selftuning_architecture_cost':
         _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
+    elif S.sim.test_model == 'pointdistribution_openloop':
+        _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, print_check=print_check, statistics_model=1)
 
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
-        simulate_statistics_experiment_fixed_vs_selftuning2(exp_no=exp_no)
+        simulate_statistics_experiment_fixed_vs_selftuning(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
         simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
         simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
         simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
+    elif S.sim.test_model == 'statistics_experiment_pointdistribution_openloop':
+        simulate_statistics_experiment_pointdistribution_openloop(exp_no=exp_no)
     else:
         raise Exception('Experiment not defined')
 
@@ -1686,14 +1735,15 @@ def retrieve_experiment(exp_no: int = 1):
 
 def system_model_to_memory_gen_model(S: System):  # Store model generated from experiment parameters
     shelve_filename = datadump_folder_path + 'gen_' + S.model_name
-    print('\nShelving gen model: ', shelve_filename)
     with shelve.open(shelve_filename, writeback=True) as shelve_data:
         shelve_data['s'] = S
+    print('\nShelving gen model: ', shelve_filename)
 
 
-def system_model_from_memory_gen_model(model):  # Retrieve model generated from experiment parameters
+def system_model_from_memory_gen_model(model, print_check=False):  # Retrieve model generated from experiment parameters
     shelve_filename = datadump_folder_path + 'gen_' + model
-    print('\nReading gen model: ', shelve_filename)
+    if print_check:
+        print('\nReading gen model: ', shelve_filename)
     with shelve.open(shelve_filename, flag='r') as shelve_data:
         S = shelve_data['s']
     if not isinstance(S, System):
@@ -1764,7 +1814,7 @@ def plot_experiment(exp_no: int = None):
 
     if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time' or S.sim.test_model == 'selftuning_architecture_cost':
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost':
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' or S.sim.test_model == 'statistics_experiment_pointdistribution_openloop':
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
@@ -1905,14 +1955,15 @@ def plot_statistics_exp_no(exp_no: int = None):
     sample_eig = np.zeros(S.number_of_states)
     # sample_arch_count1 = []
     # sample_arch_count2 = []
-    sample_ID = np.random.choice(range(1, 101))
 
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
 
     sim_range = 100 if S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' else S.number_of_states
 
-    for model_no in tqdm(range(1, sim_range+1), ncols=100, desc='Model ID'):
+    sample_ID = np.random.choice(range(1, sim_range + 1))
+
+    for model_no in tqdm(range(1, sim_range + 1), ncols=100, desc='Model ID'):
         S, S_1, S_2 = data_from_memory_statistics(exp_no, model_no)
 
         S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key_cost(S_1.trajectory.cost.true)))
@@ -1932,7 +1983,7 @@ def plot_statistics_exp_no(exp_no: int = None):
         arch_change_2['B'].append(S_2.B.change_count)
         arch_change_2['C'].append(S_2.C.change_count)
 
-        eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[2], color=cstyle[0], alpha=0.01)
+        eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[2], color=cstyle[0], alpha=float(1/S.number_of_states))
         if sample_ID == model_no:
             sample_cost_1 = S_1_true_cost
             sample_cost_2 = S_2_true_cost
