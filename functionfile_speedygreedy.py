@@ -138,10 +138,10 @@ class Experiment:
 
     def read_table_from_file(self):
         # Read table from file
-        if not os.path.exists(datadump_folder_path + self.save_filename):
+        if not os.path.exists(self.save_filename):
             raise Warning('File does not exist')
         else:
-            self.parameter_table = pd.read_csv(datadump_folder_path + self.save_filename, index_col=0, dtype=self.parameter_datatypes)
+            self.parameter_table = pd.read_csv(self.save_filename, index_col=0, dtype=self.parameter_datatypes)
             self.parameter_table.replace({np.nan: None}, inplace=True)
             self.experiments_list = self.parameter_table.index
 
@@ -173,7 +173,7 @@ class Experiment:
             self.write_table_to_file()
 
     def write_table_to_file(self):
-        self.parameter_table.to_csv(datadump_folder_path + self.save_filename)
+        self.parameter_table.to_csv(self.save_filename)
         print('Printing done')
 
     def return_keys_values(self):
@@ -1502,7 +1502,7 @@ def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_l
     S_fix = simulate_fixed_architecture(S, print_check=print_check, tqdm_check=tqdm_check)
     S_fix.plot_name = 'fixed arch'
 
-    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=number_of_changes_limit, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=S.sim.test_parameter, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning.plot_name = 'selftuning arch'
 
     if statistics_model == 0:
@@ -1525,7 +1525,7 @@ def simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no: i
     S_fix = simulate_fixed_architecture(S, print_check=print_check, tqdm_check=tqdm_check)
     S_fix.plot_name = 'fixed arch'
 
-    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning = simulate_self_tuning_architecture(S, number_of_changes_limit=S.sim.test_parameter, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning.plot_name = 'selftuning arch'
 
     if statistics_model == 0:
@@ -1544,7 +1544,7 @@ def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_chec
     S_tuning_1change = simulate_self_tuning_architecture(S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_1change.plot_name = 'selftuning 1change'
 
-    S_tuning_bestchange = simulate_self_tuning_architecture(S, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_bestchange = simulate_self_tuning_architecture(S, number_of_changes_limit=S.sim.test_parameter, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_bestchange.plot_name = 'selftuning bestchange'
 
     if statistics_model == 0:
@@ -1564,17 +1564,17 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
     S_tuning_Tp = simulate_self_tuning_architecture(S_tuning_Tp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_Tp.plot_name = 'selftuning Tp' + str(S_tuning_Tp.sim.t_predict)
 
-    S_tuning_2Tp = dc(S)
-    S_tuning_2Tp.sim.t_predict *= 2
-    S_tuning_2Tp = simulate_self_tuning_architecture(S_tuning_2Tp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-    S_tuning_2Tp.plot_name = 'selftuning Tp' + str(S_tuning_2Tp.sim.t_predict)
+    S_tuning_nTp = dc(S)
+    S_tuning_nTp.sim.t_predict *= S.sim.test_parameter
+    S_tuning_nTp = simulate_self_tuning_architecture(S_tuning_nTp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_nTp.plot_name = 'selftuning Tp' + str(S_tuning_nTp.sim.t_predict)
 
     if statistics_model == 0:
-        system_model_to_memory_sim_model(S, S_tuning_Tp, S_tuning_2Tp)
+        system_model_to_memory_sim_model(S, S_tuning_Tp, S_tuning_nTp)
     else:
-        system_model_to_memory_statistics(S, S_tuning_Tp, S_tuning_2Tp, statistics_model)
+        system_model_to_memory_statistics(S, S_tuning_Tp, S_tuning_nTp, statistics_model)
 
-    return S, S_tuning_Tp, S_tuning_2Tp
+    return S, S_tuning_Tp, S_tuning_nTp
 
 
 def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
