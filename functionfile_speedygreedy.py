@@ -1625,7 +1625,7 @@ def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_id
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(1), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
