@@ -3,9 +3,9 @@ import functionfile_speedygreedy as ff
 if __name__ == "__main__":
     print('Code run start')
 
-    exp_no = 19
+    exp_no = 31
 
-    ff.simulate_experiment(exp_no)
+    # ff.simulate_experiment(exp_no)
 
     ff.plot_experiment(exp_no)
 

@@ -201,6 +201,13 @@ def architecture_iterator(arch=None):
     return arch
 
 
+def normalize_columns_of_matrix(A_mat: np.ndarray):
+    for i in range(0, np.shape(A_mat)[0]):
+        if np.linalg.norm(A_mat[:, i]) != 0:
+            A_mat[:, i] /= np.linalg.norm(A_mat[:, i])
+    return A_mat
+
+
 def initialize_system_from_experiment_number(exp_no: int = 1):
     exp = Experiment()
     exp.read_parameters_from_table(exp_no)
@@ -518,6 +525,7 @@ class System:
                 A = np.random.rand(self.number_of_nodes, self.number_of_nodes)
                 A = A.T + A
                 _, V_mat = np.linalg.eig(A)
+                V_mat = normalize_columns_of_matrix(V_mat)
 
                 if self.A.network_model == 'eval_squeeze':
                     e = 2 * self.A.network_parameter * (0.5 - np.random.default_rng().random(self.number_of_nodes))
@@ -547,9 +555,7 @@ class System:
     def evaluate_modes(self):
         self.A.open_loop_eig_vals = np.sort(np.abs(np.linalg.eigvals(self.A.A_mat)))
         _, self.A.open_loop_eig_vecs = np.linalg.eig(self.A.A_mat)
-        for i in range(0, self.number_of_states):
-            if np.linalg.norm(self.A.open_loop_eig_vecs[:, i]) != 0:
-                self.A.open_loop_eig_vecs[:, i] /= np.linalg.norm(self.A.open_loop_eig_vecs[:, i])
+        self.A.open_loop_eig_vecs = normalize_columns_of_matrix(self.A.open_loop_eig_vecs)
         self.A.number_of_non_stable_modes = len([e for e in self.A.open_loop_eig_vals if e >= 1])
 
     def rescale(self):
@@ -2025,8 +2031,15 @@ def plot_statistics_exp_no(exp_no: int = None):
         mlines.Line2D([], [], color=cstyle[2], marker=mstyle[2], linewidth=0, label='Sample')],
         loc='upper left')
 
-    archB_ax.boxplot([arch_change_1['B'], arch_change_2['B']], labels=[r'$M_1$', r'$M_2$'])
-    archC_ax.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'])
+    a1 = archB_ax.boxplot([arch_change_1['B'], arch_change_2['B']], labels=[r'$M_1$', r'$M_2$'])
+    a2 = archC_ax.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'])
+
+    for bplot in (a1, a2):
+        # for patch, color in zip(bplot['boxes'], [cstyle[0], cstyle[1]]):
+        for patch, color in zip(bplot['medians'], [cstyle[0], cstyle[1]]):
+            # patch.set_facecolor(color)
+            patch.set_color(color)
+
     archC_ax.yaxis.set_tick_params(labelleft=False, left=False)
     archB_ax.set_ylabel('Number of\nChanges')
     archB_ax.set_title('Actuator ' + r'$S$')
