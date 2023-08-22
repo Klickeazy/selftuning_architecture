@@ -251,7 +251,7 @@ class System:
             self.adjacency_matrix = 0  # Adjacency matrix
             self.number_of_non_stable_modes = 0  # Number of unstable modes with magnitude >= 1
             self.A_mat = np.zeros((0, 0))  # Open-loop dynamics matrix
-            self.A_enhanced_mat = np.zeros((0, 0))  # Open-loop enhanced dynamics matrix for current t
+            self.A_augmented_mat = np.zeros((0, 0))  # Open-loop augmented dynamics matrix for current t
 
         def display_values(self):
             for var, value in vars(self).items():
@@ -301,7 +301,7 @@ class System:
             self.V = np.zeros((0, 0))  # Measurement noise covariance
             self.w_gen = {}  # Realization of process noise
             self.v_gen = {}  # Realization of measurement noise
-            self.F_enhanced = np.zeros((0, 0))  # Enhanced matrix for noise at current time
+            self.F_augmented = np.zeros((0, 0))  # augmented matrix for noise at current time
 
         def display_values(self):
             for var, value in vars(self).items():
@@ -334,7 +334,7 @@ class System:
             self.X0_covariance = np.zeros((0, 0))  # Initial state covariance
             self.x = {}  # True state trajectory
             self.x_estimate = {}  # Estimates state trajectory
-            self.X_enhanced = {}  # Enhanced state trajectory
+            self.X_augmented = {}  # augmented state trajectory
             self.error = {}  # Estimation error trajectory
             self.control_cost_matrix = {}  # Control cost matrix at each timestep
             self.estimation_matrix = {}  # Estimation error covariance matrix at each timestep
@@ -661,7 +661,7 @@ class System:
 
         self.trajectory.x_estimate = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)}
 
-        self.trajectory.X_enhanced = {0: np.concatenate((self.trajectory.x[0], self.trajectory.x_estimate[0]))}
+        self.trajectory.X_augmented = {0: np.concatenate((self.trajectory.x[0], self.trajectory.x_estimate[0]))}
 
         self.trajectory.control_cost_matrix = {}
         self.trajectory.estimation_matrix = {0: np.identity(self.number_of_states)}
@@ -825,35 +825,35 @@ class System:
         #     self.trajectory.estimation_matrix.append(self.C.recursion_matrix[1])
 
     def cost_prediction(self):
-        A_enhanced_mat = {}
-        W_enhanced = {}
-        F_enhanced = {}
-        Q_enhanced = {}
+        A_augmented_mat = {}
+        W_augmented = {}
+        F_augmented = {}
+        Q_augmented = {}
         W_mat = np.block([[self.disturbance.W, np.zeros((self.number_of_states, len(self.C.active_set)))],
                           [np.zeros((len(self.C.active_set), self.number_of_states)), self.disturbance.V[:, self.C.active_set][self.C.active_set, :]]])
         for t in range(0, self.sim.t_predict):
             BKt = self.B.active_matrix @ self.B.gain[t]
             ALtC = self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix
-            A_enhanced_mat[t] = np.block([[self.A.A_mat, -BKt],
+            A_augmented_mat[t] = np.block([[self.A.A_mat, -BKt],
                                           [ALtC, self.A.A_mat - ALtC - BKt]])
-            F_enhanced[t] = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, len(self.C.active_set)))],
+            F_augmented[t] = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, len(self.C.active_set)))],
                                       [np.zeros((self.number_of_states, self.number_of_states)), self.A.A_mat @ self.C.gain[t]]])
-            W_enhanced[t] = F_enhanced[t] @ W_mat @ F_enhanced[t].T
-            Q_enhanced[t] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
+            W_augmented[t] = F_augmented[t] @ W_mat @ F_augmented[t].T
+            Q_augmented[t] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
                                       [np.zeros((self.number_of_states, self.number_of_states)), self.B.gain[t].T @ self.B.R1 @ self.B.gain[t]]])
 
-        Q_enhanced[self.sim.t_predict] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
+        Q_augmented[self.sim.t_predict] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
                                                    [np.zeros((self.number_of_states, self.number_of_states)), np.zeros((self.number_of_states, self.number_of_states))]])
 
-        self.A.A_enhanced_mat = A_enhanced_mat[0]
-        self.disturbance.F_enhanced = F_enhanced[0]
+        self.A.A_augmented_mat = A_augmented_mat[0]
+        self.disturbance.F_augmented = F_augmented[0]
 
-        self.trajectory.cost.predicted_matrix = {self.sim.t_predict: Q_enhanced[self.sim.t_predict]}
+        self.trajectory.cost.predicted_matrix = {self.sim.t_predict: Q_augmented[self.sim.t_predict]}
         self.trajectory.cost.control = 0
 
         for t in range(self.sim.t_predict - 1, -1, -1):
-            self.trajectory.cost.control += np.trace(self.trajectory.cost.predicted_matrix[t + 1] @ W_enhanced[t])
-            self.trajectory.cost.predicted_matrix[t] = A_enhanced_mat[t].T @ self.trajectory.cost.predicted_matrix[t + 1] @ A_enhanced_mat[t]
+            self.trajectory.cost.control += np.trace(self.trajectory.cost.predicted_matrix[t + 1] @ W_augmented[t])
+            self.trajectory.cost.predicted_matrix[t] = A_augmented_mat[t].T @ self.trajectory.cost.predicted_matrix[t + 1] @ A_augmented_mat[t]
 
         if self.trajectory.cost.metric_control == 1:
             x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[self.sim.t_current], (1, 2)))
@@ -949,13 +949,13 @@ class System:
         return return_values
 
     def one_step_system_update(self):
-        # print('1:', np.shape(self.disturbance.F_enhanced), np.shape(self.disturbance.w_gen[self.sim.t_current]), np.shape(self.disturbance.v_gen[self.sim.t_current]))
-        # print('2:', np.shape(self.A.A_enhanced_mat), np.shape(self.trajectory.X_enhanced[self.sim.t_current]))
-        self.trajectory.X_enhanced[self.sim.t_current + 1] = (self.A.A_enhanced_mat @ self.trajectory.X_enhanced[self.sim.t_current]) + (self.disturbance.F_enhanced @ np.concatenate((self.disturbance.w_gen[self.sim.t_current], self.disturbance.v_gen[self.sim.t_current][self.C.active_set])))
+        # print('1:', np.shape(self.disturbance.F_augmented), np.shape(self.disturbance.w_gen[self.sim.t_current]), np.shape(self.disturbance.v_gen[self.sim.t_current]))
+        # print('2:', np.shape(self.A.A_augmented_mat), np.shape(self.trajectory.X_augmented[self.sim.t_current]))
+        self.trajectory.X_augmented[self.sim.t_current + 1] = (self.A.A_augmented_mat @ self.trajectory.X_augmented[self.sim.t_current]) + (self.disturbance.F_augmented @ np.concatenate((self.disturbance.w_gen[self.sim.t_current], self.disturbance.v_gen[self.sim.t_current][self.C.active_set])))
 
-        self.trajectory.x[self.sim.t_current + 1] = self.trajectory.X_enhanced[self.sim.t_current + 1][0:self.number_of_states]
+        self.trajectory.x[self.sim.t_current + 1] = self.trajectory.X_augmented[self.sim.t_current + 1][0:self.number_of_states]
 
-        self.trajectory.x_estimate[self.sim.t_current + 1] = self.trajectory.X_enhanced[self.sim.t_current + 1][self.number_of_states:]
+        self.trajectory.x_estimate[self.sim.t_current + 1] = self.trajectory.X_augmented[self.sim.t_current + 1][self.number_of_states:]
 
         self.trajectory.error[self.sim.t_current + 1] = self.trajectory.x[self.sim.t_current + 1] - self.trajectory.x_estimate[self.sim.t_current + 1]
 
@@ -991,9 +991,9 @@ class System:
         self.plot.network_plot_limits = [[min(x)*scale, max(x)*scale], [min(y)*scale, max(y)*scale]]
 
     def generate_network_architecture_graph_matrix(self, mA=1, mB=1, mC=1):
-        A_mat = (self.A.adjacency_matrix > 0) * mA
-        B_mat = (self.B.active_matrix > 0) * mB
-        C_mat = (self.C.active_matrix > 0) * mC
+        A_mat = np.array((self.A.adjacency_matrix > 0) * mA, dtpye=int)
+        B_mat = np.array((self.B.active_matrix > 0) * mB, dtpye=int)
+        C_mat = np.array((self.C.active_matrix > 0) * mC, dtpye=int)
         net_matrix = np.block([[A_mat, B_mat, C_mat.T],
                                [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))), np.zeros((len(self.B.active_set), len(self.C.active_set)))],
                                [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))), np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
@@ -1273,8 +1273,11 @@ def greedy_selection(S: System, number_of_changes_limit: int = None, print_check
             number_of_choices += len(choices)
             # evaluations = list(map(work_iteration.evaluate_cost_for_choice, choices))
             evaluations = cost_mapper(work_iteration, choices)
-            smallest_cost = min(d['cost'] for d in evaluations)
-            index_of_smallest_cost = evaluations.index(min(d for d in evaluations if d['cost'] == smallest_cost))
+            # smallest_cost = min(d['cost'] for d in evaluations)
+            # index_of_smallest_cost = evaluations.index(min(d for d in evaluations if d['cost'] == smallest_cost))
+
+            index_of_smallest_cost = min(range(len(evaluations)), key=lambda change: evaluations[change].get('cost', float('inf')))
+            smallest_cost = evaluations[index_of_smallest_cost]['cost']
 
             if print_check:
                 print('Choice evaluations')
@@ -1335,8 +1338,11 @@ def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check
             number_of_choices += len(choices)
             # evaluations = list(map(work_iteration.evaluate_cost_for_choice, choices))
             evaluations = cost_mapper(work_iteration, choices)
-            smallest_cost = min(d['cost'] for d in evaluations)
-            index_of_smallest_cost = evaluations.index(min(d for d in evaluations if d['cost'] == smallest_cost))
+            # smallest_cost = min(d['cost'] for d in evaluations)
+            # index_of_smallest_cost = evaluations.index(min(d for d in evaluations if d['cost'] == smallest_cost))
+
+            index_of_smallest_cost = min(range(len(evaluations)), key=lambda change: evaluations[change].get('cost', float('inf')))
+            smallest_cost = evaluations[index_of_smallest_cost]['cost']
 
             if print_check:
                 print('Choice evaluations')
@@ -1500,7 +1506,7 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
     return S_self_tuning
 
 
-def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+def simulate_experiment_fixed_vs_selftuning(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
 
     S = optimize_initial_architecture(S, print_check=print_check)
@@ -1571,7 +1577,7 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
     S_tuning_Tp.plot_name = 'selftuning Tp' + str(S_tuning_Tp.sim.t_predict)
 
     S_tuning_nTp = dc(S)
-    S_tuning_nTp.sim.t_predict *= S.sim.test_parameter
+    S_tuning_nTp.sim.t_predict = S_tuning_nTp.sim.t_predict * S.sim.test_parameter
     S_tuning_nTp = simulate_self_tuning_architecture(S_tuning_nTp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_nTp.plot_name = 'selftuning Tp' + str(S_tuning_nTp.sim.t_predict)
 
@@ -1635,7 +1641,7 @@ def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_id
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=1, statistics_model=test_no)
+            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, statistics_model=test_no)
 
 
 def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
@@ -1709,10 +1715,10 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
 
     S = initialize_system_from_experiment_number(exp_no)
     if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning':
-        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, number_of_changes_limit=S.sim.test_parameter, print_check=print_check)
+        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'selftuning_number_of_changes':
         _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
-    elif S.sim.test_model == 'selftuning_prediction_time':
+    elif S.sim.test_model == 'selftuning_prediction_horizon':
         _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'selftuning_architecture_cost':
         _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
@@ -1818,7 +1824,7 @@ def plot_experiment(exp_no: int = None):
 
     S = initialize_system_from_experiment_number(exp_no)
 
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_time' or S.sim.test_model == 'selftuning_architecture_cost':
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_horizon' or S.sim.test_model == 'selftuning_architecture_cost':
         plot_comparison_exp_no(exp_no)
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' or S.sim.test_model == 'statistics_experiment_pointdistribution_openloop':
         plot_statistics_exp_no(exp_no)
@@ -1860,9 +1866,9 @@ def plot_comparison_exp_no(exp_no: int = 1):
                           loc='upper left', ncol=2)
     ax_cost.add_artist(leg1)
 
-    leg2 = ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
-                                   mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
-                          loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
+    # leg2 = ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
+    #                                mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
+    #                       loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
     # ax_cost.add_artist(leg2)
 
     ax_cost.tick_params(axis="x", labelbottom=False)
