@@ -36,5 +36,5 @@ experiment_no,test_model,test_parameter,number_of_nodes,network_model,network_pa
 35,statistics_experiment_pointdistribution_openloop,0,20,eval_squeeze,0.1,1,FALSE,0,2,2,2,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,TRUE
 36,statistics_experiment_pointdistribution_openloop,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,TRUE
 37,statistics_fixed_vs_selftuning,0,20,eval_squeeze,0.1,1,FALSE,0,2,2,2,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,TRUE
-38,statistics_selftuning_prediction_horizon,5,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,1,10,TRUE
+38,statistics_selftuning_prediction_horizon,2,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,1,10,TRUE
 39,selftuning_prediction_horizon,5,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,1,10,FALSE
