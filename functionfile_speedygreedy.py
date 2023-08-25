@@ -279,6 +279,7 @@ class System:
             self.indicator_vector_history = np.zeros(self.number_of_available)  # {1, 0} binary vector of previously active architecture - to compute switching costs
             self.history_active_set = {}  # Record of active architecture over simulation horizon
             self.change_count = 0  # Count of number of changes in architecture over simulation horizon
+            self.active_count = []  # Count size of active architecture at each timestep of the simulation horizon
             self.recursion_matrix = {}  # Recursive cost matrix/estimation error covariance over the prediction horizon
             self.gain = {}  # Gains calculated over the prediction horizon for the fixed architecture
 
@@ -567,13 +568,11 @@ class System:
     def second_order_matrix(self):
         if self.A.second_order:
             if self.A.second_order_network_type == 1:
-                self.A.A_mat = np.block([
-                    [self.A.A_mat, np.zeros_like(self.A.A_mat)],
-                    [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * np.identity(self.number_of_nodes)]])
+                self.A.A_mat = np.block([[self.A.A_mat, np.zeros_like(self.A.A_mat)],
+                                         [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * np.identity(self.number_of_nodes)]])
             elif self.A.second_order_network_type == 2:
-                self.A.A_mat = np.block([
-                    [np.identity(self.number_of_nodes), np.zeros_like(self.A.A_mat)],
-                    [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * self.A.A_mat]])
+                self.A.A_mat = np.block([[np.identity(self.number_of_nodes), np.zeros_like(self.A.A_mat)],
+                                         [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * self.A.A_mat]])
             else:
                 raise SecondOrderError()
 
@@ -834,8 +833,8 @@ class System:
         for t in range(0, self.sim.t_predict):
             BKt = self.B.active_matrix @ self.B.gain[t]
             ALtC = self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix
-            A_augmented_mat[t] = np.block([[self.A.A_mat, -BKt],
-                                          [ALtC, self.A.A_mat - ALtC - BKt]])
+            A_augmented_mat[t] = np.block([[self.A.A_mat, -BKt                        ],
+                                          [ALtC, self.A.A_mat - ALtC - BKt   ]])
             F_augmented[t] = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, len(self.C.active_set)))],
                                       [np.zeros((self.number_of_states, self.number_of_states)), self.A.A_mat @ self.C.gain[t]]])
             W_augmented[t] = F_augmented[t] @ W_mat @ F_augmented[t].T
@@ -1047,6 +1046,16 @@ class System:
                 self.plot.C_history[0].append(t)
                 self.plot.C_history[1].append(a+1)
 
+    def generate_architecture_active_count(self):
+        if self.sim.sim_model == 'selftuning':
+            self.B.active_count = [len(self.B.history_active_set[i]) for i in range(0, len(self.B.history_active_set))]
+            self.C.active_count = [len(self.C.history_active_set[i]) for i in range(0, len(self.C.history_active_set))]
+        elif self.sim.sim_model == "fixed":
+            self.B.active_count = [len(self.B.active_set)] * len(self.B.history_active_set)
+            self.C.active_count = [len(self.C.active_set)] * len(self.C.history_active_set)
+        else:
+            raise Exception('Invalid test model')
+
     def plot_network_architecture(self, t: int = None, ax_in=None):
         if ax_in is None:
             fig = plt.figure()
@@ -1136,6 +1145,24 @@ class System:
                     raise Exception('Invalid test model')
 
         ax.set_ylim([0, self.number_of_states + 2])
+
+        if ax_in is None:
+            plt.show()
+
+    def plot_architecture_count(self, ax_in=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(1, 1)
+            ax = fig.add_subplot(grid[0, 0])
+        else:
+            ax = ax_in
+
+        self.generate_architecture_active_count()
+
+        ax.scatter(range(0, len(self.B.active_count)), self.B.active_count,
+                   marker='x', c=self.plot.plot_parameters[self.plot.plot_system]['c'], s=10, alpha=0.7)
+        ax.scatter(range(0, len(self.C.active_count)), self.C.active_count,
+                   marker='o', c=self.plot.plot_parameters[self.plot.plot_system]['c'], s=10, alpha=0.7)
 
         if ax_in is None:
             plt.show()
@@ -1572,9 +1599,9 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
 
     S = optimize_initial_architecture(S, print_check=print_check)
 
-    S_tuning_Tp = dc(S)
-    S_tuning_Tp = simulate_self_tuning_architecture(S_tuning_Tp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-    S_tuning_Tp.plot_name = 'selftuning Tp' + str(S_tuning_Tp.sim.t_predict)
+    S_tuning_baseTp = dc(S)
+    S_tuning_baseTp = simulate_self_tuning_architecture(S_tuning_baseTp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_baseTp.plot_name = 'selftuning Tp' + str(S_tuning_baseTp.sim.t_predict)
 
     S_tuning_nTp = dc(S)
     S_tuning_nTp.sim.t_predict = S_tuning_nTp.sim.t_predict * S.sim.test_parameter
@@ -1582,11 +1609,11 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
     S_tuning_nTp.plot_name = 'selftuning Tp' + str(S_tuning_nTp.sim.t_predict)
 
     if statistics_model == 0:
-        system_model_to_memory_sim_model(S, S_tuning_Tp, S_tuning_nTp)
+        system_model_to_memory_sim_model(S, S_tuning_baseTp, S_tuning_nTp)
     else:
-        system_model_to_memory_statistics(S, S_tuning_Tp, S_tuning_nTp, statistics_model)
+        system_model_to_memory_statistics(S, S_tuning_baseTp, S_tuning_nTp, statistics_model)
 
-    return S, S_tuning_Tp, S_tuning_nTp
+    return S, S_tuning_baseTp, S_tuning_nTp
 
 
 def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
@@ -1692,7 +1719,7 @@ def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0,
             _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
-def simulate_statistics_pointdistribution_openloop(exp_no: int = 0):
+def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0):
     S_temp = initialize_system_from_experiment_number(exp_no)
     system_model_to_memory_gen_model(S_temp)
 
@@ -1737,7 +1764,7 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
     elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
         simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_pointdistribution_openloop':
-        simulate_statistics_pointdistribution_openloop(exp_no=exp_no)
+        simulate_statistics_experiment_pointdistribution_openloop(exp_no=exp_no)
     else:
         raise Exception('Experiment not defined')
 
@@ -1828,7 +1855,7 @@ def plot_experiment(exp_no: int = None):
     S = initialize_system_from_experiment_number(exp_no)
 
     if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_horizon' or S.sim.test_model == 'selftuning_architecture_cost':
-        plot_comparison_exp_no(exp_no)
+        plot_comparison2_exp_no(exp_no)
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' or S.sim.test_model == 'statistics_pointdistribution_openloop':
         plot_statistics_exp_no(exp_no)
     else:
@@ -1845,8 +1872,7 @@ def plot_comparison_exp_no(exp_no: int = 1):
     if S_2.plot is None:
         S_2.plot = PlotParameters()
 
-    # fig = plt.figure(tight_layout=True)
-    fig = plt.figure(constrained_layout=True)
+    fig = plt.figure(tight_layout=True)
     outer_grid = gs.GridSpec(2, 1, figure=fig, height_ratios=[4, 1])
 
     time_grid = gs.GridSpecFromSubplotSpec(4, 1, subplot_spec=outer_grid[0, 0])
@@ -1869,14 +1895,12 @@ def plot_comparison_exp_no(exp_no: int = 1):
                           loc='upper left', ncol=2)
     ax_cost.add_artist(leg1)
 
-    # leg2 = ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
-    #                                mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
-    #                       loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
-    # ax_cost.add_artist(leg2)
+    ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
+                            mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
+                   loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
 
     ax_cost.tick_params(axis="x", labelbottom=False)
     ax_cost.set_ylabel('Cost\n'+r'$J_t$')
-    # ax_cost.ticklabel_format(axis='y', style='sci', scilimits=[-2, 2])
     ax_cost.set_yscale('log')
     ax_cost.grid(visible=True, which='major', axis='x')
 
@@ -1885,49 +1909,124 @@ def plot_comparison_exp_no(exp_no: int = 1):
     ax_B.set_ylabel('Actuator\nPosition\n'+r'$S_t$')
     ax_B.tick_params(axis="x", labelbottom=False)
     ax_B.grid(visible=True, which='major', axis='x')
-    # ax_B.legend()
 
     S_1.plot_architecture_history(arch='C', ax_in=ax_C)
     S_2.plot_architecture_history(arch='C', ax_in=ax_C)
     ax_C.set_ylabel('Sensor\nPosition\n'+r'$S_t$'+'\'')
-    # ax_C.legend()
-    # ax_C.set_xlabel('Time')
     ax_C.tick_params(axis="x", labelbottom=False)
     ax_C.grid(visible=True, which='major', axis='x')
 
     S_1.plot_states_estimates_norm(ax_in=ax_state)
     S_2.plot_states_estimates_norm(ax_in=ax_state)
-
-    # S_1.plot_states(ax_in=ax_state)
-    # S_2.plot_states(ax_in=ax_state)
-    # bmin, bmax = ax_state.get_ylim()
-    # b = max(abs(bmin), abs(bmax))
-    # ax_state.set_ylim(-b, b)
-
+    ax_state.set_yscale('log')
     ax_state.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label=r'$|x_t|$'),
                              mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label=r'$|\hat{x}_t|$')],
                     loc='upper left', ncol=2)
-
-    ax_state.set_xlabel('Time')
-    ax_state.set_ylabel('States')
+    ax_state.set_xlabel(r'Time $t$')
+    ax_state.set_ylabel('States\n' + r'$x_t$ $\hat{x}_t$')
     ax_state.grid(visible=True, which='major', axis='x')
 
-    # x_1 = S_1.vector_from_dict_key_states(S_1.trajectory.x)
-    # x_2 = S_2.vector_from_dict_key_states(S_2.trajectory.x)
-    # print(np.shape(x_1))
-    # ax_state.stairs(range(0, S_1.sim.t_simulate), x_1)
-    # ax_state.stairs(range(0, S_2.sim.t_simulate), x_2)
-
     S_1.plot_openloop_eigvals(ax_in=ax_eval)
-    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dotted')
-    ax_eval.set_xlabel('Mode')
+    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dashdot')
+    ax_eval.set_xlabel(r'Mode $i$')
     ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
 
-    fig.suptitle('Experiment No: ' + str(exp_no))
+    plt.show()
 
-    plt.savefig(image_save_folder_path + 'exp' + str(exp_no) + '.pdf', format='pdf')
+    save_path = image_save_folder_path + 'exp' + str(exp_no) + '.pdf'
+    fig.savefig(save_path, dpi=fig.dpi)
+    # print('Image saved: ', save_path)
+
+
+def plot_comparison2_exp_no(exp_no: int = 1):
+    S, S_1, S_2 = retrieve_experiment(exp_no)
+
+    if S_1.plot is None:
+        S_1.plot = PlotParameters()
+
+    if S_2.plot is None:
+        S_2.plot = PlotParameters()
+
+    fig = plt.figure(tight_layout=True)
+    outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 5.5], width_ratios=[2, 3])
+
+    time_grid = gs.GridSpecFromSubplotSpec(5, 1, subplot_spec=outer_grid[1, :], hspace=0.2)
+    eval_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[0, 1])
+
+    ax_cost = fig.add_subplot(time_grid[0, 0])
+    ax_B_scatter = fig.add_subplot(time_grid[1, 0], sharex=ax_cost)
+    ax_C_scatter = fig.add_subplot(time_grid[2, 0], sharex=ax_cost)
+    ax_arch_count = fig.add_subplot(time_grid[3, 0], sharex=ax_cost)
+    ax_state = fig.add_subplot(time_grid[4, 0], sharex=ax_cost)
+
+    ax_eval = fig.add_subplot(eval_grid[0, 0])
+
+    S_1.plot_cost(ax_in=ax_cost)
+    S_2.plot_cost(ax_in=ax_cost)
+    S_1.plot_cost(ax_in=ax_cost, cost_type='predict')
+    S_2.plot_cost(ax_in=ax_cost, cost_type='predict')
+
+    leg2 = ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
+                                   mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
+                          loc='lower left', bbox_to_anchor=(0.05, 1.2), ncol=1)
+    ax_cost.add_artist(leg2)
+
+    leg1 = ax_cost.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label='True'),
+                                   mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label='Predicted')],
+                          loc='upper left', ncol=2)
+    ax_cost.add_artist(leg1)
+
+    ax_cost.tick_params(axis="x", labelbottom=False)
+    ax_cost.set_ylabel('Cost\n' + r'$J_t$')
+    ax_cost.set_yscale('log')
+    ax_cost.grid(visible=True, which='major', axis='x')
+
+    S_1.plot_architecture_history(arch='B', ax_in=ax_B_scatter)
+    S_2.plot_architecture_history(arch='B', ax_in=ax_B_scatter)
+    ax_B_scatter.set_ylabel('Actuator\nPosition\n' + r'$S_t$')
+    ax_B_scatter.tick_params(axis="x", labelbottom=False)
+    ax_B_scatter.grid(visible=True, which='major', axis='x')
+
+    S_1.plot_architecture_history(arch='C', ax_in=ax_C_scatter)
+    S_2.plot_architecture_history(arch='C', ax_in=ax_C_scatter)
+    ax_C_scatter.set_ylabel('Sensor\nPosition\n' + r'$S_t$' + '\'')
+    ax_C_scatter.tick_params(axis="x", labelbottom=False)
+    ax_C_scatter.grid(visible=True, which='major', axis='x')
+
+    ax_arch_count.hlines([S.B.min, S.B.max], xmin=0, xmax=S.sim.t_simulate, colors=['k', 'k'], ls='dashed', alpha=1)
+    S_1.plot_architecture_count(ax_in=ax_arch_count)
+    S_2.plot_architecture_count(ax_in=ax_arch_count)
+    ax_arch_count.set_ylim(0, S.B.max+1)
+    ax_arch_count.set_yticks([S.B.min, S.B.max])
+    ax_arch_count.set_ylabel('Arch\nChange')
+    ax_arch_count.tick_params(axis="x", labelbottom=False)
+    ax_arch_count.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], marker='x', linewidth=0, label=r'$|S_t|$'),
+                                  mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], marker='o', linewidth=0, label=r'$|S$' + '\'' + r'$_t|$')],
+                         loc='upper left', ncol=2)
+    ax_arch_count.grid(visible=True, which='major', axis='x')
+
+    S_1.plot_states_estimates_norm(ax_in=ax_state)
+    S_2.plot_states_estimates_norm(ax_in=ax_state)
+    ax_state.set_yscale('log')
+    ax_state.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label=r'$|x_t|$'),
+                             mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label=r'$|\hat{x}_t|$')],
+                    loc='upper left', ncol=2)
+    ax_state.set_xlabel(r'Time $t$')
+    ax_state.set_ylabel('States\n' + r'$x_t$ $\hat{x}_t$')
+    ax_state.grid(visible=True, which='major', axis='x')
+
+    S_1.plot_openloop_eigvals(ax_in=ax_eval)
+    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dashdot')
+    # ax_eval.set_xlabel(r'Mode $i$')
+    # ax_eval.xaxis.set_label_position('top')
+    ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
+    ax_eval.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
 
     plt.show()
+
+    save_path = image_save_folder_path + 'exp' + str(exp_no) + '.pdf'
+    fig.savefig(save_path, dpi=fig.dpi)
+    print('Image saved: ', save_path)
 
 
 def element_wise_min_max(v_ref_min, v_ref_max, v):
@@ -1956,21 +2055,16 @@ def plot_statistics_exp_no(exp_no: int = None):
     eig_ax = fig.add_subplot(outer_grid[1, 0])
 
     cstyle = ['tab:blue', 'tab:orange', 'black']
-    lstyle = ['dotted', 'dashed']
+    lstyle = ['dashdot', 'dashed']
     mstyle = ['o', '+', 'x']
 
     cost_min_1 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_1 = np.zeros(S.sim.t_simulate)
-
     cost_min_2 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_2 = np.zeros(S.sim.t_simulate)
-
     sample_cost_1 = np.zeros(S.sim.t_simulate)
     sample_cost_2 = np.zeros(S.sim.t_simulate)
     sample_eig = np.zeros(S.number_of_states)
-    # sample_arch_count1 = []
-    # sample_arch_count2 = []
-
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
 
@@ -1983,9 +2077,6 @@ def plot_statistics_exp_no(exp_no: int = None):
 
         S_1_true_cost = list(itertools.accumulate(S_1.vector_from_dict_key_cost(S_1.trajectory.cost.true)))
         S_2_true_cost = list(itertools.accumulate(S_2.vector_from_dict_key_cost(S_2.trajectory.cost.true)))
-
-        # cost_ax.plot(range(0, S.sim.t_simulate), S_1_true_cost, color='tab:blue', alpha=0.1)
-        # cost_ax.plot(range(0, S.sim.t_simulate), S_2_true_cost, color='tab:orange', alpha=0.1)
 
         cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
         cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
@@ -2003,33 +2094,19 @@ def plot_statistics_exp_no(exp_no: int = None):
             sample_cost_1 = S_1_true_cost
             sample_cost_2 = S_2_true_cost
             sample_eig = np.sort(np.abs(S.A.open_loop_eig_vals))
-            # sample_arch_count1 = [S_1.B.change_count, S_1.C.change_count]
-            # sample_arch_count2 = [S_2.B.change_count, S_2.C.change_count]
 
     cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
     cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4)
     cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
     cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
     cost_ax.set_yscale('log')
-    cost_ax.set_xlabel('Time')
-    cost_ax.set_ylabel('Cost')
+    cost_ax.set_xlabel(r'Time $t$')
+    cost_ax.set_ylabel(r'Cost $J_t$')
     cost_ax.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$'),
                             mpatches.Patch(color=cstyle[1], label=r'$M_2$'),
                             mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
                             mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
                    loc='lower right', ncols=2)
-
-    # arch_ax.scatter(arch_change_1['B'], arch_change_1['C'], marker=mstyle[0], color=c_lines[0], alpha=0.05)
-    # arch_ax.scatter(arch_change_2['B'], arch_change_2['C'], marker=mstyle[0], color=c_lines[1], alpha=0.05)
-    # arch_ax.scatter(sample_arch_count1[0], sample_arch_count1[1], marker=mstyle[1], color=c_lines[2], alpha=1)
-    # arch_ax.scatter(sample_arch_count2[0], sample_arch_count2[1], marker=mstyle[2], color=c_lines[2], alpha=1)
-    # arch_ax.set_xlabel('Actuator \n change count')
-    # arch_ax.set_ylabel('Sensor \n change count')
-    # arch_ax.legend(handles=[mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[0], label=r'$S_1$'),
-    #                         mlines.Line2D([], [], marker=mstyle[0], linewidth=0, color=c_lines[1], label=r'$S_2$'),
-    #                         mlines.Line2D([], [], marker=mstyle[1], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_1$'),
-    #                         mlines.Line2D([], [], marker=mstyle[2], linewidth=0, color=c_lines[2], label='Sample ' + r'$S_2$')],
-    #                loc='upper left')
 
     eig_ax.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.5)
     eig_ax.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
@@ -2044,18 +2121,16 @@ def plot_statistics_exp_no(exp_no: int = None):
     a2 = archC_ax.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'])
 
     for bplot in (a1, a2):
-        # for patch, color in zip(bplot['boxes'], [cstyle[0], cstyle[1]]):
         for patch, color in zip(bplot['medians'], [cstyle[0], cstyle[1]]):
-            # patch.set_facecolor(color)
             patch.set_color(color)
 
     archC_ax.yaxis.set_tick_params(labelleft=False, left=False)
-    archB_ax.set_ylabel('Number of\nChanges')
-    archB_ax.set_title('Actuator ' + r'$S$')
-    archC_ax.set_title('Sensor ' + r'$S$' + '\'')
-
-    fig.suptitle('Experiment No: ' + str(exp_no))
-
-    plt.savefig(image_save_folder_path + 'exp' + str(exp_no) + '.pdf', format='pdf')
+    archB_ax.set_ylabel('Number of Changes')
+    archB_ax.set_xlabel('Actuators ' + r'$S$')
+    archC_ax.set_xlabel('Sensors ' + r'$S$' + '\'')
 
     plt.show()
+
+    save_path = image_save_folder_path + 'exp' + str(exp_no) + '.pdf'
+    fig.savefig(save_path, dpi=fig.dpi)
+    print('Image saved: ', save_path)
