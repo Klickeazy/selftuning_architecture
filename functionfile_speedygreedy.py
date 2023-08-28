@@ -1046,15 +1046,21 @@ class System:
                 self.plot.C_history[0].append(t)
                 self.plot.C_history[1].append(a+1)
 
-    def generate_architecture_active_count(self):
-        if self.sim.sim_model == 'selftuning':
-            self.B.active_count = [len(self.B.history_active_set[i]) for i in range(0, len(self.B.history_active_set))]
-            self.C.active_count = [len(self.C.history_active_set[i]) for i in range(0, len(self.C.history_active_set))]
-        elif self.sim.sim_model == "fixed":
-            self.B.active_count = [len(self.B.active_set)] * len(self.B.history_active_set)
-            self.C.active_count = [len(self.C.active_set)] * len(self.C.history_active_set)
-        else:
-            raise Exception('Invalid test model')
+    def generate_architecture_active_count(self, arch=None):
+        arch = architecture_iterator(arch)
+        for a in arch:
+            if self.sim.sim_model == 'selftuning':
+                if a == 'B':
+                    self.B.active_count = [len(self.B.history_active_set[i]) for i in range(0, len(self.B.history_active_set))]
+                else:  # if arch == 'C':
+                    self.C.active_count = [len(self.C.history_active_set[i]) for i in range(0, len(self.C.history_active_set))]
+            elif self.sim.sim_model == "fixed":
+                if a == 'B':
+                    self.B.active_count = [len(self.B.active_set)] * len(self.B.history_active_set)
+                else:  # if arch == 'C':
+                    self.C.active_count = [len(self.C.active_set)] * len(self.C.history_active_set)
+            else:
+                raise Exception('Invalid test model')
 
     def plot_network_architecture(self, t: int = None, ax_in=None):
         if ax_in is None:
@@ -1124,7 +1130,7 @@ class System:
             if a == 'B':
                 if self.sim.sim_model == 'selftuning':
                     ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.plot_name,
-                               s=10, alpha=0.7,
+                               s=10, alpha=0.6,
                                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
                                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
                 elif self.sim.sim_model == "fixed":
@@ -1135,7 +1141,7 @@ class System:
             else:  # a=='C'
                 if self.sim.sim_model == 'selftuning':
                     ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.plot_name,
-                               s=10, alpha=0.7,
+                               s=10, alpha=0.6,
                                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
                                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
                 elif self.sim.sim_model == "fixed":
@@ -1149,7 +1155,9 @@ class System:
         if ax_in is None:
             plt.show()
 
-    def plot_architecture_count(self, ax_in=None):
+    def plot_architecture_count(self, ax_in=None, arch=None):
+        arch = architecture_iterator(arch)
+
         if ax_in is None:
             fig = plt.figure()
             grid = fig.add_gridspec(1, 1)
@@ -1157,12 +1165,16 @@ class System:
         else:
             ax = ax_in
 
-        self.generate_architecture_active_count()
-
-        ax.scatter(range(0, len(self.B.active_count)), self.B.active_count,
-                   marker='x', c=self.plot.plot_parameters[self.plot.plot_system]['c'], s=10, alpha=0.7)
-        ax.scatter(range(0, len(self.C.active_count)), self.C.active_count,
-                   marker='o', c=self.plot.plot_parameters[self.plot.plot_system]['c'], s=10, alpha=0.7)
+        for a in arch:
+            self.generate_architecture_active_count(arch=a)
+            if a == 'B':
+                # ax.scatter(range(0, len(self.B.active_count)), self.B.active_count,
+                #            marker='x', c=self.plot.plot_parameters[self.plot.plot_system]['c'], s=10, alpha=0.6)
+                ax.plot(range(0, len(self.B.active_count)), self.B.active_count, color=self.plot.plot_parameters[self.plot.plot_system]['c'], alpha=0.7)
+            else:  # a == 'C'
+                ax.plot(range(0, len(self.C.active_count)), self.C.active_count, color=self.plot.plot_parameters[self.plot.plot_system]['c'], alpha=0.7)
+                # ax.scatter(range(0, len(self.C.active_count)), self.C.active_count,
+                #            marker='o', c=self.plot.plot_parameters[self.plot.plot_system]['c'], s=10, alpha=0.6)
 
         if ax_in is None:
             plt.show()
@@ -1423,7 +1435,7 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
             print('After force selection')
             force_swap.architecture_display()
 
-        force_swap = dc(force_swap)
+        # force_swap = dc(force_swap)
         force_swap.architecture_limit_mod(min_mod=-swap_limit_mod, max_mod=-swap_limit_mod)
         force_swap = greedy_rejection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
 
@@ -1626,10 +1638,11 @@ def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_chec
     S_tuning_base_cost.plot_name = 'selftuning base arch cost'
 
     S_tuning_scale_cost = dc(S)
-    S_tuning_scale_cost.B.R2 = S.B.R2 * S.sim.test_parameter
-    S_tuning_scale_cost.B.R3 = S.B.R3 * S.sim.test_parameter
-    S_tuning_scale_cost.C.R2 = S.C.R2 * S.sim.test_parameter
-    S_tuning_scale_cost.C.R3 = S.C.R3 * S.sim.test_parameter
+    cost_scale = 0 if S.sim.test_parameter is None else S.sim.test_parameter
+    S_tuning_scale_cost.B.R2 = S.B.R2 * cost_scale
+    S_tuning_scale_cost.B.R3 = S.B.R3 * cost_scale
+    S_tuning_scale_cost.C.R2 = S.C.R2 * cost_scale
+    S_tuning_scale_cost.C.R3 = S.C.R3 * cost_scale
     S_tuning_scale_cost = optimize_initial_architecture(S_tuning_scale_cost, print_check=print_check)
     S_tuning_scale_cost = simulate_self_tuning_architecture(S_tuning_scale_cost, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_scale_cost.plot_name = 'selftuning scale arch cost'
@@ -1947,17 +1960,18 @@ def plot_comparison2_exp_no(exp_no: int = 1):
     if S_2.plot is None:
         S_2.plot = PlotParameters()
 
-    fig = plt.figure(tight_layout=True)
-    outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 5.5], width_ratios=[2, 3])
+    fig = plt.figure(figsize=(6, 8), tight_layout=True)
+    outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 7], width_ratios=[1, 1])
 
-    time_grid = gs.GridSpecFromSubplotSpec(5, 1, subplot_spec=outer_grid[1, :], hspace=0.2)
+    time_grid = gs.GridSpecFromSubplotSpec(6, 1, subplot_spec=outer_grid[1, :], hspace=0.2)
     eval_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[0, 1])
 
     ax_cost = fig.add_subplot(time_grid[0, 0])
-    ax_B_scatter = fig.add_subplot(time_grid[1, 0], sharex=ax_cost)
-    ax_C_scatter = fig.add_subplot(time_grid[2, 0], sharex=ax_cost)
-    ax_arch_count = fig.add_subplot(time_grid[3, 0], sharex=ax_cost)
-    ax_state = fig.add_subplot(time_grid[4, 0], sharex=ax_cost)
+    ax_state = fig.add_subplot(time_grid[1, 0], sharex=ax_cost)
+    ax_B_scatter = fig.add_subplot(time_grid[2, 0], sharex=ax_cost)
+    ax_B_count = fig.add_subplot(time_grid[3, 0], sharex=ax_cost)
+    ax_C_scatter = fig.add_subplot(time_grid[4, 0], sharex=ax_cost)
+    ax_C_count = fig.add_subplot(time_grid[5, 0], sharex=ax_cost)
 
     ax_eval = fig.add_subplot(eval_grid[0, 0])
 
@@ -1968,7 +1982,7 @@ def plot_comparison2_exp_no(exp_no: int = 1):
 
     leg2 = ax_cost.legend(handles=[mpatches.Patch(color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], label=S_1.plot_name),
                                    mpatches.Patch(color=S_2.plot.plot_parameters[S_2.plot.plot_system]['c'], label=S_2.plot_name)],
-                          loc='lower left', bbox_to_anchor=(0.05, 1.2), ncol=1)
+                          loc='lower left', bbox_to_anchor=(0, 1.2), ncol=1)
     ax_cost.add_artist(leg2)
 
     leg1 = ax_cost.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label='True'),
@@ -1993,17 +2007,36 @@ def plot_comparison2_exp_no(exp_no: int = 1):
     ax_C_scatter.tick_params(axis="x", labelbottom=False)
     ax_C_scatter.grid(visible=True, which='major', axis='x')
 
-    ax_arch_count.hlines([S.B.min, S.B.max], xmin=0, xmax=S.sim.t_simulate, colors=['k', 'k'], ls='dashed', alpha=1)
-    S_1.plot_architecture_count(ax_in=ax_arch_count)
-    S_2.plot_architecture_count(ax_in=ax_arch_count)
-    ax_arch_count.set_ylim(0, S.B.max+1)
-    ax_arch_count.set_yticks([S.B.min, S.B.max])
-    ax_arch_count.set_ylabel('Arch\nChange')
-    ax_arch_count.tick_params(axis="x", labelbottom=False)
-    ax_arch_count.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], marker='x', linewidth=0, label=r'$|S_t|$'),
-                                  mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], marker='o', linewidth=0, label=r'$|S$' + '\'' + r'$_t|$')],
-                         loc='upper left', ncol=2)
-    ax_arch_count.grid(visible=True, which='major', axis='x')
+    for lim_val in [S.B.min, S.B.max]:
+        ax_B_count.axhline(y=lim_val, color='k', ls='dashdot', alpha=0.5)
+        ax_C_count.axhline(y=lim_val, color='k', ls='dashdot', alpha=0.5)
+
+    # ax_B_count.hlines(, xmin=0, xmax=S.sim.t_simulate, colors=['k', 'k'], ls='dashdot', alpha=1)
+    S_1.plot_architecture_count(ax_in=ax_B_count, arch='B')
+    S_2.plot_architecture_count(ax_in=ax_B_count, arch='B')
+    ax_B_count.set_ylim(0, S.B.max+1)
+    ax_B_count.set_yticks([S.B.min, S.B.max])
+    ax_B_count.set_ylabel('Actuator\nCount\n'+r'$|S_t|$')
+    ax_B_count.tick_params(axis="x", labelbottom=False)
+
+    # ax_C_count.hlines([S.B.min, S.B.max], xmin=0, xmax=S.sim.t_simulate, colors=['k', 'k'], ls='dashdot', alpha=1)
+    S_1.plot_architecture_count(ax_in=ax_C_count, arch='C')
+    S_2.plot_architecture_count(ax_in=ax_C_count, arch='C')
+    ax_C_count.set_ylim(0, S.B.max + 1)
+    ax_C_count.set_yticks([S.B.min, S.B.max])
+    ax_C_count.set_ylabel('Sensor\nCount\n'+r'$|S$' + '\'' + '$_t|$')
+    ax_C_count.tick_params(axis="x", labelbottom=False)
+
+    # S_1.plot_architecture_count(ax_in=ax_arch_count)
+    # S_2.plot_architecture_count(ax_in=ax_arch_count)
+    # ax_arch_count.set_ylim(0, S.B.max+1)
+    # ax_arch_count.set_yticks([S.B.min, S.B.max])
+    # ax_arch_count.set_ylabel('Arch\nChange')
+    # ax_arch_count.tick_params(axis="x", labelbottom=False)
+    # ax_arch_count.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], marker='x', linewidth=0, label=r'$|S_t|$'),
+    #                               mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], marker='o', linewidth=0, label=r'$|S$' + '\'' + r'$_t|$')],
+    #                      loc='upper left', ncol=2)
+    # ax_arch_count.grid(visible=True, which='major', axis='x')
 
     S_1.plot_states_estimates_norm(ax_in=ax_state)
     S_2.plot_states_estimates_norm(ax_in=ax_state)
