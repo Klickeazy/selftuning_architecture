@@ -164,7 +164,7 @@ class Experiment:
         append_check = True
         for i in self.experiments_list:
             if [k for k in self.parameter_table.loc[i]][:] == self.parameter_values[1:]:
-                print('Duplicate experiment at :', i)
+                print('Duplicate experiment at : {}'.format(i))
                 append_check = False
                 break
         if append_check:
@@ -224,8 +224,8 @@ class PlotParameters:
         self.network_state_graph, self.network_state_locations = netx.Graph(), {}
         self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
         self.plot_parameters = \
-            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:blue', 'ms': 20, 'ls': 'solid'},
-             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:orange', 'ms': 20, 'ls': 'dashed'}}
+            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:blue', 'ms': 20, 'ls': 'solid'},
+             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:orange', 'ms': 20, 'ls': 'dashed'}}
         self.network_plot_limits = []
         self.B_history = [[], []]
         self.C_history = [[], []]
@@ -468,9 +468,9 @@ class System:
             self.model_name = self.model_name + '_' + name_extension
 
     def display_all_parameters(self):
-        print('Model name = ', self.model_name)
-        print('Number of Nodes = ', self.number_of_nodes)
-        print('Number of States = ', self.number_of_states)
+        print('Model name = {}'.format(self.model_name))
+        print('Number of Nodes = {}'.format(self.number_of_nodes))
+        print('Number of States = {}'.format(self.number_of_states))
         print('A')
         self.A.display_values()
         print('B')
@@ -680,13 +680,15 @@ class System:
 
     def architecture_limit_mod(self, arch=None, min_mod: int = None, max_mod: int = None):
         arch = architecture_iterator(arch)
+        min_mod = 0 if min_mod is None else min_mod
+        max_mod = 0 if max_mod is None else max_mod
         for a in arch:
             if a == 'B':
-                self.B.min += (min_mod if min_mod is not None else 0)
-                self.B.max += (max_mod if max_mod is not None else 0)
+                self.B.min = self.B.min + min_mod
+                self.B.max = self.B.max + max_mod
             else:  # a == 'C'
-                self.C.min += (min_mod if min_mod is not None else 0)
-                self.C.max += (max_mod if max_mod is not None else 0)
+                self.C.min = self.C.min + min_mod
+                self.C.max = self.C.max + max_mod
 
     def architecture_update_to_matrix_from_active_set(self, arch=None):
         arch = architecture_iterator(arch)
@@ -755,12 +757,18 @@ class System:
             raise ClassError
         return set(self.B.active_set) == set(reference_system.B.active_set) and set(self.C.active_set) == set(reference_system.C.active_set)
 
+    def architecture_limit_check(self):
+        if self.B.min <= len(self.B.active_set) <= self.B.max and self.C.min <= len(self.C.active_set) <= self.C.max:
+            return True
+        else:
+            return False
+
     def architecture_compute_active_set_changes(self, reference_system):
         if not isinstance(reference_system, System):
             raise ClassError
         B_compare = compare_lists(self.B.active_set, reference_system.B.active_set)
         C_compare = compare_lists(self.C.active_set, reference_system.C.active_set)
-        number_of_changes = max(len(B_compare['only2']), len(B_compare['only2'])) + max(len(C_compare['only2']), len(C_compare['only2']))
+        number_of_changes = max(len(B_compare['only1']), len(B_compare['only2'])) + max(len(C_compare['only1']), len(C_compare['only2']))
         return number_of_changes
 
     def architecture_count_number_of_sim_changes(self):
@@ -773,8 +781,8 @@ class System:
                 self.C.change_count += max(len(compare_C['only2']), len(compare_C['only1']))
 
     def architecture_display(self):
-        print('B: ', self.B.active_set)
-        print('C: ', self.C.active_set)
+        print('B: {}'.format(self.B.active_set))
+        print('C: {}'.format(self.C.active_set))
 
     def cost_architecture_running(self):
         if self.trajectory.cost.metric_running == 0 or (self.B.R2 == 0 and self.C.R2 == 0):
@@ -1128,27 +1136,35 @@ class System:
         arch = architecture_iterator(arch)
         for a in arch:
             if a == 'B':
-                if self.sim.sim_model == 'selftuning':
-                    ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.plot_name,
-                               s=10, alpha=0.6,
-                               marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
-                               c=self.plot.plot_parameters[self.plot.plot_system]['c'])
-                elif self.sim.sim_model == "fixed":
-                    ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate, alpha=1,
-                              colors=[self.plot.plot_parameters[self.plot.plot_system]['c']]*len(self.B.history_active_set[0]), linestyles='dashed', linewidth=1)
-                else:
-                    raise Exception('Invalid test model')
+                ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.plot_name,
+                           s=10, alpha=0.4,
+                           marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
+                           c=self.plot.plot_parameters[self.plot.plot_system]['c'])
+                # if self.sim.sim_model == 'selftuning':
+                #     ax.scatter(self.plot.B_history[0], self.plot.B_history[1], label=self.plot_name,
+                #                s=10, alpha=0.6,
+                #                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
+                #                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
+                # elif self.sim.sim_model == "fixed":
+                #     ax.hlines([i+1 for i in self.B.history_active_set[0]], 0, self.sim.t_simulate, alpha=1,
+                #               colors=[self.plot.plot_parameters[self.plot.plot_system]['c']]*len(self.B.history_active_set[0]), linestyles='dashed', linewidth=1)
+                # else:
+                #     raise Exception('Invalid test model')
             else:  # a=='C'
-                if self.sim.sim_model == 'selftuning':
-                    ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.plot_name,
-                               s=10, alpha=0.6,
-                               marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
-                               c=self.plot.plot_parameters[self.plot.plot_system]['c'])
-                elif self.sim.sim_model == "fixed":
-                    ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate, alpha=1,
-                              colors=[self.plot.plot_parameters[self.plot.plot_system]['c']] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
-                else:
-                    raise Exception('Invalid test model')
+                ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.plot_name,
+                           s=10, alpha=0.4,
+                           marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
+                           c=self.plot.plot_parameters[self.plot.plot_system]['c'])
+                # if self.sim.sim_model == 'selftuning':
+                #     ax.scatter(self.plot.C_history[0], self.plot.C_history[1], label=self.plot_name,
+                #                s=10, alpha=0.6,
+                #                marker=self.plot.plot_parameters[self.plot.plot_system]['m'],
+                #                c=self.plot.plot_parameters[self.plot.plot_system]['c'])
+                # elif self.sim.sim_model == "fixed":
+                #     ax.hlines([i+1 for i in self.C.history_active_set[0]], 0, self.sim.t_simulate, alpha=1,
+                #               colors=[self.plot.plot_parameters[self.plot.plot_system]['c']] * len(self.C.history_active_set[0]), linestyles='dashed', linewidth=1)
+                # else:
+                #     raise Exception('Invalid test model')
 
         ax.set_ylim([0, self.number_of_states + 2])
 
@@ -1213,7 +1229,7 @@ class System:
             ax = ax_in
 
         ax.scatter(range(1, self.number_of_states+1), np.sort(np.abs(self.A.open_loop_eig_vals)),
-                   marker='x', c='black', alpha=0.7)
+                   marker='x', s=10, c='black', alpha=0.7)
 
         if ax_in is None:
             ax.set_xlabel('Mode')
@@ -1287,7 +1303,9 @@ def cost_mapper(S: System, choices):
 
 
 def greedy_selection(S: System, number_of_changes_limit: int = None, print_check: bool = False, t_start=time.time()):
+    exit_condition = 0
     work_sys = dc(S)
+    arch_ref = dc(S)
     cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
 
     if print_check:
@@ -1305,8 +1323,16 @@ def greedy_selection(S: System, number_of_changes_limit: int = None, print_check
         if len(choices) == 0:
             # Exit if there are no available selections or the only option is no change
             selection_check = False
+            exit_condition = 1
             if print_check:
                 print('Selection exit 1: No available selections')
+
+        elif len(choices) == 1 and choices[0]['arch'] == 'skip':
+            # Exit if the only option is no change
+            selection_check = False
+            exit_condition = 2
+            if print_check:
+                print('Selection exit 2: No valuable selections')
 
         else:
             number_of_choices += len(choices)
@@ -1328,31 +1354,47 @@ def greedy_selection(S: System, number_of_changes_limit: int = None, print_check
             if evaluations[index_of_smallest_cost]['arch'] == 'skip':
                 # Exit if the best option is no change
                 selection_check = False
+                exit_condition = 5
                 if print_check:
-                    print('Selection exit 2: No valuable selections')
+                    print('Selection exit 5: No valuable selections')
 
             else:
                 work_sys = dc(evaluations[index_of_smallest_cost]['system'])
                 cost_improvement.append(smallest_cost)
-                number_of_changes += 1
+                number_of_changes = arch_ref.architecture_compute_active_set_changes(work_sys)
+                # number_of_changes += 1
 
                 if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
                     # Exit if maximum number of changes have been completed
                     selection_check = False
-
+                    exit_condition = 3
                     if print_check:
                         print('Selection exit 3: Maximum selections done')
+
+                elif number_of_changes == 0:
+                    # Trigger 2 should always activate before this
+                    selection_check = False
+                    exit_condition = 4
+                    if print_check:
+                        print('Selection exit 4: No selections done')
+
 
     work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
     if print_check:
         print('Number of iterations: {}'.format(number_of_changes))
         work_sys.architecture_display()
         print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+
+    if not work_sys.architecture_limit_check():
+        print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
+        raise Exception('Architecture limits failed')
     return work_sys
 
 
 def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check: bool = False, t_start=time.time()):
+    exit_condition = 0
     work_sys = dc(S)
+    arch_ref = dc(S)
     cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
 
     if print_check:
@@ -1370,8 +1412,16 @@ def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check
         if len(choices) == 0:
             # Exit if there are no available rejections or the only option is no change
             rejection_check = False
+            exit_condition = 1
             if print_check:
                 print('Rejection exit 1: No available rejections')
+
+        elif len(choices) == 1 and choices[0]['arch'] == 'skip':
+            # Exit if the only option is no change
+            rejection_check = False
+            exit_condition = 2
+            if print_check:
+                print('Rejection exit 2: No valuable rejections')
 
         else:
             number_of_choices += len(choices)
@@ -1393,33 +1443,49 @@ def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check
             if evaluations[index_of_smallest_cost]['arch'] == 'skip':
                 # Exit if the best option is no change
                 rejection_check = False
+                exit_condition = 5
                 if print_check:
-                    print('Rejection exit 2: No valuable rejections')
+                    print('Rejection exit 5: No valuable rejections')
 
             else:
                 work_sys = dc(evaluations[index_of_smallest_cost]['system'])
                 cost_improvement.append(smallest_cost)
-                number_of_changes += 1
+                # number_of_changes += 1
+                number_of_changes = arch_ref.architecture_compute_active_set_changes(work_sys)
 
                 if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
                     # Exit if maximum number of changes have been completed
                     rejection_check = False
-
+                    exit_condition = 3
                     if print_check:
                         print('Rejection exit 3: Maximum rejections done')
+
+                elif number_of_changes == 0:
+                    # Trigger 2 should always activate before this
+                    rejection_check = False
+                    exit_condition = 4
+                    if print_check:
+                        print('Rejection exit 4: No valuable rejections')
 
     work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
     if print_check:
         print('Number of iterations: {}'.format(number_of_changes))
         work_sys.architecture_display()
         print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+
+    if not work_sys.architecture_limit_check():
+        print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
+        raise Exception('Architecture limits failed')
     return work_sys
 
 
 def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False, t_start=time.time()):
     work_sys = dc(S)
+    ref_arch = dc(S)
     cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
     swap_limit_mod = 1 if number_of_changes_per_iteration is None else number_of_changes_per_iteration
+    safety_counter = 0
+    exit_condition = 0
 
     if print_check_outer:
         print('Initial architecture')
@@ -1429,7 +1495,8 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
     while simultaneous_check:
         force_swap = dc(work_sys)
         force_swap.architecture_limit_mod(min_mod=swap_limit_mod, max_mod=swap_limit_mod)
-        force_swap = greedy_selection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
+        # force_swap = greedy_selection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
+        force_swap = greedy_selection(force_swap, number_of_changes_limit=None, print_check=print_check_inner)
 
         if print_check_outer:
             print('After force selection')
@@ -1437,7 +1504,8 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
 
         # force_swap = dc(force_swap)
         force_swap.architecture_limit_mod(min_mod=-swap_limit_mod, max_mod=-swap_limit_mod)
-        force_swap = greedy_rejection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
+        # force_swap = greedy_rejection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
+        force_swap = greedy_rejection(force_swap, number_of_changes_limit=None, print_check=print_check_inner)
 
         cost_improvement.append(force_swap.trajectory.cost.predicted[force_swap.sim.t_current])
 
@@ -1445,24 +1513,39 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
             print('After force rejection')
             force_swap.architecture_display()
 
-        if work_sys.architecture_compare_active_set_to_system(force_swap):
+        if work_sys.architecture_compare_active_set_to_system(force_swap):      # Comparison of previous to current iteration of architecture update
             simultaneous_check = False
+            exit_condition = 1
             if print_check_outer:
-                print('Swap exit 1: No more valuable swaps')
+                print('Swap exit 1: No more valuable forced swaps')
 
         else:
-            number_of_changes += work_sys.architecture_compute_active_set_changes(force_swap)
+            number_of_changes = ref_arch.architecture_compute_active_set_changes(force_swap)    # Comparison of initial reference to current architecture
             work_sys = dc(force_swap)
+            safety_counter += 1
 
-            if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
+            if number_of_changes_limit is not None and number_of_changes >= 2*number_of_changes_limit:
                 simultaneous_check = False
+                exit_condition = 2
                 if print_check_outer:
                     print('Swap exit 2: Maximum swaps done')
+            elif number_of_changes == 0:
+                simultaneous_check = False
+                exit_condition = 3
+                if print_check_outer:
+                    print('Swap exit 3: No valuable swaps or cyclic swaps')
+
+            if safety_counter > work_sys.number_of_states:
+                raise Exception('Triggered safety constraint - too many changes - check system')
 
     work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
     if print_check_outer:
         work_sys.architecture_display()
         print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+
+    if not work_sys.architecture_limit_check():
+        print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
+        raise Exception('Architecture limits failed')
     return work_sys
 
 
@@ -1474,13 +1557,18 @@ def optimize_initial_architecture(S: System, print_check: bool = False):
     t_predict_ref = dc(S.sim.t_predict)
     S.sim.t_predict = 2*t_predict_ref
     S.trajectory.cost.metric_control = 2
+    BR3, CR3 = dc(S.B.R3), dc(S.C.R3)
+    S.B.R3 *= 0
+    S.C.R3 *= 0
     S.prediction_gains()
     S.cost_prediction_wrapper()
 
-    S = greedy_simultaneous(S)
+    S = greedy_simultaneous(S, print_check_inner=print_check, print_check_outer=print_check)
 
     S.sim.t_predict = dc(t_predict_ref)
     S.trajectory.cost.metric_control = 1
+    S.B.R3 = dc(BR3)
+    S.C.R3 = dc(CR3)
     S.prediction_gains()
     S.cost_prediction_wrapper()
 
@@ -1569,6 +1657,8 @@ def simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no: i
 
     S = system_model_from_memory_gen_model(S.model_name)
 
+    S.sim.test_parameter = None if S.sim.test_parameter == 0 else S.sim.test_parameter
+
     S.initialize_trajectory(statistics_model-1)
 
     S = optimize_initial_architecture(S, print_check=print_check)
@@ -1589,6 +1679,8 @@ def simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no: i
 
 def simulate_experiment_selftuning_number_of_changes(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
     S = initialize_system_from_experiment_number(exp_no)
+
+    S.sim.test_parameter = None if S.sim.test_parameter == 0 else S.sim.test_parameter
 
     S = optimize_initial_architecture(S, print_check=print_check)
 
@@ -1611,12 +1703,14 @@ def simulate_experiment_selftuning_prediction_horizon(exp_no: int = 1, print_che
 
     S = optimize_initial_architecture(S, print_check=print_check)
 
+    prediction_scaling = 2 if S.sim.test_parameter is None else S.sim.test_parameter
+
     S_tuning_baseTp = dc(S)
     S_tuning_baseTp = simulate_self_tuning_architecture(S_tuning_baseTp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_baseTp.plot_name = 'selftuning Tp' + str(S_tuning_baseTp.sim.t_predict)
 
     S_tuning_nTp = dc(S)
-    S_tuning_nTp.sim.t_predict = S_tuning_nTp.sim.t_predict * S.sim.test_parameter
+    S_tuning_nTp.sim.t_predict *= prediction_scaling
     S_tuning_nTp = simulate_self_tuning_architecture(S_tuning_nTp, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
     S_tuning_nTp.plot_name = 'selftuning Tp' + str(S_tuning_nTp.sim.t_predict)
 
@@ -1645,7 +1739,7 @@ def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_chec
     S_tuning_scale_cost.C.R3 = S.C.R3 * cost_scale
     S_tuning_scale_cost = optimize_initial_architecture(S_tuning_scale_cost, print_check=print_check)
     S_tuning_scale_cost = simulate_self_tuning_architecture(S_tuning_scale_cost, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-    S_tuning_scale_cost.plot_name = 'selftuning scale arch cost'
+    S_tuning_scale_cost.plot_name = 'selftuning' + str(cost_scale) + 'scale arch cost'
 
     if statistics_model == 0:
         system_model_to_memory_sim_model(S, S_tuning_base_cost, S_tuning_scale_cost)
@@ -1792,13 +1886,13 @@ def system_model_to_memory_gen_model(S: System):  # Store model generated from e
     shelve_filename = datadump_folder_path + 'gen_' + S.model_name
     with shelve.open(shelve_filename, writeback=True) as shelve_data:
         shelve_data['s'] = S
-    print('\nShelving gen model: ', shelve_filename)
+    print('\nShelving gen model: {}'.format(shelve_filename))
 
 
 def system_model_from_memory_gen_model(model, print_check=False):  # Retrieve model generated from experiment parameters
     shelve_filename = datadump_folder_path + 'gen_' + model
     if print_check:
-        print('\nReading gen model: ', shelve_filename)
+        print('\nReading gen model: {}'.format(shelve_filename))
     with shelve.open(shelve_filename, flag='r') as shelve_data:
         S = shelve_data['s']
     if not isinstance(S, System):
@@ -1808,7 +1902,7 @@ def system_model_from_memory_gen_model(model, print_check=False):  # Retrieve mo
 
 def system_model_to_memory_sim_model(S: System, S_1: System, S_2: System):  # Store simulated models
     shelve_filename = datadump_folder_path + 'sim_' + S.model_name
-    print('\nShelving sim model:', shelve_filename)
+    print('\nShelving sim model: {}'.format(shelve_filename))
     with shelve.open(shelve_filename, writeback=True) as shelve_data:
         shelve_data['s'] = S
         shelve_data['s1'] = S_1
@@ -1817,7 +1911,7 @@ def system_model_to_memory_sim_model(S: System, S_1: System, S_2: System):  # St
 
 def system_model_from_memory_sim_model(model):  # Retrieve simulated models
     shelve_filename = datadump_folder_path + 'sim_' + model
-    print('\nReading sim model: ', shelve_filename)
+    print('\nReading sim model: {}'.format(shelve_filename))
     with shelve.open(shelve_filename, flag='r') as shelve_data:
         S = shelve_data['s']
         S_1 = shelve_data['s1']
@@ -1840,7 +1934,7 @@ def system_model_to_memory_statistics(S: System, S_1: System, S_2: System, model
         shelve_data['s1'] = S_1
         shelve_data['s2'] = S_2
     if print_check:
-        print('\nShelving model:', shelve_filename)
+        print('\nShelving model: {}'.format(shelve_filename))
 
 
 def data_from_memory_statistics(exp_no: int = None, model_id: int = None, print_check=False):
@@ -1857,7 +1951,7 @@ def data_from_memory_statistics(exp_no: int = None, model_id: int = None, print_
     if not isinstance(S, System) or not isinstance(S_1, System) or not isinstance(S_2, System):
         raise Exception('Data type mismatch')
     if print_check:
-        print('\nModel read done: ', shelve_filename)
+        print('\nModel read done: {}'.format(shelve_filename))
     return S, S_1, S_2
 
 
@@ -1940,7 +2034,7 @@ def plot_comparison_exp_no(exp_no: int = 1):
     ax_state.grid(visible=True, which='major', axis='x')
 
     S_1.plot_openloop_eigvals(ax_in=ax_eval)
-    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dashdot')
+    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='tab:gray', ls='dashdot')
     ax_eval.set_xlabel(r'Mode $i$')
     ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
 
@@ -1948,7 +2042,7 @@ def plot_comparison_exp_no(exp_no: int = 1):
 
     save_path = image_save_folder_path + 'exp' + str(exp_no) + '.pdf'
     fig.savefig(save_path, dpi=fig.dpi)
-    # print('Image saved: ', save_path)
+    print('Image saved: {}'.format(save_path))
 
 
 def plot_comparison2_exp_no(exp_no: int = 1):
@@ -1963,7 +2057,7 @@ def plot_comparison2_exp_no(exp_no: int = 1):
     fig = plt.figure(figsize=(6, 8), tight_layout=True)
     outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 7], width_ratios=[1, 1])
 
-    time_grid = gs.GridSpecFromSubplotSpec(6, 1, subplot_spec=outer_grid[1, :], hspace=0.2)
+    time_grid = gs.GridSpecFromSubplotSpec(6, 1, subplot_spec=outer_grid[1, :], hspace=0.2, height_ratios=[1, 1, 1, 0.7, 1, 0.7])
     eval_grid = gs.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_grid[0, 1])
 
     ax_cost = fig.add_subplot(time_grid[0, 0])
@@ -1985,8 +2079,8 @@ def plot_comparison2_exp_no(exp_no: int = 1):
                           loc='lower left', bbox_to_anchor=(0, 1.2), ncol=1)
     ax_cost.add_artist(leg2)
 
-    leg1 = ax_cost.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label='True'),
-                                   mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label='Predicted')],
+    leg1 = ax_cost.legend(handles=[mlines.Line2D([], [], color='tab:gray', ls='solid', label='True'),
+                                   mlines.Line2D([], [], color='tab:gray', ls='dashed', label='Predicted')],
                           loc='upper left', ncol=2)
     ax_cost.add_artist(leg1)
 
@@ -2008,24 +2102,28 @@ def plot_comparison2_exp_no(exp_no: int = 1):
     ax_C_scatter.grid(visible=True, which='major', axis='x')
 
     for lim_val in [S.B.min, S.B.max]:
-        ax_B_count.axhline(y=lim_val, color='k', ls='dashdot', alpha=0.5)
-        ax_C_count.axhline(y=lim_val, color='k', ls='dashdot', alpha=0.5)
+        ax_B_count.axhline(y=lim_val, color='tab:gray', ls='dashdot', alpha=0.5)
+        ax_C_count.axhline(y=lim_val, color='tab:gray', ls='dashdot', alpha=0.5)
 
-    # ax_B_count.hlines(, xmin=0, xmax=S.sim.t_simulate, colors=['k', 'k'], ls='dashdot', alpha=1)
+    # ax_B_count.hlines(, xmin=0, xmax=S.sim.t_simulate, colors=['tab:gray', 'tab:gray'], ls='dashdot', alpha=1)
     S_1.plot_architecture_count(ax_in=ax_B_count, arch='B')
     S_2.plot_architecture_count(ax_in=ax_B_count, arch='B')
-    ax_B_count.set_ylim(0, S.B.max+1)
+    ax_B_count.set_ylim(S.B.min - 1, S.B.max + 1)
     ax_B_count.set_yticks([S.B.min, S.B.max])
     ax_B_count.set_ylabel('Actuator\nCount\n'+r'$|S_t|$')
+    ax_B_count.grid(visible=True, which='major', axis='x')
     ax_B_count.tick_params(axis="x", labelbottom=False)
 
-    # ax_C_count.hlines([S.B.min, S.B.max], xmin=0, xmax=S.sim.t_simulate, colors=['k', 'k'], ls='dashdot', alpha=1)
+    # ax_C_count.hlines([S.B.min, S.B.max], xmin=0, xmax=S.sim.t_simulate, colors=['tab:gray', 'tab:gray'], ls='dashdot', alpha=1)
     S_1.plot_architecture_count(ax_in=ax_C_count, arch='C')
     S_2.plot_architecture_count(ax_in=ax_C_count, arch='C')
-    ax_C_count.set_ylim(0, S.B.max + 1)
+    ax_C_count.set_ylim(S.B.min - 1, S.B.max + 1)
     ax_C_count.set_yticks([S.B.min, S.B.max])
     ax_C_count.set_ylabel('Sensor\nCount\n'+r'$|S$' + '\'' + '$_t|$')
-    ax_C_count.tick_params(axis="x", labelbottom=False)
+    ax_C_count.set_xlabel(r'Time $t$')
+    ax_C_count.grid(visible=True, which='major', axis='x')
+    # ax_C_count.tick_params(axis="x", labelbottom=False)
+
 
     # S_1.plot_architecture_count(ax_in=ax_arch_count)
     # S_2.plot_architecture_count(ax_in=ax_arch_count)
@@ -2041,15 +2139,16 @@ def plot_comparison2_exp_no(exp_no: int = 1):
     S_1.plot_states_estimates_norm(ax_in=ax_state)
     S_2.plot_states_estimates_norm(ax_in=ax_state)
     ax_state.set_yscale('log')
-    ax_state.legend(handles=[mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='solid', label=r'$|x_t|$'),
-                             mlines.Line2D([], [], color=S_1.plot.plot_parameters[S_1.plot.plot_system]['c'], ls='dashed', label=r'$|\hat{x}_t|$')],
+    ax_state.legend(handles=[mlines.Line2D([], [], color='tab:gray', ls='solid', label=r'$|x_t|$'),
+                             mlines.Line2D([], [], color='tab:gray', ls='dashed', label=r'$|\hat{x}_t|$')],
                     loc='upper left', ncol=2)
-    ax_state.set_xlabel(r'Time $t$')
+    # ax_state.set_xlabel(r'Time $t$')
     ax_state.set_ylabel('States\n' + r'$x_t$ $\hat{x}_t$')
     ax_state.grid(visible=True, which='major', axis='x')
+    ax_state.tick_params(axis="x", labelbottom=False)
 
     S_1.plot_openloop_eigvals(ax_in=ax_eval)
-    ax_eval.hlines(1, xmin=1, xmax=S.number_of_states, colors='black', ls='dashdot')
+    ax_eval.axhline(y=1, color='tab:gray', ls='dashdot', alpha=0.5)
     # ax_eval.set_xlabel(r'Mode $i$')
     # ax_eval.xaxis.set_label_position('top')
     ax_eval.set_ylabel('Openloop\nEigenvalues\n' + r'$|\lambda_i(A)|$')
@@ -2059,7 +2158,7 @@ def plot_comparison2_exp_no(exp_no: int = 1):
 
     save_path = image_save_folder_path + 'exp' + str(exp_no) + '.pdf'
     fig.savefig(save_path, dpi=fig.dpi)
-    print('Image saved: ', save_path)
+    print('Image saved: {}'.format(save_path))
 
 
 def element_wise_min_max(v_ref_min, v_ref_max, v):
@@ -2166,4 +2265,4 @@ def plot_statistics_exp_no(exp_no: int = None):
 
     save_path = image_save_folder_path + 'exp' + str(exp_no) + '.pdf'
     fig.savefig(save_path, dpi=fig.dpi)
-    print('Image saved: ', save_path)
+    print('Image saved: {}'.format(save_path))
