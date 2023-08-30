@@ -1495,8 +1495,8 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
     while simultaneous_check:
         force_swap = dc(work_sys)
         force_swap.architecture_limit_mod(min_mod=swap_limit_mod, max_mod=swap_limit_mod)
-        # force_swap = greedy_selection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
-        force_swap = greedy_selection(force_swap, number_of_changes_limit=None, print_check=print_check_inner)
+        force_swap = greedy_selection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
+        # force_swap = greedy_selection(force_swap, number_of_changes_limit=None, print_check=print_check_inner)
 
         if print_check_outer:
             print('After force selection')
@@ -1504,8 +1504,8 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
 
         # force_swap = dc(force_swap)
         force_swap.architecture_limit_mod(min_mod=-swap_limit_mod, max_mod=-swap_limit_mod)
-        # force_swap = greedy_rejection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
-        force_swap = greedy_rejection(force_swap, number_of_changes_limit=None, print_check=print_check_inner)
+        force_swap = greedy_rejection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
+        # force_swap = greedy_rejection(force_swap, number_of_changes_limit=None, print_check=print_check_inner)
 
         cost_improvement.append(force_swap.trajectory.cost.predicted[force_swap.sim.t_current])
 
@@ -2176,15 +2176,15 @@ def plot_statistics_exp_no(exp_no: int = None):
     S = initialize_system_from_experiment_number(exp_no)
 
     fig = plt.figure(tight_layout=True)
-    outer_grid = gs.GridSpec(2, 2, figure=fig)
-    arch_grid = gs.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_grid[1, 1], wspace=0)
+    grid_outer = gs.GridSpec(2, 2, figure=fig)
+    grid_architecture = gs.GridSpecFromSubplotSpec(1, 2, subplot_spec=grid_outer[1, 1], wspace=0)
 
-    cost_ax = fig.add_subplot(outer_grid[0, :])
+    ax_cost = fig.add_subplot(grid_outer[0, :])
 
-    archB_ax = fig.add_subplot(arch_grid[0, 0])
-    archC_ax = fig.add_subplot(arch_grid[0, 1], sharey=archB_ax)
+    ax_architecture_B = fig.add_subplot(grid_architecture[0, 0])
+    ax_archchitecture_C = fig.add_subplot(grid_architecture[0, 1], sharey=ax_architecture_B)
 
-    eig_ax = fig.add_subplot(outer_grid[1, 0])
+    ax_eigmodes = fig.add_subplot(grid_outer[1, 0])
 
     cstyle = ['tab:blue', 'tab:orange', 'black']
     lstyle = ['dashdot', 'dashed']
@@ -2199,6 +2199,8 @@ def plot_statistics_exp_no(exp_no: int = None):
     sample_eig = np.zeros(S.number_of_states)
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
+    
+    m1_name, m2_name = '', ''
 
     sim_range = 100 if S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' else S.number_of_states
 
@@ -2221,45 +2223,49 @@ def plot_statistics_exp_no(exp_no: int = None):
         arch_change_2['B'].append(S_2.B.change_count)
         arch_change_2['C'].append(S_2.C.change_count)
 
-        eig_ax.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[2], color=cstyle[0], alpha=float(1/S.number_of_states))
+        ax_eigmodes.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[0], color=cstyle[0], alpha=float(1/S.number_of_states))
         if sample_ID == model_no:
             sample_cost_1 = S_1_true_cost
             sample_cost_2 = S_2_true_cost
             sample_eig = np.sort(np.abs(S.A.open_loop_eig_vals))
+            m1_name = S_1.model_name
+            m1_name = S_2.model_name
 
-    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
-    cost_ax.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4)
-    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
-    cost_ax.plot(range(0, S.sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
-    cost_ax.set_yscale('log')
-    cost_ax.set_xlabel(r'Time $t$')
-    cost_ax.set_ylabel(r'Cost $J_t$')
-    cost_ax.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$'),
-                            mpatches.Patch(color=cstyle[1], label=r'$M_2$'),
-                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
-                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
-                   loc='lower right', ncols=2)
+    ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
+    ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4)
+    ax_cost.plot(range(0, S.sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
+    ax_cost.plot(range(0, S.sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
+    ax_cost.set_yscale('log')
+    ax_cost.set_xlabel(r'Time $t$')
+    ax_cost.set_ylabel(r'Cost $J_t$')
+    leg1 = ax_cost.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
+                                   mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
+                                   mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name),
+                                   mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
+                          loc='upper left', ncols=2)
+    # ax_cost.add_artist(leg1)
+    # # leg2 = ax_cost.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
+    # #                                 mpatches.Patch(color=cstyle[1], label=r'$M_2$' + m2_name)])
 
-    eig_ax.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.5)
-    eig_ax.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
-    eig_ax.set_xlabel('Mode ' + r'$i$')
-    eig_ax.set_ylabel(r'$|\lambda_i(A)|$')
-    eig_ax.legend(handles=[
-        mlines.Line2D([], [], color=cstyle[2], marker=mstyle[0], linewidth=0, label='Modes'),
-        mlines.Line2D([], [], color=cstyle[2], marker=mstyle[2], linewidth=0, label='Sample')],
-        loc='upper left')
+    ax_eigmodes.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.5)
+    ax_eigmodes.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
+    ax_eigmodes.set_xlabel('Mode ' + r'$i$')
+    ax_eigmodes.set_ylabel(r'$|\lambda_i(A)|$')
+    ax_eigmodes.legend(handles=[mlines.Line2D([], [], color=cstyle[2], marker=mstyle[0], linewidth=0, label='Modes'),
+                                mlines.Line2D([], [], color=cstyle[0], marker=mstyle[0], linewidth=0, label='Sample')],
+                       loc='upper left')
 
-    a1 = archB_ax.boxplot([arch_change_1['B'], arch_change_2['B']], labels=[r'$M_1$', r'$M_2$'])
-    a2 = archC_ax.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'])
+    a1 = ax_architecture_B.boxplot([arch_change_1['B'], arch_change_2['B']], labels=[r'$M_1$', r'$M_2$'])
+    a2 = ax_archchitecture_C.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'])
 
     for bplot in (a1, a2):
         for patch, color in zip(bplot['medians'], [cstyle[0], cstyle[1]]):
             patch.set_color(color)
 
-    archC_ax.yaxis.set_tick_params(labelleft=False, left=False)
-    archB_ax.set_ylabel('Number of Changes')
-    archB_ax.set_xlabel('Actuators ' + r'$S$')
-    archC_ax.set_xlabel('Sensors ' + r'$S$' + '\'')
+    ax_archchitecture_C.yaxis.set_tick_params(labelleft=False, left=False)
+    ax_architecture_B.set_ylabel('Number of Changes')
+    ax_architecture_B.set_xlabel('Actuators ' + r'$S$')
+    ax_archchitecture_C.set_xlabel('Sensors ' + r'$S$' + '\'')
 
     plt.show()
 
