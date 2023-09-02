@@ -20,7 +20,7 @@ import concurrent.futures
 import os
 import socket
 
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 matplotlib.rcParams['axes.titlesize'] = 12
 matplotlib.rcParams['xtick.labelsize'] = 12
@@ -1942,7 +1942,7 @@ def plot_experiment(exp_no: int = None):
         raise Exception('Check experiment number')
 
     S = initialize_system_from_experiment_number(exp_no)
-    print('Plotting Experiment No: {}'.format(exp_no))
+    print('\nPlotting Experiment No: {}'.format(exp_no))
 
     if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_horizon' or S.sim.test_model == 'selftuning_architecture_cost':
         plot_comparison_exp_no(exp_no)
@@ -2038,12 +2038,13 @@ def plot_statistics_exp_no(exp_no: int = None):
     S = initialize_system_from_experiment_number(exp_no)
 
     fig = plt.figure(tight_layout=True)
-    grid_outer = gs.GridSpec(3, 2, figure=fig, width_ratios=[1, 2], height_ratios=[1, 2, 2])
-    grid_architecture = gs.GridSpecFromSubplotSpec(2, 2, subplot_spec=grid_outer[2, 1], wspace=0, hspace=0)
+    grid_outer = gs.GridSpec(2, 2, figure=fig, width_ratios=[1, 2], height_ratios=[3, 2])
+    grid_cost = gs.GridSpecFromSubplotSpec(2, 1, subplot_spec=grid_outer[0, :], hspace=0, height_ratios=[1, 2])
+    grid_architecture = gs.GridSpecFromSubplotSpec(2, 2, subplot_spec=grid_outer[1, 1], wspace=0, hspace=0)
 
-    ax_exp_legend = fig.add_subplot(grid_outer[0, :])
-    ax_cost = fig.add_subplot(grid_outer[1, :])
-    ax_eigmodes = fig.add_subplot(grid_outer[2, 0])
+    ax_exp_legend = fig.add_subplot(grid_cost[0, 0])
+    ax_cost = fig.add_subplot(grid_cost[1, 0])
+    ax_eigmodes = fig.add_subplot(grid_outer[1, 0])
 
     cstyle = ['tab:blue', 'tab:orange', 'black']
     lstyle = ['dashdot', 'dashed']
@@ -2107,10 +2108,11 @@ def plot_statistics_exp_no(exp_no: int = None):
             m2_name = S_2.plot_name
 
     ax_exp_legend.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
-                            mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name),
-                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
-                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
-                   loc='lower center', ncols=2, title='Experiment No:' + str(exp_no))
+                                  mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name),
+                                  mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
+                                  mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
+                         loc='lower center', ncols=2, title='Experiment No:' + str(exp_no))
+    ax_exp_legend.axis('off')
 
     ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4, linewidth=0)
     ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4, linewidth=0)
@@ -2120,7 +2122,7 @@ def plot_statistics_exp_no(exp_no: int = None):
     ax_cost.set_xlabel(r'Time $t$')
     ax_cost.set_ylabel(r'Cost $J_t$')
 
-    ax_eigmodes.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.5)
+    ax_eigmodes.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.3)
     ax_eigmodes.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
     ax_eigmodes.set_xlabel('Mode ' + r'$i$')
     ax_eigmodes.set_ylabel(r'$|\lambda_i(A)|$')
@@ -2139,9 +2141,9 @@ def plot_statistics_exp_no(exp_no: int = None):
 
     # ax_architecture_C_count.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax_architecture_C_count.locator_params(axis='x', integer=True)
-    ax_architecture_B_count.set_ylabel('Actuators ' + r'$S$')
-    ax_architecture_C_count.set_ylabel('Sensors ' + r'$S$' + '\'')
-    ax_architecture_C_count.set_xlabel('Average Active')
+    ax_architecture_B_count.set_ylabel('Actuators\n' + r'$S$')
+    ax_architecture_C_count.set_ylabel('Sensors\n' + r'$S$' + '\'')
+    ax_architecture_C_count.set_xlabel('Average Set Size')
     ax_architecture_C_change.set_xlabel('Number of Changes')
 
     ax_architecture_B_count.tick_params(axis='x', labelbottom=False, bottom=False)
