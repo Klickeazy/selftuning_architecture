@@ -48,3 +48,5 @@ experiment_no,test_model,test_parameter,number_of_nodes,network_model,network_pa
 47,selftuning_architecture_cost,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,1000,1000,1000,1000,1,1,None,0,0,0,5,10,FALSE
 48,selftuning_architecture_cost,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,1000,0,1000,0,1,1,None,0,0,0,5,10,FALSE
 49,statistics_selftuning_architecture_cost,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,TRUE
+50,statistics_selftuning_architecture_cost_no_lim,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,TRUE
+51,selftuning_architecture_cost_no_lim,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,TRUE

@@ -1747,6 +1747,35 @@ def simulate_experiment_selftuning_architecture_cost(exp_no: int = 1, print_chec
     return S, S_tuning_base_cost, S_tuning_scale_cost
 
 
+def simulate_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 1, print_check: bool = False, tqdm_check: bool = True, statistics_model=0):
+    S = initialize_system_from_experiment_number(exp_no)
+
+    S_tuning_base_cost = dc(S)
+    S_tuning_base_cost = optimize_initial_architecture(S_tuning_base_cost, print_check=print_check)
+    S_tuning_base_cost = simulate_self_tuning_architecture(S_tuning_base_cost, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
+    S_tuning_base_cost.plot_name = 'selftuning base arch cost'
+
+    S_tuning_scale_cost = dc(S)
+    cost_scale = 0 if S.sim.test_parameter is None else S.sim.test_parameter
+    S_tuning_scale_cost.B.R2 = S.B.R2 * cost_scale
+    S_tuning_scale_cost.B.R3 = S.B.R3 * cost_scale
+    S_tuning_scale_cost.C.R2 = S.C.R2 * cost_scale
+    S_tuning_scale_cost.C.R3 = S.C.R3 * cost_scale
+    S_tuning_scale_cost = optimize_initial_architecture(S_tuning_scale_cost, print_check=print_check)
+    S_tuning_scale_cost = simulate_self_tuning_architecture(S_tuning_scale_cost, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
+    if cost_scale == 0:
+        S_tuning_scale_cost.plot_name = 'selftuning free arch'
+    else:
+        S_tuning_scale_cost.plot_name = 'selftuning ' + str(cost_scale) + 'scale arch cost'
+
+    if statistics_model == 0:
+        system_model_to_memory_sim_model(S, S_tuning_base_cost, S_tuning_scale_cost)
+    else:
+        system_model_to_memory_statistics(S, S_tuning_base_cost, S_tuning_scale_cost, statistics_model)
+
+    return S, S_tuning_base_cost, S_tuning_scale_cost
+
+
 def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
 
     idx_range = list(range(start_idx, number_of_samples + start_idx))
@@ -1808,6 +1837,21 @@ def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0,
             _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
+def simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+    idx_range = list(range(start_idx, number_of_samples + start_idx))
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.multiprocess_check:
+        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
+            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for _ in executor.map(simulate_experiment_selftuning_architecture_cost_no_lim, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                    pbar.update()
+    else:
+        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
+            _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
+
+
 def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0):
     S_temp = initialize_system_from_experiment_number(exp_no)
     system_model_to_memory_gen_model(S_temp)
@@ -1843,6 +1887,8 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
     elif S.sim.test_model == 'pointdistribution_openloop':
         _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, print_check=print_check, statistics_model=1)
+    elif S.sim.test_model == 'selftuning_architecture_cost_no_lim':
+        _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, print_check=print_check)
 
     elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
         simulate_statistics_experiment_fixed_vs_selftuning(exp_no=exp_no)
@@ -1852,6 +1898,8 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
         simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
+    elif S.sim.test_model == 'statistics_selftuning_architecture_cost_no_lim':
+        simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no)
     elif S.sim.test_model == 'statistics_pointdistribution_openloop':
         simulate_statistics_experiment_pointdistribution_openloop(exp_no=exp_no)
     else:
@@ -1944,9 +1992,9 @@ def plot_experiment(exp_no: int = None):
     S = initialize_system_from_experiment_number(exp_no)
     print('\nPlotting Experiment No: {}'.format(exp_no))
 
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_horizon' or S.sim.test_model == 'selftuning_architecture_cost':
+    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_horizon' or S.sim.test_model == 'selftuning_architecture_cost' or S.sim.test_model == 'selftuning_architecture_cost_no_lim':
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' or S.sim.test_model == 'statistics_pointdistribution_openloop':
+    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' or S.sim.test_model == 'statistics_pointdistribution_openloop' or S.sim.test_model == 'statistics_selftuning_architecture_cost_no_lim':
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
