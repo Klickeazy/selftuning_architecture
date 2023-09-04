@@ -1068,18 +1068,21 @@ class System:
 
     def architecture_active_count(self, arch=None):
         for a in architecture_iterator(arch):
-            if self.sim.sim_model == 'selftuning':
-                if a == 'B':
+            if a == 'B':
+                if self.sim.sim_model == 'selftuning':
                     self.B.active_count = [len(self.B.history_active_set[i]) for i in range(0, len(self.B.history_active_set))]
-                else:  # if arch == 'C':
-                    self.C.active_count = [len(self.C.history_active_set[i]) for i in range(0, len(self.C.history_active_set))]
-            elif self.sim.sim_model == "fixed":
-                if a == 'B':
+                elif self.sim.sim_model == "fixed":
                     self.B.active_count = [len(self.B.active_set)] * len(self.B.history_active_set)
-                else:  # if arch == 'C':
+                else:
+                    raise Exception('Invalid test model')
+
+            else:  # if arch == 'C'
+                if self.sim.sim_model == 'selftuning':
+                    self.C.active_count = [len(self.C.history_active_set[i]) for i in range(0, len(self.C.history_active_set))]
+                elif self.sim.sim_model == "fixed":
                     self.C.active_count = [len(self.C.active_set)] * len(self.C.history_active_set)
-            else:
-                raise Exception('Invalid test model')
+                else:
+                    raise Exception('Invalid test model')
 
     def plot_network_architecture(self, t: int = None, ax_in=None):
         if ax_in is None:
@@ -2012,9 +2015,9 @@ def plot_experiment(exp_no: int = None):
     S = initialize_system_from_experiment_number(exp_no)
     print('\nPlotting Experiment No: {}'.format(exp_no))
 
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning' or S.sim.test_model == 'selftuning_number_of_changes' or S.sim.test_model == 'selftuning_prediction_horizon' or S.sim.test_model == 'selftuning_architecture_cost' or S.sim.test_model == 'selftuning_architecture_cost_no_lim':
+    if S.sim.test_model in ['fixed_vs_selftuning', 'selftuning_number_of_changes', 'selftuning_prediction_horizon', 'selftuning_architecture_cost', 'selftuning_architecture_cost_no_lim']:
         plot_comparison_exp_no(exp_no)
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' or S.sim.test_model == 'statistics_pointdistribution_openloop' or S.sim.test_model == 'statistics_selftuning_architecture_cost_no_lim':
+    elif S.sim.test_model in ['statistics_fixed_vs_selftuning', 'statistics_selftuning_number_of_changes', 'statistics_selftuning_prediction_horizon', 'statistics_selftuning_architecture_cost', 'statistics_pointdistribution_openloop', 'statistics_selftuning_architecture_cost_no_lim']:
         plot_statistics_exp_no(exp_no)
     else:
         raise Exception('Experiment not defined')
@@ -2104,24 +2107,26 @@ def plot_statistics_exp_no(exp_no: int = None):
         raise Exception('Experiment not provided')
 
     S = initialize_system_from_experiment_number(exp_no)
+    sim_range = 100 if S.sim.test_model in 'statistics_fixed_vs_selftuning', 'statistics_selftuning_number_of_changes', 'statistics_selftuning_prediction_horizon', 'statistics_selftuning_architecture_cost'] else S.number_of_states
 
     fig = plt.figure(tight_layout=True)
-    grid_outer = gs.GridSpec(2, 2, figure=fig, width_ratios=[1, 2], height_ratios=[3, 2])
-    grid_cost = gs.GridSpecFromSubplotSpec(2, 1, subplot_spec=grid_outer[0, :], hspace=0, height_ratios=[1, 2])
-    grid_architecture = gs.GridSpecFromSubplotSpec(2, 2, subplot_spec=grid_outer[1, 1], wspace=0, hspace=0)
+    grid_outer = gs.GridSpec(3, 2, figure=fig, width_ratios=[1, 2], height_ratios=[1, 2, 2])
+    # grid_cost = gs.GridSpecFromSubplotSpec(2, 1, subplot_spec=grid_outer[0, :], hspace=0, height_ratios=[1, 2])
+    grid_architecture = gs.GridSpecFromSubplotSpec(1, 5, subplot_spec=grid_outer[2, :], wspace=0, hspace=0)
 
-    ax_exp_legend = fig.add_subplot(grid_cost[0, 0])
-    ax_cost = fig.add_subplot(grid_cost[1, 0])
-    ax_eigmodes = fig.add_subplot(grid_outer[1, 0])
+    ax_exp_legend = fig.add_subplot(grid_outer[0, 0])
+    ax_cost = fig.add_subplot(grid_outer[1, :])
+    ax_eigmodes = fig.add_subplot(grid_outer[0, 1])
+
+    ax_architecture_B_count = fig.add_subplot(grid_architecture[0, 0])
+    ax_architecture_C_count = fig.add_subplot(grid_architecture[0, 1], sharey=ax_architecture_B_count)
+    ax_architecture_B_change = fig.add_subplot(grid_architecture[0, 2], sharey=ax_architecture_B_count)
+    ax_architecture_C_change = fig.add_subplot(grid_architecture[0, 3], sharey=ax_architecture_B_count)
+    ax_architecture_compute_time = fig.add_subplot(grid_architecture[0, 4], sharey=ax_architecture_B_count)
 
     cstyle = ['tab:blue', 'tab:orange', 'black']
     lstyle = ['dashdot', 'dashed']
     mstyle = ['o', '+', 'x']
-
-    ax_architecture_B_count = fig.add_subplot(grid_architecture[0, 0])
-    ax_architecture_C_count = fig.add_subplot(grid_architecture[1, 0], sharex=ax_architecture_B_count)
-    ax_architecture_B_change = fig.add_subplot(grid_architecture[0, 1], sharey=ax_architecture_B_count)
-    ax_architecture_C_change = fig.add_subplot(grid_architecture[1, 1], sharex=ax_architecture_B_change, sharey=ax_architecture_C_count)
 
     cost_min_1 = np.inf * np.ones(S.sim.t_simulate)
     cost_max_1 = np.zeros(S.sim.t_simulate)
@@ -2129,6 +2134,8 @@ def plot_statistics_exp_no(exp_no: int = None):
     cost_max_2 = np.zeros(S.sim.t_simulate)
     sample_cost_1 = np.zeros(S.sim.t_simulate)
     sample_cost_2 = np.zeros(S.sim.t_simulate)
+    compute_time_1 = []
+    compute_time_2 = []
     sample_eig = np.zeros(S.number_of_states)
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
@@ -2136,8 +2143,6 @@ def plot_statistics_exp_no(exp_no: int = None):
     arch_count_2 = {'B': [], 'C': []}
 
     m1_name, m2_name = '', ''
-
-    sim_range = 100 if S.sim.test_model == 'statistics_fixed_vs_selftuning' or S.sim.test_model == 'statistics_selftuning_number_of_changes' or S.sim.test_model == 'statistics_selftuning_prediction_horizon' or S.sim.test_model == 'statistics_selftuning_architecture_cost' else S.number_of_states
 
     sample_ID = np.random.choice(range(1, sim_range + 1))
 
@@ -2150,17 +2155,21 @@ def plot_statistics_exp_no(exp_no: int = None):
         cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
         cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
 
+        compute_time_1.append(average(list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.computation_time)))))
+        compute_time_2.append(average(list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.computation_time)))))
+        # compute_time_2 = list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.cost.true)))
+
         S_1.architecture_count_number_of_sim_changes()
-        arch_change_1['B'].append(S_1.B.change_count)
-        arch_change_1['C'].append(S_1.C.change_count)
+        arch_change_1['B'].append(float(S_1.B.change_count/S.sim.t_simulate))
+        arch_change_1['C'].append(float(S_1.C.change_count/S.sim.t_simulate))
 
         S_1.architecture_active_count()
         arch_count_1['B'].append(np.average(S_1.B.active_count))
         arch_count_1['C'].append(np.average(S_1.C.active_count))
 
         S_2.architecture_count_number_of_sim_changes()
-        arch_change_2['B'].append(S_2.B.change_count)
-        arch_change_2['C'].append(S_2.C.change_count)
+        arch_change_2['B'].append(float(S_2.B.change_count/S.sim.t_simulate))
+        arch_change_2['C'].append(float(S_2.C.change_count/S.sim.t_simulate))
 
         S_2.architecture_active_count()
         arch_count_2['B'].append(np.average(S_2.B.active_count))
@@ -2192,8 +2201,9 @@ def plot_statistics_exp_no(exp_no: int = None):
 
     ax_eigmodes.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.3)
     ax_eigmodes.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
-    ax_eigmodes.set_xlabel('Mode ' + r'$i$')
+    # ax_eigmodes.set_xlabel('Mode ' + r'$i$')
     ax_eigmodes.set_ylabel(r'$|\lambda_i(A)|$')
+    ax_eigmodes.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
     ax_eigmodes.legend(handles=[mlines.Line2D([], [], color=cstyle[2], marker=mstyle[2], linewidth=0, label='Sample'),
                                 mlines.Line2D([], [], color=cstyle[0], marker=mstyle[0], linewidth=0, label='Modes')],
                        loc='upper left')
@@ -2202,21 +2212,26 @@ def plot_statistics_exp_no(exp_no: int = None):
     a2 = ax_architecture_C_change.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'], vert=False)
     a3 = ax_architecture_B_count.boxplot([arch_count_1['B'], arch_count_2['B']], labels=[r'$M_1$', r'$M_2$'], vert=False)
     a4 = ax_architecture_C_count.boxplot([arch_count_1['C'], arch_count_2['C']], labels=[r'$M_1$', r'$M_2$'], vert=False)
+    a5 = ax_architecture_compute_time.boxplot([compute_time_1, compute_time_2], labels=[r'$M_1$', r'$M_2$'], vert=False)
 
-    for bplot in (a1, a2, a3, a4):
+    for bplot in (a1, a2, a3, a4, a5):
         for patch, color in zip(bplot['medians'], [cstyle[0], cstyle[1]]):
             patch.set_color(color)
 
     # ax_architecture_C_count.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax_architecture_C_count.locator_params(axis='x', integer=True)
-    ax_architecture_B_count.set_ylabel('Actuators\n' + r'$S$')
-    ax_architecture_C_count.set_ylabel('Sensors\n' + r'$S$' + '\'')
-    ax_architecture_C_count.set_xlabel('Average Set Size')
-    ax_architecture_C_change.set_xlabel('Number of Changes')
+    # ax_architecture_C_count.locator_params(axis='x', integer=True)
+    ax_architecture_B_count.set_xlabel('Avg Actuator Size\n' + r'$|S|$')
+    ax_architecture_C_count.set_xlabel('Avg Sensor Size\n' + r'$|S$' + '\'' + r'$|$')
+    ax_architecture_B_change.set_xlabel('Avg Actuator Changes')
+    ax_architecture_C_change.set_xlabel('Avg Sensor Changes')
+    ax_architecture_compute_time.set_xlabel('Avg Compute Time')
 
-    ax_architecture_B_count.tick_params(axis='x', labelbottom=False, bottom=False)
-    ax_architecture_B_change.tick_params(labelleft=False, left=False, labelbottom=False, bottom=False)
+    # ax_architecture_B_count.tick_params(axis='x', labelbottom=False, bottom=False)
+    # ax_architecture_B_change.tick_params(labelleft=False, left=False, labelbottom=False, bottom=False)
+    ax_architecture_B_count.tick_params(axis='y', labelleft=False, left=False)
+    ax_architecture_C_count.tick_params(axis='y', labelleft=False, left=False)
     ax_architecture_C_change.tick_params(axis='y', labelleft=False, left=False)
+    ax_architecture_compute_time.tick_params(axis='y', labelleft=False, left=False)
 
     plt.show()
 
