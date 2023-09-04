@@ -1776,7 +1776,7 @@ def simulate_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 1, pri
     return S, S_tuning_base_cost, S_tuning_scale_cost
 
 
-def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
 
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
@@ -1785,14 +1785,14 @@ def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, start_id
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, statistics_model=test_no)
 
 
-def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
 
@@ -1800,14 +1800,14 @@ def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0,
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_number_of_changes, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_selftuning_number_of_changes, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
-def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
 
@@ -1815,14 +1815,14 @@ def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_prediction_horizon, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_selftuning_prediction_horizon, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
-def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
 
@@ -1830,14 +1830,14 @@ def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0,
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_architecture_cost, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_selftuning_architecture_cost, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
-def simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 0, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
     idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
 
@@ -1845,14 +1845,14 @@ def simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no: i
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_architecture_cost_no_lim, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_selftuning_architecture_cost_no_lim, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
             _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
 
 
-def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0):
+def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0, print_check: bool = 'False'):
     S_temp = initialize_system_from_experiment_number(exp_no)
     system_model_to_memory_gen_model(S_temp)
 
@@ -1862,7 +1862,7 @@ def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0):
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop, itertools.repeat(exp_no), itertools.repeat(False), itertools.repeat(False), idx_range):
+                for _ in executor.map(simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
@@ -1876,34 +1876,54 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
     else:
         print('Experiment number: ', exp_no)
 
-    S = initialize_system_from_experiment_number(exp_no)
-    if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning':
-        _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, print_check=print_check)
-    elif S.sim.test_model == 'selftuning_number_of_changes':
-        _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
-    elif S.sim.test_model == 'selftuning_prediction_horizon':
-        _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
-    elif S.sim.test_model == 'selftuning_architecture_cost':
-        _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
-    elif S.sim.test_model == 'pointdistribution_openloop':
-        _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, print_check=print_check, statistics_model=1)
-    elif S.sim.test_model == 'selftuning_architecture_cost_no_lim':
-        _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, print_check=print_check)
+    experiment_function_mapper = {'fixed_vs_selftuning': simulate_experiment_fixed_vs_selftuning,
+                                  'selftuning_number_of_changes': simulate_experiment_selftuning_number_of_changes,
+                                  'selftuning_prediction_horizon': simulate_experiment_selftuning_prediction_horizon,
+                                  'selftuning_architecture_cost': simulate_experiment_selftuning_architecture_cost,
+                                  'pointdistribution_openloop': simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop,
+                                  'selftuning_architecture_cost_no_lim': simulate_experiment_selftuning_architecture_cost_no_lim,
+                                  'statistics_fixed_vs_selftuning': simulate_statistics_experiment_fixed_vs_selftuning,
+                                  'statistics_selftuning_number_of_changes': simulate_statistics_experiment_selftuning_number_of_changes,
+                                  'statistics_selftuning_prediction_horizon': simulate_statistics_experiment_selftuning_prediction_horizon,
+                                  'statistics_selftuning_architecture_cost': simulate_statistics_experiment_selftuning_architecture_cost,
+                                  'statistics_selftuning_architecture_cost_no_lim': simulate_statistics_experiment_selftuning_architecture_cost_no_lim,
+                                  'statistics_pointdistribution_openloop': simulate_statistics_experiment_pointdistribution_openloop
+                                  }
 
-    elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
-        simulate_statistics_experiment_fixed_vs_selftuning(exp_no=exp_no)
-    elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
-        simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
-    elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
-        simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
-    elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
-        simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
-    elif S.sim.test_model == 'statistics_selftuning_architecture_cost_no_lim':
-        simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no)
-    elif S.sim.test_model == 'statistics_pointdistribution_openloop':
-        simulate_statistics_experiment_pointdistribution_openloop(exp_no=exp_no)
-    else:
+    S = initialize_system_from_experiment_number(exp_no)
+
+    if S.sim.test_model not in experiment_function_mapper:
         raise Exception('Experiment not defined')
+
+    experiment_function_mapper[S.sim.test_model](exp_no=exp_no)
+
+    # if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning':
+    #     _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, print_check=print_check)
+    # elif S.sim.test_model == 'selftuning_number_of_changes':
+    #     _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
+    # elif S.sim.test_model == 'selftuning_prediction_horizon':
+    #     _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
+    # elif S.sim.test_model == 'selftuning_architecture_cost':
+    #     _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
+    # elif S.sim.test_model == 'pointdistribution_openloop':
+    #     _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, print_check=print_check, statistics_model=1)
+    # elif S.sim.test_model == 'selftuning_architecture_cost_no_lim':
+    #     _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, print_check=print_check)
+    #
+    # elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
+    #     simulate_statistics_experiment_fixed_vs_selftuning(exp_no=exp_no)
+    # elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
+    #     simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
+    # elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
+    #     simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
+    # elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
+    #     simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
+    # elif S.sim.test_model == 'statistics_selftuning_architecture_cost_no_lim':
+    #     simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no)
+    # elif S.sim.test_model == 'statistics_pointdistribution_openloop':
+    #     simulate_statistics_experiment_pointdistribution_openloop(exp_no=exp_no)
+    # else:
+    #     raise Exception('Experiment not defined')
 
 
 def retrieve_experiment(exp_no: int = 1):
