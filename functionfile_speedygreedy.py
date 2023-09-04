@@ -8,7 +8,7 @@ import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 
-import time
+from time import process_time
 from copy import deepcopy as dc
 import pandas as pd
 import shelve
@@ -1165,6 +1165,21 @@ class System:
         if ax_in is None:
             plt.show()
 
+    def plot_compute_time(self, ax_in=None):
+        if ax_in is None:
+            fig = plt.figure()
+            grid = fig.add_gridspec(1, 1)
+            ax = fig.add_subplot(grid[0, 0])
+        else:
+            ax = ax_in
+
+        compute_time = self.list_from_dict_key_cost(self.trajectory.computation_time)
+        ax.scatter(range(0, len(compute_time)), compute_time, color=self.plot.plot_parameters[self.plot.plot_system]['c'], marker='o', s=5)
+        ax.grid(visible=True, which='major', axis='x')
+
+        if ax_in is None:
+            plt.show()
+
     def plot_architecture_count(self, ax_in=None, arch=None):
         if ax_in is None:
             fig = plt.figure()
@@ -1309,7 +1324,7 @@ def cost_mapper(S: System, choices):
     return evaluation
 
 
-def greedy_selection(S: System, number_of_changes_limit: int = None, print_check: bool = False, t_start=time.time()):
+def greedy_selection(S: System, number_of_changes_limit: int = None, print_check: bool = False):
     exit_condition = 0
     work_sys = dc(S)
     arch_ref = dc(S)
@@ -1385,11 +1400,11 @@ def greedy_selection(S: System, number_of_changes_limit: int = None, print_check
                     if print_check:
                         print('Selection exit 4: No selections done')
 
-    work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
+    # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
     if print_check:
         print('Number of iterations: {}'.format(number_of_changes))
         work_sys.architecture_display()
-        print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+        # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
 
     if not work_sys.architecture_limit_check():
         print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
@@ -1397,7 +1412,7 @@ def greedy_selection(S: System, number_of_changes_limit: int = None, print_check
     return work_sys
 
 
-def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check: bool = False, t_start=time.time()):
+def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check: bool = False):
     exit_condition = 0
     work_sys = dc(S)
     arch_ref = dc(S)
@@ -1469,11 +1484,11 @@ def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check
                     if print_check:
                         print('Rejection exit 4: No valuable rejections')
 
-    work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
+    # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
     if print_check:
         print('Number of iterations: {}'.format(number_of_changes))
         work_sys.architecture_display()
-        print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+        # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
 
     if not work_sys.architecture_limit_check():
         print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
@@ -1481,7 +1496,7 @@ def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check
     return work_sys
 
 
-def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False, t_start=time.time()):
+def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False):
     work_sys = dc(S)
     ref_arch = dc(S)
     cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
@@ -1537,10 +1552,10 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
             if safety_counter > work_sys.number_of_states:
                 raise Exception('Triggered safety constraint - too many changes - check system')
 
-    work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
+    # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
     if print_check_outer:
         work_sys.architecture_display()
-        print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+        # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
 
     if not work_sys.architecture_limit_check():
         print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
@@ -1589,12 +1604,16 @@ def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check
     if tqdm_check:
         with tqdm(total=S_fix.sim.t_simulate, ncols=100, desc='Fixed (P_ID:' + str(os.getpid()) + ')', leave=False) as pbar:
             for _ in range(0, S_fix.sim.t_simulate):
+                t_start = process_time()
                 S_fix.cost_true_wrapper()
+                S_fix.trajectory.computation_time[S_fix.sim.t_current] = process_time() - t_start
                 S_fix.one_step_system_update()
                 pbar.update()
     else:
         for _ in range(0, S_fix.sim.t_simulate):
+            t_start = process_time()
             S_fix.cost_true_wrapper()
+            S_fix.trajectory.computation_time[S_fix.sim.t_current] = process_time() - t_start
             S_fix.one_step_system_update()
 
     if print_check:
@@ -1614,16 +1633,20 @@ def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = 
     if tqdm_check:
         with tqdm(total=S_self_tuning.sim.t_simulate, ncols=100, desc='Self-Tuning (P_ID:' + str(os.getpid()) + ')', leave=False) as pbar:
             for t in range(0, S_self_tuning.sim.t_simulate):
+                t_start = process_time()
                 if t > 0:
                     S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
                 S_self_tuning.cost_true_wrapper()
+                S_self_tuning.trajectory.computation_time[S_self_tuning.sim.t_current] = process_time() - t_start
                 S_self_tuning.one_step_system_update()
                 pbar.update()
     else:
         for t in range(0, S_self_tuning.sim.t_simulate):
+            t_start = process_time()
             if t > 0:
                 S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
             S_self_tuning.cost_true_wrapper()
+            S_self_tuning.trajectory.computation_time[S_self_tuning.sim.t_current] = process_time() - t_start
             S_self_tuning.one_step_system_update()
 
     if print_check:
@@ -2038,7 +2061,7 @@ def plot_comparison_exp_no(exp_no: int = 1):
     ax_exp_legend = fig.add_subplot(outer_grid[0, 0])
     ax_eval = fig.add_subplot(outer_grid[0, 1])
 
-    time_grid = gs.GridSpecFromSubplotSpec(6, 1, subplot_spec=outer_grid[1, :], hspace=0.2, height_ratios=[1, 1, 1, 0.7, 1, 0.7])
+    time_grid = gs.GridSpecFromSubplotSpec(7, 1, subplot_spec=outer_grid[1, :], hspace=0.2, height_ratios=[1, 1, 1, 0.7, 1, 0.7, 0.7])
 
     ax_cost = fig.add_subplot(time_grid[0, 0])
     ax_state = fig.add_subplot(time_grid[1, 0], sharex=ax_cost)
@@ -2046,6 +2069,7 @@ def plot_comparison_exp_no(exp_no: int = 1):
     ax_B_count = fig.add_subplot(time_grid[3, 0], sharex=ax_cost)
     ax_C_scatter = fig.add_subplot(time_grid[4, 0], sharex=ax_cost)
     ax_C_count = fig.add_subplot(time_grid[5, 0], sharex=ax_cost)
+    ax_compute_time = fig.add_subplot(time_grid[6, 0], sharex=ax_cost)
 
     S_1.plot_openloop_eigvals(ax_in=ax_eval)
 
@@ -2084,7 +2108,14 @@ def plot_comparison_exp_no(exp_no: int = 1):
     S_1.plot_architecture_count(ax_in=ax_C_count, arch='C')
     S_2.plot_architecture_count(ax_in=ax_C_count, arch='C')
     ax_C_count.set_ylabel('Sensor\nCount\n'+r'$|S$' + '\'' + '$_t|$')
-    ax_C_count.set_xlabel(r'Time $t$')
+    ax_C_count.tick_params(axis="x", labelbottom=False)
+
+    S_1.plot_compute_time(ax_in=ax_compute_time)
+    S_2.plot_compute_time(ax_in=ax_compute_time)
+    ax_compute_time.set_yscale('log')
+    ax_compute_time.set_ylabel('Compute\nTime')
+
+    ax_compute_time.set_xlabel(r'Time $t$')
 
     plt.show()
 
@@ -2107,17 +2138,16 @@ def plot_statistics_exp_no(exp_no: int = None):
         raise Exception('Experiment not provided')
 
     S = initialize_system_from_experiment_number(exp_no)
-    sim_range = 100 if S.sim.test_model in 'statistics_fixed_vs_selftuning', 'statistics_selftuning_number_of_changes', 'statistics_selftuning_prediction_horizon', 'statistics_selftuning_architecture_cost'] else S.number_of_states
+    sim_range = 100 if S.sim.test_model in ['statistics_fixed_vs_selftuning', 'statistics_selftuning_number_of_changes', 'statistics_selftuning_prediction_horizon', 'statistics_selftuning_architecture_cost'] else S.number_of_states
 
     fig = plt.figure(tight_layout=True)
-    grid_outer = gs.GridSpec(3, 2, figure=fig, width_ratios=[1, 2], height_ratios=[1, 2, 2])
-    # grid_cost = gs.GridSpecFromSubplotSpec(2, 1, subplot_spec=grid_outer[0, :], hspace=0, height_ratios=[1, 2])
-    grid_architecture = gs.GridSpecFromSubplotSpec(1, 5, subplot_spec=grid_outer[2, :], wspace=0, hspace=0)
+    grid_outer = gs.GridSpec(3, 2, figure=fig, width_ratios=[1, 1], height_ratios=[1.5, 2, 1])
 
     ax_exp_legend = fig.add_subplot(grid_outer[0, 0])
-    ax_cost = fig.add_subplot(grid_outer[1, :])
     ax_eigmodes = fig.add_subplot(grid_outer[0, 1])
+    ax_cost = fig.add_subplot(grid_outer[1, :])
 
+    grid_architecture = gs.GridSpecFromSubplotSpec(1, 5, subplot_spec=grid_outer[2, :], hspace=0)
     ax_architecture_B_count = fig.add_subplot(grid_architecture[0, 0])
     ax_architecture_C_count = fig.add_subplot(grid_architecture[0, 1], sharey=ax_architecture_B_count)
     ax_architecture_B_change = fig.add_subplot(grid_architecture[0, 2], sharey=ax_architecture_B_count)
@@ -2155,9 +2185,15 @@ def plot_statistics_exp_no(exp_no: int = None):
         cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
         cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
 
-        compute_time_1.append(average(list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.computation_time)))))
-        compute_time_2.append(average(list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.computation_time)))))
-        # compute_time_2 = list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.cost.true)))
+        if S_1.sim.sim_model == 'fixed':
+            compute_time_1.append(np.NaN)
+        else:  # selftuning
+            compute_time_1.append(np.average(list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.computation_time)))))
+
+        if S_2.sim.sim_model == 'fixed':
+            compute_time_2.append(np.NaN)
+        else:
+            compute_time_2.append(np.average(list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.computation_time)))))
 
         S_1.architecture_count_number_of_sim_changes()
         arch_change_1['B'].append(float(S_1.B.change_count/S.sim.t_simulate))
@@ -2175,7 +2211,7 @@ def plot_statistics_exp_no(exp_no: int = None):
         arch_count_2['B'].append(np.average(S_2.B.active_count))
         arch_count_2['C'].append(np.average(S_2.C.active_count))
 
-        ax_eigmodes.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[0], color=cstyle[0], alpha=float(1 / S.number_of_states))
+        ax_eigmodes.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[0], s=10, color=cstyle[0], alpha=float(1 / S.number_of_states))
 
         if sample_ID == model_no:
             sample_cost_1 = S_1_true_cost
@@ -2184,22 +2220,23 @@ def plot_statistics_exp_no(exp_no: int = None):
             m1_name = S_1.plot_name
             m2_name = S_2.plot_name
 
-    ax_exp_legend.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
-                                  mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name),
-                                  mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
-                                  mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
-                         loc='lower center', ncols=2, title='Experiment No:' + str(exp_no))
     ax_exp_legend.axis('off')
+    ax_exp_legend.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
+                                  mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name)],
+                         title='Experiment No:' + str(exp_no))
 
     ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4, linewidth=0)
     ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4, linewidth=0)
     ax_cost.plot(range(0, S.sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
     ax_cost.plot(range(0, S.sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
+    ax_cost.legend(handles=[mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
+                            mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
+                   loc='upper left', ncols=2)
     ax_cost.set_yscale('log')
     ax_cost.set_xlabel(r'Time $t$')
     ax_cost.set_ylabel(r'Cost $J_t$')
 
-    ax_eigmodes.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], alpha=0.3)
+    ax_eigmodes.scatter(range(1, S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], s=10)
     ax_eigmodes.hlines(1, xmin=1, xmax=S.number_of_states, colors=cstyle[2], ls=lstyle[1])
     # ax_eigmodes.set_xlabel('Mode ' + r'$i$')
     ax_eigmodes.set_ylabel(r'$|\lambda_i(A)|$')
@@ -2208,27 +2245,28 @@ def plot_statistics_exp_no(exp_no: int = None):
                                 mlines.Line2D([], [], color=cstyle[0], marker=mstyle[0], linewidth=0, label='Modes')],
                        loc='upper left')
 
-    a1 = ax_architecture_B_change.boxplot([arch_change_1['B'], arch_change_2['B']], labels=[r'$M_1$', r'$M_2$'], vert=False)
-    a2 = ax_architecture_C_change.boxplot([arch_change_1['C'], arch_change_2['C']], labels=[r'$M_1$', r'$M_2$'], vert=False)
-    a3 = ax_architecture_B_count.boxplot([arch_count_1['B'], arch_count_2['B']], labels=[r'$M_1$', r'$M_2$'], vert=False)
-    a4 = ax_architecture_C_count.boxplot([arch_count_1['C'], arch_count_2['C']], labels=[r'$M_1$', r'$M_2$'], vert=False)
-    a5 = ax_architecture_compute_time.boxplot([compute_time_1, compute_time_2], labels=[r'$M_1$', r'$M_2$'], vert=False)
+    a1 = ax_architecture_B_change.boxplot([arch_change_2['B'], arch_change_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False)
+    a2 = ax_architecture_C_change.boxplot([arch_change_2['C'], arch_change_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False)
+    a3 = ax_architecture_B_count.boxplot([arch_count_2['B'], arch_count_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False)
+    a4 = ax_architecture_C_count.boxplot([arch_count_2['C'], arch_count_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False)
+    a5 = ax_architecture_compute_time.boxplot([compute_time_2, compute_time_1], labels=[r'$M_2$', r'$M_1$'], vert=False)
 
     for bplot in (a1, a2, a3, a4, a5):
-        for patch, color in zip(bplot['medians'], [cstyle[0], cstyle[1]]):
+        for patch, color in zip(bplot['medians'], [cstyle[1], cstyle[0]]):
             patch.set_color(color)
 
     # ax_architecture_C_count.xaxis.set_major_locator(MaxNLocator(integer=True))
     # ax_architecture_C_count.locator_params(axis='x', integer=True)
-    ax_architecture_B_count.set_xlabel('Avg Actuator Size\n' + r'$|S|$')
-    ax_architecture_C_count.set_xlabel('Avg Sensor Size\n' + r'$|S$' + '\'' + r'$|$')
-    ax_architecture_B_change.set_xlabel('Avg Actuator Changes')
-    ax_architecture_C_change.set_xlabel('Avg Sensor Changes')
-    ax_architecture_compute_time.set_xlabel('Avg Compute Time')
+    ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + ' Size')
+    ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + ' Size')
+    ax_architecture_B_change.set_xlabel('Avg ' + r'$|S_t|$' + ' Changes')
+    ax_architecture_C_change.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + 'Changes')
+    ax_architecture_compute_time.set_xlabel('Avg Compute \n Time (s)')
+    ax_architecture_compute_time.set_xscale('log')
 
     # ax_architecture_B_count.tick_params(axis='x', labelbottom=False, bottom=False)
     # ax_architecture_B_change.tick_params(labelleft=False, left=False, labelbottom=False, bottom=False)
-    ax_architecture_B_count.tick_params(axis='y', labelleft=False, left=False)
+    ax_architecture_B_change.tick_params(axis='y', labelleft=False, left=False)
     ax_architecture_C_count.tick_params(axis='y', labelleft=False, left=False)
     ax_architecture_C_change.tick_params(axis='y', labelleft=False, left=False)
     ax_architecture_compute_time.tick_params(axis='y', labelleft=False, left=False)
