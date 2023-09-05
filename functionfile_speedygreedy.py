@@ -1809,7 +1809,7 @@ def simulate_statistics_experiment(exp_no: int, print_check: bool = False, start
                                   'statistics_selftuning_prediction_horizon'      : simulate_experiment_selftuning_prediction_horizon,
                                   'statistics_selftuning_architecture_cost'       : simulate_experiment_selftuning_architecture_cost,
                                   'statistics_selftuning_architecture_cost_no_lim': simulate_experiment_selftuning_architecture_cost_no_lim,
-                                  'statistics_pointdistribution_openloop'         : simulate_experiment_pointdistribution_openloop
+                                  'statistics_pointdistribution_openloop'         : simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop
                                   }
 
     S = initialize_system_from_experiment_number(exp_no)
@@ -2040,6 +2040,22 @@ def element_wise_min_max(v_ref_min, v_ref_max, v):
     return v_ret_min, v_ret_max
 
 
+def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_change, arch_count):
+
+    cost_min, cost_max = element_wise_min_max(cost_min, cost_max, list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.cost.true))))
+    compute_time.append(np.average(list(itertools.accumulate(S.list_from_dict_key_cost(S.trajectory.computation_time)))))
+    S.architecture_count_number_of_sim_changes()
+    S.architecture_active_count()
+
+    arch_change['B'].append(float(S.B.change_count / S.sim.t_simulate))
+    arch_change['C'].append(float(S.C.change_count / S.sim.t_simulate))
+
+    arch_count['B'].append(np.average(S.B.active_count))
+    arch_count['C'].append(np.average(S.C.active_count))
+
+    return cost_min, cost_max, compute_time, arch_change, arch_count
+
+
 def plot_statistics_exp_no(exp_no: int = None):
 
     if exp_no is None:
@@ -2066,14 +2082,10 @@ def plot_statistics_exp_no(exp_no: int = None):
     lstyle = ['dashdot', 'dashed']
     mstyle = ['o', '+', 'x']
 
-    cost_min_1 = np.inf * np.ones(S.sim.t_simulate)
-    cost_max_1 = np.zeros(S.sim.t_simulate)
-    cost_min_2 = np.inf * np.ones(S.sim.t_simulate)
-    cost_max_2 = np.zeros(S.sim.t_simulate)
-    sample_cost_1 = np.zeros(S.sim.t_simulate)
-    sample_cost_2 = np.zeros(S.sim.t_simulate)
-    compute_time_1 = []
-    compute_time_2 = []
+    cost_min_1, cost_min_2 = np.inf * np.ones(S.sim.t_simulate), np.inf * np.ones(S.sim.t_simulate)
+    cost_max_1, cost_max_2 = np.zeros(S.sim.t_simulate), np.zeros(S.sim.t_simulate)
+    sample_cost_1, sample_cost_2 = np.zeros(S.sim.t_simulate), np.zeros(S.sim.t_simulate)
+    compute_time_1, compute_time_2 = [], []
     sample_eig = np.zeros(S.number_of_states)
     arch_change_1 = {'B': [], 'C': []}
     arch_change_2 = {'B': [], 'C': []}
@@ -2087,51 +2099,22 @@ def plot_statistics_exp_no(exp_no: int = None):
     for model_no in tqdm(range(1, sim_range + 1), ncols=100, desc='Model ID'):
         S, S_1, S_2 = data_from_memory_statistics(exp_no, model_no)
 
-        S_1_true_cost = list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.cost.true)))
-        S_2_true_cost = list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.cost.true)))
-
-        cost_min_1, cost_max_1 = element_wise_min_max(cost_min_1, cost_max_1, S_1_true_cost)
-        cost_min_2, cost_max_2 = element_wise_min_max(cost_min_2, cost_max_2, S_2_true_cost)
-
-        if S_1.sim.sim_model == 'fixed':
-            compute_time_1.append(np.NaN)
-        else:  # selftuning
-            compute_time_1.append(np.average(list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.computation_time)))))
-
-        if S_2.sim.sim_model == 'fixed':
-            compute_time_2.append(np.NaN)
-        else:
-            compute_time_2.append(np.average(list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.computation_time)))))
-
-        S_1.architecture_count_number_of_sim_changes()
-        arch_change_1['B'].append(float(S_1.B.change_count/S.sim.t_simulate))
-        arch_change_1['C'].append(float(S_1.C.change_count/S.sim.t_simulate))
-
-        S_1.architecture_active_count()
-        arch_count_1['B'].append(np.average(S_1.B.active_count))
-        arch_count_1['C'].append(np.average(S_1.C.active_count))
-
-        S_2.architecture_count_number_of_sim_changes()
-        arch_change_2['B'].append(float(S_2.B.change_count/S.sim.t_simulate))
-        arch_change_2['C'].append(float(S_2.C.change_count/S.sim.t_simulate))
-
-        S_2.architecture_active_count()
-        arch_count_2['B'].append(np.average(S_2.B.active_count))
-        arch_count_2['C'].append(np.average(S_2.C.active_count))
+        cost_min_1, cost_max_1, compute_time_1, arch_change_1, arch_count_1 = statistics_data_parser(S_1, cost_min_1, cost_max_1, compute_time_1, arch_change_1, arch_count_1)
+        cost_min_2, cost_max_2, compute_time_2, arch_change_2, arch_count_2 = statistics_data_parser(S_2, cost_min_2, cost_max_2, compute_time_2, arch_change_2, arch_count_2)
 
         ax_eigmodes.scatter(range(1, S.number_of_states + 1), np.sort(np.abs(S.A.open_loop_eig_vals)), marker=mstyle[0], s=10, color=cstyle[0], alpha=float(1 / S.number_of_states))
 
         if sample_ID == model_no:
-            sample_cost_1 = S_1_true_cost
-            sample_cost_2 = S_2_true_cost
+            sample_cost_1 = list(itertools.accumulate(S_1.list_from_dict_key_cost(S_1.trajectory.cost.true)))
+            sample_cost_2 = list(itertools.accumulate(S_2.list_from_dict_key_cost(S_2.trajectory.cost.true)))
             sample_eig = np.sort(np.abs(S.A.open_loop_eig_vals))
             m1_name = S_1.plot_name
             m2_name = S_2.plot_name
 
-    ax_exp_legend.axis('off')
     ax_exp_legend.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
                                   mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name)],
                          title='Experiment No:' + str(exp_no))
+    ax_exp_legend.axis('off')
 
     ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4, linewidth=0)
     ax_cost.fill_between(range(0, S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4, linewidth=0)
