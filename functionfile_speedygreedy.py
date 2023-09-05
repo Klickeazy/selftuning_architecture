@@ -1802,97 +1802,32 @@ def simulate_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 1, pri
     return S, S_tuning_base_cost, S_tuning_scale_cost
 
 
-def simulate_statistics_experiment_fixed_vs_selftuning(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
+def simulate_statistics_experiment(exp_no: int, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
+    experiment_function_mapper = {
+                                  'statistics_fixed_vs_selftuning'                : simulate_experiment_fixed_vs_selftuning,
+                                  'statistics_selftuning_number_of_changes'       : simulate_experiment_selftuning_number_of_changes,
+                                  'statistics_selftuning_prediction_horizon'      : simulate_experiment_selftuning_prediction_horizon,
+                                  'statistics_selftuning_architecture_cost'       : simulate_experiment_selftuning_architecture_cost,
+                                  'statistics_selftuning_architecture_cost_no_lim': simulate_experiment_selftuning_architecture_cost_no_lim,
+                                  'statistics_pointdistribution_openloop'         : simulate_experiment_pointdistribution_openloop
+                                  }
 
-    idx_range = list(range(start_idx, number_of_samples + start_idx))
     S = initialize_system_from_experiment_number(exp_no)
+    if S.sim.test_model == 'statistics_pointdistribution_openloop':
+        system_model_to_memory_gen_model(S_temp)
+        idx_range = list(range(1, 1 + S_temp.number_of_states))
+    else:
+        idx_range = list(range(start_idx, number_of_samples + start_idx))
 
     if S.sim.multiprocess_check:
         with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
             # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
             with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_fixed_vs_selftuning, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
+                for _ in executor.map(experiment_function_mapper[S.sim.test_model], itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
                     pbar.update()
     else:
         for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, statistics_model=test_no)
-
-
-def simulate_statistics_experiment_selftuning_number_of_changes(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
-    idx_range = list(range(start_idx, number_of_samples + start_idx))
-    S = initialize_system_from_experiment_number(exp_no)
-
-    if S.sim.multiprocess_check:
-        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_number_of_changes, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
-                    pbar.update()
-    else:
-        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
-
-
-def simulate_statistics_experiment_selftuning_prediction_horizon(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
-    idx_range = list(range(start_idx, number_of_samples + start_idx))
-    S = initialize_system_from_experiment_number(exp_no)
-
-    if S.sim.multiprocess_check:
-        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_prediction_horizon, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
-                    pbar.update()
-    else:
-        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
-
-
-def simulate_statistics_experiment_selftuning_architecture_cost(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
-    idx_range = list(range(start_idx, number_of_samples + start_idx))
-    S = initialize_system_from_experiment_number(exp_no)
-
-    if S.sim.multiprocess_check:
-        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_architecture_cost, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
-                    pbar.update()
-    else:
-        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
-
-
-def simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no: int = 0, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100):
-    idx_range = list(range(start_idx, number_of_samples + start_idx))
-    S = initialize_system_from_experiment_number(exp_no)
-
-    if S.sim.multiprocess_check:
-        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_selftuning_architecture_cost_no_lim, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
-                    pbar.update()
-    else:
-        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
-
-
-def simulate_statistics_experiment_pointdistribution_openloop(exp_no: int = 0, print_check: bool = 'False'):
-    S_temp = initialize_system_from_experiment_number(exp_no)
-    system_model_to_memory_gen_model(S_temp)
-
-    idx_range = list(range(1, 1 + S_temp.number_of_states))
-
-    if S_temp.sim.multiprocess_check:
-        with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-            # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                for _ in executor.map(simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop, itertools.repeat(exp_no), itertools.repeat(print_check), itertools.repeat(False), idx_range):
-                    pbar.update()
-    else:
-        for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-            _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, tqdm_check=True, statistics_model=test_no)
+            _, _, _ = experiment_function_mapper[S.sim.test_model](exp_no=exp_no, statistics_model=test_no, print_check=print_check, tqdm_check=True)
 
 
 def simulate_experiment(exp_no: int = None, print_check: bool = False):
@@ -1902,18 +1837,19 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
     else:
         print('Experiment number: ', exp_no)
 
-    experiment_function_mapper = {'fixed_vs_selftuning': simulate_experiment_fixed_vs_selftuning,
-                                  'selftuning_number_of_changes': simulate_experiment_selftuning_number_of_changes,
-                                  'selftuning_prediction_horizon': simulate_experiment_selftuning_prediction_horizon,
-                                  'selftuning_architecture_cost': simulate_experiment_selftuning_architecture_cost,
-                                  'pointdistribution_openloop': simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop,
-                                  'selftuning_architecture_cost_no_lim': simulate_experiment_selftuning_architecture_cost_no_lim,
-                                  'statistics_fixed_vs_selftuning': simulate_statistics_experiment_fixed_vs_selftuning,
-                                  'statistics_selftuning_number_of_changes': simulate_statistics_experiment_selftuning_number_of_changes,
-                                  'statistics_selftuning_prediction_horizon': simulate_statistics_experiment_selftuning_prediction_horizon,
-                                  'statistics_selftuning_architecture_cost': simulate_statistics_experiment_selftuning_architecture_cost,
-                                  'statistics_selftuning_architecture_cost_no_lim': simulate_statistics_experiment_selftuning_architecture_cost_no_lim,
-                                  'statistics_pointdistribution_openloop': simulate_statistics_experiment_pointdistribution_openloop
+    experiment_function_mapper = {
+                                    'fixed_vs_selftuning'                           : simulate_experiment_fixed_vs_selftuning,
+                                    'selftuning_number_of_changes'                  : simulate_experiment_selftuning_number_of_changes,
+                                    'selftuning_prediction_horizon'                 : simulate_experiment_selftuning_prediction_horizon,
+                                    'selftuning_architecture_cost'                  : simulate_experiment_selftuning_architecture_cost,
+                                    'pointdistribution_openloop'                    : simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop,
+                                    'selftuning_architecture_cost_no_lim'           : simulate_experiment_selftuning_architecture_cost_no_lim,
+                                    'statistics_fixed_vs_selftuning'                : simulate_statistics_experiment,
+                                    'statistics_selftuning_number_of_changes'       : simulate_statistics_experiment,
+                                    'statistics_selftuning_prediction_horizon'      : simulate_statistics_experiment,
+                                    'statistics_selftuning_architecture_cost'       : simulate_statistics_experiment,
+                                    'statistics_selftuning_architecture_cost_no_lim': simulate_statistics_experiment,
+                                    'statistics_pointdistribution_openloop'         : simulate_statistics_experiment
                                   }
 
     S = initialize_system_from_experiment_number(exp_no)
@@ -1922,34 +1858,6 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False):
         raise Exception('Experiment not defined')
 
     experiment_function_mapper[S.sim.test_model](exp_no=exp_no)
-
-    # if S.sim.test_model is None or S.sim.test_model == 'fixed_vs_selftuning':
-    #     _, _, _ = simulate_experiment_fixed_vs_selftuning(exp_no=exp_no, print_check=print_check)
-    # elif S.sim.test_model == 'selftuning_number_of_changes':
-    #     _, _, _ = simulate_experiment_selftuning_number_of_changes(exp_no=exp_no, print_check=print_check)
-    # elif S.sim.test_model == 'selftuning_prediction_horizon':
-    #     _, _, _ = simulate_experiment_selftuning_prediction_horizon(exp_no=exp_no, print_check=print_check)
-    # elif S.sim.test_model == 'selftuning_architecture_cost':
-    #     _, _, _ = simulate_experiment_selftuning_architecture_cost(exp_no=exp_no, print_check=print_check)
-    # elif S.sim.test_model == 'pointdistribution_openloop':
-    #     _, _, _ = simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(exp_no=exp_no, print_check=print_check, statistics_model=1)
-    # elif S.sim.test_model == 'selftuning_architecture_cost_no_lim':
-    #     _, _, _ = simulate_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no, print_check=print_check)
-    #
-    # elif S.sim.test_model == 'statistics_fixed_vs_selftuning':
-    #     simulate_statistics_experiment_fixed_vs_selftuning(exp_no=exp_no)
-    # elif S.sim.test_model == 'statistics_selftuning_number_of_changes':
-    #     simulate_statistics_experiment_selftuning_number_of_changes(exp_no=exp_no)
-    # elif S.sim.test_model == 'statistics_selftuning_prediction_horizon':
-    #     simulate_statistics_experiment_selftuning_prediction_horizon(exp_no=exp_no)
-    # elif S.sim.test_model == 'statistics_selftuning_architecture_cost':
-    #     simulate_statistics_experiment_selftuning_architecture_cost(exp_no=exp_no)
-    # elif S.sim.test_model == 'statistics_selftuning_architecture_cost_no_lim':
-    #     simulate_statistics_experiment_selftuning_architecture_cost_no_lim(exp_no=exp_no)
-    # elif S.sim.test_model == 'statistics_pointdistribution_openloop':
-    #     simulate_statistics_experiment_pointdistribution_openloop(exp_no=exp_no)
-    # else:
-    #     raise Exception('Experiment not defined')
 
 
 def retrieve_experiment(exp_no: int = 1):
@@ -2112,9 +2020,9 @@ def plot_comparison_exp_no(exp_no: int = 1):
 
     S_1.plot_compute_time(ax_in=ax_compute_time)
     S_2.plot_compute_time(ax_in=ax_compute_time)
-    ax_compute_time.set_yscale('log')
+    # ax_compute_time.set_yscale('log')
+    ax_compute_time.tick_params(axis='y', labelrotation=30)
     ax_compute_time.set_ylabel('Compute\nTime')
-
     ax_compute_time.set_xlabel(r'Time $t$')
 
     plt.show()
@@ -2245,11 +2153,11 @@ def plot_statistics_exp_no(exp_no: int = None):
                                 mlines.Line2D([], [], color=cstyle[0], marker=mstyle[0], linewidth=0, label='Modes')],
                        loc='upper left')
 
-    a1 = ax_architecture_B_change.boxplot([arch_change_2['B'], arch_change_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False)
-    a2 = ax_architecture_C_change.boxplot([arch_change_2['C'], arch_change_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False)
-    a3 = ax_architecture_B_count.boxplot([arch_count_2['B'], arch_count_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False)
-    a4 = ax_architecture_C_count.boxplot([arch_count_2['C'], arch_count_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False)
-    a5 = ax_architecture_compute_time.boxplot([compute_time_2, compute_time_1], labels=[r'$M_2$', r'$M_1$'], vert=False)
+    a1 = ax_architecture_B_change.boxplot([arch_change_2['B'], arch_change_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+    a2 = ax_architecture_C_change.boxplot([arch_change_2['C'], arch_change_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+    a3 = ax_architecture_B_count.boxplot([arch_count_2['B'], arch_count_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+    a4 = ax_architecture_C_count.boxplot([arch_count_2['C'], arch_count_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+    a5 = ax_architecture_compute_time.boxplot([compute_time_2, compute_time_1], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
 
     for bplot in (a1, a2, a3, a4, a5):
         for patch, color in zip(bplot['medians'], [cstyle[1], cstyle[0]]):
@@ -2257,12 +2165,13 @@ def plot_statistics_exp_no(exp_no: int = None):
 
     # ax_architecture_C_count.xaxis.set_major_locator(MaxNLocator(integer=True))
     # ax_architecture_C_count.locator_params(axis='x', integer=True)
-    ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + ' Size')
-    ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + ' Size')
-    ax_architecture_B_change.set_xlabel('Avg ' + r'$|S_t|$' + ' Changes')
-    ax_architecture_C_change.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + 'Changes')
+    ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + '\nSize')
+    ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nSize')
+    ax_architecture_B_change.set_xlabel('Avg ' + r'$|S_t|$' + '\nChanges')
+    ax_architecture_C_change.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nChanges')
     ax_architecture_compute_time.set_xlabel('Avg Compute \n Time (s)')
     ax_architecture_compute_time.set_xscale('log')
+    ax_architecture_compute_time.tick_params(axis='x', labelrotation=30)
 
     # ax_architecture_B_count.tick_params(axis='x', labelbottom=False, bottom=False)
     # ax_architecture_B_change.tick_params(labelleft=False, left=False, labelbottom=False, bottom=False)
