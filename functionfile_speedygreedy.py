@@ -116,6 +116,12 @@ class Experiment:
         self.parameter_keys = list(self.default_parameter_datatype_map.keys())      # Strip parameter names from dict
         self.parameter_datatypes = {k: type(self.default_parameter_datatype_map[k]) for k in self.default_parameter_datatype_map}      # Strip parameter data types from dict
 
+        self.exp_no = 1
+        self.exp_iterations = 1
+        self.S = System(self.exp_no)
+        self.S_1 = System(self.exp_no)
+        self.S_2 = System(self.exp_no)
+
         self.parameter_table = pd.DataFrame()       # Parameter table from csv
         self.experiments_list = []                  # List of experiments
         self.parameter_values = []                  # Parameters for target experiment
@@ -136,6 +142,10 @@ class Experiment:
                 print('Dimensions agree: {} elements'.format(len(self.parameter_keys)))
         else:
             raise Exception("Dimension mismatch - values: {}, datatype: {}, keys: {}".format(len(self.parameter_values), len(self.parameter_datatypes), len(self.parameter_keys)))
+
+    def check_experiment_number(self) -> None:
+        if self.exp_no not in self.experiments_list:
+            raise Exception('Invalid experiment number')
 
     def read_table_from_file(self) -> None:
         # Read table from file
@@ -177,7 +187,7 @@ class Experiment:
         self.parameter_table.to_csv(self.save_filename)
         print('Printing done')
 
-    def return_keys_values(self) -> tuple(list, list):
+    def return_keys_values(self):
         return self.parameter_values, self.parameter_keys
 
     def display_test_parameters(self) -> None:
@@ -209,7 +219,7 @@ def normalize_columns_of_matrix(A_mat: np.ndarray) -> np.ndarray:
     return A_mat
 
 
-def initialize_system_from_experiment_number(exp_no: int = 1) -> System:
+def initialize_system_from_experiment_number(exp_no: int = 1):
     exp = Experiment()
     exp.read_parameters_from_table(exp_no)
     S = System()
@@ -1315,7 +1325,7 @@ def cost_mapper(S: System, choices) -> list:
     return evaluation
 
 
-def greedy_selection(S: System, number_of_changes_limit: int = None, print_check: bool = False) -> System:
+def greedy_selection(S: System, number_of_changes_limit: int = None, print_check: bool = False):
     exit_condition = 0
     work_sys = dc(S)
     arch_ref = dc(S)
@@ -1403,7 +1413,7 @@ def greedy_selection(S: System, number_of_changes_limit: int = None, print_check
     return work_sys
 
 
-def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check: bool = False) -> System:
+def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check: bool = False):
     exit_condition = 0
     work_sys = dc(S)
     arch_ref = dc(S)
@@ -1487,7 +1497,7 @@ def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check
     return work_sys
 
 
-def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False) -> System:
+def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False):
     work_sys = dc(S)
     ref_arch = dc(S)
     cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
@@ -1554,7 +1564,7 @@ def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_o
     return work_sys
 
 
-def optimize_initial_architecture(S: System, print_check: bool = False) -> System:
+def optimize_initial_architecture(S: System, print_check: bool = False):
     if print_check:
         print('Optimizing design-time architecture from:')
         S.architecture_display()
@@ -1584,7 +1594,7 @@ def optimize_initial_architecture(S: System, print_check: bool = False) -> Syste
     return S
 
 
-def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check: bool = True) -> System:
+def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check: bool = True):
     S_fix = dc(S)
     S_fix.sim.sim_model = "fixed"
     S_fix.model_namer()
@@ -1613,7 +1623,7 @@ def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check
     return S_fix
 
 
-def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True) -> System:
+def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
     S_self_tuning = dc(S)
     S_self_tuning.sim.sim_model = "selftuning"
     S_self_tuning.model_namer()
@@ -1839,7 +1849,7 @@ def simulate_experiment(exp_no: int = None, print_check: bool = False) -> None:
     experiment_function_mapper[S.sim.test_model](exp_no=exp_no)
 
 
-def retrieve_experiment(exp_no: int = 1) -> tuple(System, System, System):
+def retrieve_experiment(exp_no: int = 1):
     S = initialize_system_from_experiment_number(exp_no)
     S, S_1, S_2 = system_model_from_memory_sim_model(S.model_name)
     return S, S_1, S_2
@@ -1852,7 +1862,7 @@ def system_model_to_memory_gen_model(S: System) -> None:  # Store model generate
     print('\nShelving gen model: {}'.format(shelve_filename))
 
 
-def system_model_from_memory_gen_model(model, print_check=False) -> System:  # Retrieve model generated from experiment parameters
+def system_model_from_memory_gen_model(model, print_check=False):  # Retrieve model generated from experiment parameters
     shelve_filename = datadump_folder_path + 'gen_' + model
     if print_check:
         print('\nReading gen model: {}'.format(shelve_filename))
@@ -1872,7 +1882,7 @@ def system_model_to_memory_sim_model(S: System, S_1: System, S_2: System) -> Non
         shelve_data['s2'] = S_2
 
 
-def system_model_from_memory_sim_model(model) -> tuple(System, System, System):  # Retrieve simulated models
+def system_model_from_memory_sim_model(model):  # Retrieve simulated models
     shelve_filename = datadump_folder_path + 'sim_' + model
     print('\nReading sim model: {}'.format(shelve_filename))
     with shelve.open(shelve_filename, flag='r') as shelve_data:
@@ -1900,7 +1910,7 @@ def system_model_to_memory_statistics(S: System, S_1: System, S_2: System, model
         print('\nShelving model: {}'.format(shelve_filename))
 
 
-def data_from_memory_statistics(exp_no: int = None, model_id: int = None, print_check=False) -> tuple(System, System, System):
+def data_from_memory_statistics(exp_no: int = None, model_id: int = None, print_check=False):
     if exp_no is None:
         raise Exception('Experiment not provided')
 
@@ -1999,8 +2009,9 @@ def plot_comparison_exp_no(exp_no: int = 1) -> None:
 
     S_1.plot_compute_time(ax_in=ax_compute_time)
     S_2.plot_compute_time(ax_in=ax_compute_time)
-    # ax_compute_time.set_yscale('log')
-    ax_compute_time.tick_params(axis='y', labelrotation=30)
+    ax_compute_time.set_yscale('log')
+    x_lims = ax_compute_time.get_xlim()
+    ax_compute_time.set_xlim(10 ** np.floor(np.log10(x_lims[0])), 10 ** np.ceil(np.log10(x_lims[1])))
     ax_compute_time.set_ylabel('Compute\nTime (s)')
     ax_compute_time.set_xlabel(r'Time $t$')
 
@@ -2011,7 +2022,7 @@ def plot_comparison_exp_no(exp_no: int = 1) -> None:
     print('Image saved: {}'.format(save_path))
 
 
-def element_wise_min_max(v_ref_min, v_ref_max, v) -> tuple(list, list):
+def element_wise_min_max(v_ref_min, v_ref_max, v):
 
     v_ret_min = [min(e) for e in zip(v_ref_min, v)]
     v_ret_max = [max(e) for e in zip(v_ref_max, v)]
@@ -2019,9 +2030,9 @@ def element_wise_min_max(v_ref_min, v_ref_max, v) -> tuple(list, list):
     return v_ret_min, v_ret_max
 
 
-def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_change, arch_count) -> tuple(list, list, list, dict, dict):
+def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_change, arch_count):
 
-    cost_min, cost_max = element_wise_min_max(cost_min, cost_max, list(itertools.accumulate(S_1.list_from_dict_key_time(S_1.trajectory.cost.true))))
+    cost_min, cost_max = element_wise_min_max(cost_min, cost_max, list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.cost.true))))
     compute_time.append(np.average(list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.computation_time)))))
     S.architecture_count_number_of_sim_changes()
     S.architecture_active_count()
@@ -2125,18 +2136,24 @@ def plot_statistics_exp_no(exp_no: int = None) -> None:
         for patch, color in zip(bplot['medians'], [cstyle[1], cstyle[0]]):
             patch.set_color(color)
 
+    for a in (ax_architecture_B_count, ax_architecture_C_count, ax_architecture_B_change, ax_architecture_C_change):
+        x_lim_g = a.get_xlim()
+        a.set_xlim(np.floor(x_lim_g[0]), np.ceil(x_lim_g[1]))
+
+    for a in (ax_architecture_C_count, ax_architecture_B_change, ax_architecture_C_change, ax_architecture_compute_time):
+        a.tick_params(axis='y', labelleft=False, left=False)
+
+    ax_architecture_compute_time.set_xscale('log')
+    x_lims = ax_architecture_compute_time.get_xlim()
+    ax_architecture_compute_time.set_xlim(10**np.floor(np.log10(x_lims[0])), 10**np.ceil(np.log10(x_lims[1])))
+
     ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + '\nSize')
     ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nSize')
     ax_architecture_B_change.set_xlabel('Avg ' + r'$|S_t|$' + '\nChanges')
     ax_architecture_C_change.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nChanges')
     ax_architecture_compute_time.set_xlabel('Avg Compute \n Time (s)')
-    ax_architecture_compute_time.set_xscale('log')
-    ax_architecture_compute_time.tick_params(axis='x', labelrotation=30)
+    # ax_architecture_compute_time.tick_params(axis='x', labelrotation=30)
 
-    ax_architecture_B_change.tick_params(axis='y', labelleft=False, left=False)
-    ax_architecture_C_count.tick_params(axis='y', labelleft=False, left=False)
-    ax_architecture_C_change.tick_params(axis='y', labelleft=False, left=False)
-    ax_architecture_compute_time.tick_params(axis='y', labelleft=False, left=False)
 
     plt.show()
 

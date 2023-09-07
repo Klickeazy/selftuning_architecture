@@ -5,7 +5,7 @@ if __name__ == "__main__":
 
     # exp_master_list = [22, 41, 19, 20, 34, 31, 47, 49, 50, 51]
 
-    exp_list = [19, 20]
+    exp_list = [22]
 
     for exp_no in exp_list:
 
