@@ -6,15 +6,13 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
-# from matplotlib.ticker import MaxNLocator, FuncFormatter
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 
 from time import process_time
 from copy import deepcopy as dc
 import pandas as pd
 import shelve
 import itertools
-# import multiprocessing
-# from multiprocessing import Pool
 import concurrent.futures
 
 import os
@@ -36,12 +34,15 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rcParams['text.usetex'] = True
 matplotlib.rcParams['savefig.bbox'] = 'tight'
 matplotlib.rcParams['savefig.format'] = 'pdf'
+
+
 # matplotlib.rcParams['axes.autolimit_mode'] = 'round_numbers'
 
 
 # Error handling
 class ArchitectureError(Exception):
     """Raise when architecture is not B or C"""
+
     def __init__(self, value='Check architecture type'):
         self.value = value
 
@@ -73,77 +74,86 @@ class Experiment:
     """
     Class to manage experiment parameters - save/load from csv file
     """
-    def __init__(self):
-        self.parameters_save_filename = "experiment_parameters.csv"            # File name for experiment parameters
 
-        self.default_parameter_datatype_map = {'experiment_no'              : int(1),
-                                               'test_model'                 : str(None),
-                                               'test_parameter'             : int(0),
-                                               'number_of_nodes'            : int(20),
-                                               'network_model'              : str('rand'),
-                                               'network_parameter'          : float(0),
-                                               'rho'                        : float(1),
-                                               'second_order'               : False,
-                                               'second_order_network'       : int(0),
-                                               'initial_architecture_size'  : int(5),
+    def __init__(self):
+        self.parameters_save_filename = "experiment_parameters.csv"  # File name for experiment parameters
+
+        self.default_parameter_datatype_map = {'experiment_no': int(1),
+                                               'test_model': str(None),
+                                               'test_parameter': int(0),
+                                               'number_of_nodes': int(20),
+                                               'network_model': str('rand'),
+                                               'network_parameter': float(0),
+                                               'rho': float(1),
+                                               'second_order': False,
+                                               'second_order_network': int(0),
+                                               'initial_architecture_size': int(5),
                                                'architecture_constraint_min': int(5),
                                                'architecture_constraint_max': int(5),
-                                               'second_order_architecture'  : int(0),
-                                               'Q_cost_scaling'             : float(1),
-                                               'R_cost_scaling'             : float(1),
-                                               'B_run_cost'                 : float(1),
-                                               'C_run_cost'                 : float(1),
-                                               'B_switch_cost'              : float(1),
-                                               'C_switch_cost'              : float(1),
-                                               'W_scaling'                  : float(1),
-                                               'V_scaling'                  : float(1),
-                                               'disturbance_model'          : str(None),
-                                               'disturbance_step'           : int(0),
-                                               'disturbance_number'         : int(0),
-                                               'disturbance_magnitude'      : int(0),
-                                               'prediction_time_horizon'    : int(10),
-                                               'X0_scaling'                 : float(1),
-                                               'multiprocessing'            : False}                 # Dictionary of parameter names and default value with data-type
+                                               'second_order_architecture': int(0),
+                                               'Q_cost_scaling': float(1),
+                                               'R_cost_scaling': float(1),
+                                               'B_run_cost': float(1),
+                                               'C_run_cost': float(1),
+                                               'B_switch_cost': float(1),
+                                               'C_switch_cost': float(1),
+                                               'W_scaling': float(1),
+                                               'V_scaling': float(1),
+                                               'disturbance_model': str(None),
+                                               'disturbance_step': int(0),
+                                               'disturbance_number': int(0),
+                                               'disturbance_magnitude': int(0),
+                                               'prediction_time_horizon': int(10),
+                                               'X0_scaling': float(1),
+                                               'multiprocessing': False}  # Dictionary of parameter names and default value with data-type
 
-        self.parameter_keys = list(self.default_parameter_datatype_map.keys())      # Strip parameter names from dict
-        self.parameter_datatypes = {k: type(self.default_parameter_datatype_map[k]) for k in self.default_parameter_datatype_map}      # Strip parameter data types from dict
+        self.parameter_keys = list(self.default_parameter_datatype_map.keys())  # Strip parameter names from dict
+        self.parameter_datatypes = {k: type(self.default_parameter_datatype_map[k]) for k in
+                                    self.default_parameter_datatype_map}  # Strip parameter data types from dict
+        self.process_pool_max_workers = None
 
         # Parameters and simulation systems for current experiment
         self.exp_no = 1
         self.parameter_values = []
-        self.S = System()
-        self.S_1 = System()
-        self.S_2 = System()
+        self.S = {0: System()}
+        self.S_1 = {}
+        self.S_2 = {}
+        self.index_range = []
 
         # Save folder for data dump
         if socket.gethostname() == 'melap257805':
             self.datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-        else:
+        elif socket.gethostname() == 'DESKTOP-D6E65VO':
             self.datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+        else:
+            self.datadump_folder_path = 'DataDump/'
 
         # Save folder for images within the same git folder
         self.image_save_folder_path = 'Images/'
 
         # Saved experiment data parse
-        self.parameter_table = pd.DataFrame()       # Parameter table from csv
-        self.experiments_list = []                  # List of experiments
+        self.parameter_table = pd.DataFrame()  # Parameter table from csv
+        self.experiments_list = []  # List of experiments
         self.read_table_from_file()
 
-        self.experiment_function_mapper = {'fixed_vs_selftuning'                : self.simulate_experiment_fixed_vs_selftuning,
-                                           'selftuning_number_of_changes'       : self.simulate_experiment_selftuning_number_of_changes,
-                                           'selftuning_prediction_horizon'      : self.simulate_experiment_selftuning_prediction_horizon,
-                                           'selftuning_architecture_cost'       : self.simulate_experiment_selftuning_architecture_cost,
-                                           'pointdistribution_openloop'         : self.simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop,
-                                           'selftuning_architecture_cost_no_lim': self.simulate_experiment_selftuning_architecture_cost_no_lim,
-                                           }
+        # Simulation function mapper
+        self.experiment_modifications_mapper = {
+            'fixed_vs_self_tuning': self.simulate_experiment_fixed_vs_self_tuning,
+            'self_tuning_number_of_changes': self.simulate_experiment_self_tuning_number_of_changes,
+            'self_tuning_prediction_horizon': self.simulate_experiment_self_tuning_prediction_horizon,
+            'self_tuning_architecture_cost': self.simulate_experiment_self_tuning_architecture_cost,
+            'pointdistribution_openloop': self.simulate_experiment_fixed_vs_self_tuning_pointdistribution_openloop,
+            'self_tuning_architecture_cost_no_lim': self.simulate_experiment_self_tuning_architecture_cost_no_lim
+        }
 
-        self.experiment_function_mapper_statistics = {'statistics_fixed_vs_selftuning'                : self.simulate_experiment_fixed_vs_selftuning,
-                                                      'statistics_selftuning_number_of_changes'       : self.simulate_experiment_selftuning_number_of_changes,
-                                                      'statistics_selftuning_prediction_horizon'      : self.simulate_experiment_selftuning_prediction_horizon,
-                                                      'statistics_selftuning_architecture_cost'       : self.simulate_experiment_selftuning_architecture_cost,
-                                                      'statistics_selftuning_architecture_cost_no_lim': self.simulate_experiment_selftuning_architecture_cost_no_lim,
-                                                      'statistics_pointdistribution_openloop'         : self.simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop
-                                                      }
+        self.experiment_mapper_statistics = {
+            'statistics_fixed_vs_self_tuning': 'fixed_vs_self_tuning',
+            'statistics_self_tuning_number_of_changes': 'self_tuning_number_of_changes',
+            'statistics_self_tuning_prediction_horizon': 'self_tuning_prediction_horizon',
+            'statistics_self_tuning_architecture_cost': 'self_tuning_architecture_cost',
+            'statistics_self_tuning_architecture_cost_no_lim': 'self_tuning_architecture_cost_no_lim',
+            'statistics_pointdistribution_openloop': 'pointdistribution_openloop'
+        }
 
     def initialize_table(self) -> None:
         # Initialize parameter csv file from nothing
@@ -181,7 +191,8 @@ class Experiment:
         self.parameter_values = [self.exp_no] + [k for k in self.parameter_table.loc[self.exp_no]]
 
     def parameter_value_map(self) -> None:
-        self.parameter_values = [list(map(d, [v]))[0] if v is not None else None for d, v in zip(self.parameter_datatypes, self.parameter_values)]
+        self.parameter_values = [list(map(d, [v]))[0] if v is not None else None for d, v in
+                                 zip(self.parameter_datatypes, self.parameter_values)]
 
     def write_parameters_to_table(self) -> None:
         if len(self.parameter_values) == 0:
@@ -214,21 +225,22 @@ class Experiment:
             self.exp_no = exp_no
         self.check_experiment_number()
         self.read_parameters_from_table()
-        self.S.initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+        self.S[0] = System()
+        self.S[0].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
-        if self.S.sim.test_model not in self.experiment_function_mapper and self.S.sim.test_model not in self.experiment_function_mapper_statistics:
+        if self.S[0].sim.test_model not in self.experiment_modifications_mapper and self.S[0].sim.test_model not in self.experiment_mapper_statistics:
             raise Exception('Experiment not defined')
-    
+
     def retrieve_experiment(self, exp_no=None) -> None:
         if exp_no is None:
             exp_no = self.exp_no
         self.initialize_system_from_experiment_number(exp_no)
-        self.system_model_from_memory_sim_model(self.S.model_name)
+        self.system_model_from_memory_sim_model(self.S[0].model_name)
 
     def system_model_to_memory_gen_model(self) -> None:  # Store model generated from experiment parameters
-        shelve_filename = self.datadump_folder_path + 'gen_' + self.S.model_name
+        shelve_filename = self.datadump_folder_path + 'gen_' + self.S[0].model_name
         with shelve.open(shelve_filename, writeback=True) as shelve_data:
-            shelve_data['s'] = self.S
+            shelve_data['s'] = self.S[0]
         print('\nShelving gen model: {}'.format(shelve_filename))
 
     def system_model_from_memory_gen_model(self, model, print_check=False):  # Retrieve model generated from experiment parameters
@@ -236,40 +248,40 @@ class Experiment:
         if print_check:
             print('\nReading gen model: {}'.format(shelve_filename))
         with shelve.open(shelve_filename, flag='r') as shelve_data:
-            self.S = shelve_data['s']
-        if not isinstance(self.S, System):
+            self.S[0] = shelve_data['s']
+        if not isinstance(self.S[0], System):
             raise Exception('System model error')
 
     def system_model_to_memory_sim_model(self) -> None:  # Store simulated models
-        shelve_filename = self.datadump_folder_path + 'sim_' + self.S.model_name
+        shelve_filename = self.datadump_folder_path + 'sim_' + self.S[0].model_name
         print('\nShelving sim model: {}'.format(shelve_filename))
         with shelve.open(shelve_filename, writeback=True) as shelve_data:
-            shelve_data['s'] = self.S
-            shelve_data['s1'] = self.S_1
-            shelve_data['s2'] = self.S_2
+            shelve_data['s'] = self.S[0]
+            shelve_data['s1'] = self.S_1[0]
+            shelve_data['s2'] = self.S_2[0]
 
     def system_model_from_memory_sim_model(self, model):  # Retrieve simulated models
         shelve_filename = self.datadump_folder_path + 'sim_' + model
         print('\nReading sim model: {}'.format(shelve_filename))
         with shelve.open(shelve_filename, flag='r') as shelve_data:
-            self.S = shelve_data['s']
-            self.S_1 = shelve_data['s1']
-            self.S_2 = shelve_data['s2']
-        if not isinstance(self.S, System) or not isinstance(self.S_1, System) or not isinstance(self.S_2, System):
+            self.S[0] = shelve_data['s']
+            self.S_1[0] = shelve_data['s1']
+            self.S_2[0] = shelve_data['s2']
+        if not isinstance(self.S[0], System) or not isinstance(self.S_1[0], System) or not isinstance(self.S_2[0], System):
             raise Exception('Data type mismatch')
-        self.S.plot = PlotParameters()
-        self.S_1.plot = PlotParameters(1)
-        self.S_2.plot = PlotParameters(2)
+        self.S[0].plot = PlotParameters()
+        self.S_1[0].plot = PlotParameters(1)
+        self.S_2[0].plot = PlotParameters(2)
 
     def system_model_to_memory_statistics(self, model_id: int, print_check: bool = False) -> None:
-        shelve_filename = self.datadump_folder_path + 'statistics/' + self.S.model_name
+        shelve_filename = self.datadump_folder_path + 'statistics/' + self.S[0].model_name
         if not os.path.isdir(shelve_filename):
             os.makedirs(shelve_filename)
         shelve_filename = shelve_filename + '/model_' + str(model_id)
         with shelve.open(shelve_filename, writeback=True) as shelve_data:
-            shelve_data['s'] = self.S
-            shelve_data['s1'] = self.S_1
-            shelve_data['s2'] = self.S_2
+            shelve_data['s'] = self.S[model_id]
+            shelve_data['s1'] = self.S_1[model_id]
+            shelve_data['s2'] = self.S_2[model_id]
         if print_check:
             print('\nShelving model: {}'.format(shelve_filename))
 
@@ -277,199 +289,176 @@ class Experiment:
         if self.exp_no is None:
             raise Exception('Experiment not provided')
 
-        self.initialize_system_from_experiment_number(exp_no=None)
-
-        shelve_filename = self.datadump_folder_path + 'statistics/' + self.S.model_name + '/model_' + str(model_id)
+        shelve_filename = self.datadump_folder_path + 'statistics/' + self.S[0].model_name + '/model_' + str(model_id)
         with shelve.open(shelve_filename, flag='r') as shelve_data:
-            self.S = shelve_data['s']
-            self.S_1 = shelve_data['s1']
-            self.S_2 = shelve_data['s2']
-        if not isinstance(self.S, System) or not isinstance(self.S_1, System) or not isinstance(self.S_2, System):
+            self.S[model_id] = shelve_data['s']
+            self.S_1[model_id] = shelve_data['s1']
+            self.S_2[model_id] = shelve_data['s2']
+        if not isinstance(self.S[model_id], System) or not isinstance(self.S_1[model_id], System) or not isinstance(self.S_2[model_id], System):
             raise Exception('Data type mismatch')
         if print_check:
             print('\nModel read done: {}'.format(shelve_filename))
 
-    def optimize_initial_architecture(self, print_check: bool = False):
-        if print_check:
-            print('Optimizing design-time architecture from:')
-            self.S.architecture_display()
-
-        t_predict_ref = dc(self.S.sim.t_predict)
-        self.S.sim.t_predict = 2 * t_predict_ref
-        self.S.trajectory.cost.metric_control = 2
-        BR3, CR3 = dc(self.S.B.R3), dc(self.S.C.R3)
-        self.S.B.R3 *= 0
-        self.S.C.R3 *= 0
-        self.S.prediction_gains()
-        self.S.cost_prediction_wrapper()
-
-        self.S = greedy_simultaneous(self.S, print_check_inner=print_check, print_check_outer=print_check)
-
-        self.S.sim.t_predict = dc(t_predict_ref)
-        self.S.trajectory.cost.metric_control = 1
-        self.S.B.R3 = dc(BR3)
-        self.S.C.R3 = dc(CR3)
-        self.S.prediction_gains()
-        self.S.cost_prediction_wrapper()
-
-        if print_check:
-            print('Design-time architecture optimized to:')
-            self.S.architecture_display()
+    def dict_memory_clear(self, model_id : int = 0):
+        for S in (self.S, self.S_1, self.S_2):
+            if model_id in S:
+                del S[model_id]
 
     def simulate_experiment_wrapper(self, exp_no=None, print_check: bool = False):
         self.initialize_system_from_experiment_number(exp_no=exp_no)
-        if self.S.sim.test_model in self.experiment_function_mapper:
-            self.experiment_function_mapper[self.S.sim.test_model](print_check=print_check)
-        elif self.S.sim.test_model in self.experiment_function_mapper_statistics:
+
+        print('Simulating Exp No: {}'.format(self.exp_no))
+
+        if self.S[0].sim.test_model in self.experiment_modifications_mapper:
+            self.simulate_experiment(print_check=print_check)
+
+        elif self.S[0].sim.test_model in self.experiment_mapper_statistics:
             self.simulate_statistics_experiment(print_check=print_check)
         else:
             raise Exception('Experiment not defined')
 
-    def simulate_experiment_fixed_vs_selftuning(self, print_check: bool = False, tqdm_check: bool = True, statistics_model=0) -> None:
+    def simulate_experiment(self, statistics_model: int = 0, print_check: bool = False, tqdm_check: bool = True):
+        if statistics_model > 0:
+            self.S[statistics_model] = System()
+            self.initialize_system_from_experiment_number()
 
-        self.optimize_initial_architecture(print_check=print_check)
+        if self.S[0].sim.test_model in self.experiment_modifications_mapper:
+            sim_function = self.experiment_modifications_mapper[self.S[0].sim.test_model]
+        else:
+            sim_function = self.experiment_modifications_mapper[self.experiment_mapper_statistics[self.S[0].sim.test_model]]
 
-        self.S_1 = simulate_fixed_architecture(self.S, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_1.plot_name = 'fixed arch'
+        if self.S[0].sim.test_model == 'pointdistribution_openloop' or self.S[0].sim.test_model in self.experiment_mapper_statistics:
+            sim_function(statistics_model=statistics_model, print_check=print_check)
+        else:
+            sim_function(print_check=print_check)
 
-        self.S_2 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=self.S.sim.test_parameter, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_2.plot_name = 'selftuning arch'
+        self.S_1[statistics_model].simulate(print_check=print_check, tqdm_check=tqdm_check)
+        self.S_2[statistics_model].simulate(print_check=print_check, tqdm_check=tqdm_check)
 
         if statistics_model == 0:
             self.system_model_to_memory_sim_model()
+            self.dict_memory_clear(model_id=0)
         else:
             self.system_model_to_memory_statistics(statistics_model)
+            self.dict_memory_clear(model_id=statistics_model)
 
-    def simulate_experiment_fixed_vs_selftuning_pointdistribution_openloop(self, print_check: bool = False, tqdm_check: bool = True, statistics_model=0) -> None:
-
-        self.system_model_from_memory_gen_model(self.S.model_name)
-
-        self.S.sim.test_parameter = None if self.S.sim.test_parameter == 0 else self.S.sim.test_parameter
-
-        self.S.initialize_trajectory(statistics_model - 1)
-
-        self.optimize_initial_architecture(print_check=print_check)
-
-        self.S_1 = simulate_fixed_architecture(self.S, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_1.plot_name = 'fixed arch'
-
-        self.S_2 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=self.S.sim.test_parameter, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_2.plot_name = 'selftuning arch'
-
-        if statistics_model == 0:
-            self.system_model_to_memory_sim_model()
-        else:
-            self.system_model_to_memory_statistics(statistics_model)
-
-    def simulate_experiment_selftuning_number_of_changes(self, print_check: bool = False, tqdm_check: bool = True, statistics_model=0) -> None:
-
-        self.S.sim.test_parameter = None if self.S.sim.test_parameter == 0 else self.S.sim.test_parameter
-
-        self.optimize_initial_architecture(print_check=print_check)
-
-        self.S_1 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_1.plot_name = 'selftuning 1change'
-
-        self.S_2 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=self.S.sim.test_parameter, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_2.plot_name = 'selftuning bestchange'
-
-        if statistics_model == 0:
-            self.system_model_to_memory_sim_model()
-        else:
-            self.system_model_to_memory_statistics(statistics_model)
-
-    def simulate_experiment_selftuning_prediction_horizon(self, print_check: bool = False, tqdm_check: bool = True, statistics_model=0) -> None:
-
-        self.optimize_initial_architecture(print_check=print_check)
-
-        prediction_scaling = 2 if self.S.sim.test_parameter is None else self.S.sim.test_parameter
-
-        self.S_1 = dc(self.S)
-        self.S_1 = simulate_self_tuning_architecture(self.S_1, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_1.plot_name = 'selftuning Tp' + str(self.S_1.sim.t_predict)
-
-        self.S_2 = dc(self.S)
-        self.S_2.sim.t_predict *= prediction_scaling
-        self.S_2 = simulate_self_tuning_architecture(self.S_2, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_2.plot_name = 'selftuning Tp' + str(self.S_2.sim.t_predict)
-
-        if statistics_model == 0:
-            self.system_model_to_memory_sim_model()
-        else:
-            self.system_model_to_memory_statistics(statistics_model)
-
-    def scalecost_by_test_parameter(self) -> str:
-        cost_scale = 0 if self.S.sim.test_parameter is None else self.S.sim.test_parameter
-        self.S.B.R2 = self.S.B.R2 * cost_scale
-        self.S.B.R3 = self.S.B.R3 * cost_scale
-        self.S.C.R2 = self.S.C.R2 * cost_scale
-        self.S.C.R3 = self.S.C.R3 * cost_scale
-        if cost_scale == 0:
-            return 'selftuning free arch'
-        else:
-            return 'selftuning ' + str(cost_scale) + 'scale arch cost'
-
-    def simulate_experiment_selftuning_architecture_cost(self, print_check: bool = False, tqdm_check: bool = True, statistics_model=0) -> None:
-        S_ref = dc(self.S)
-        self.optimize_initial_architecture(print_check=print_check)
-        self.S_1 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_1.plot_name = 'selftuning base arch cost'
-
-        self.S = dc(S_ref)
-        S_name = self.scalecost_by_test_parameter()
-        self.optimize_initial_architecture(print_check=print_check)
-        self.S_2 = dc(self.S)
-        self.S_2 = simulate_self_tuning_architecture(self.S_2, number_of_changes_limit=1, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_2.plot_name = S_name
-
-        if statistics_model == 0:
-            self.system_model_to_memory_sim_model()
-        else:
-            self.system_model_to_memory_statistics(statistics_model)
-
-    def simulate_experiment_selftuning_architecture_cost_no_lim(self, print_check: bool = False, tqdm_check: bool = True, statistics_model=0) -> None:
-        S_ref = dc(self.S)
-
-        self.optimize_initial_architecture(print_check=print_check)
-        self.S_1 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_1.plot_name = 'selftuning base arch cost'
-
-        self.S = dc(S_ref)
-        S_name = self.scalecost_by_test_parameter()
-        self.optimize_initial_architecture(print_check=print_check)
-        self.S_2 = simulate_self_tuning_architecture(self.S, number_of_changes_limit=None, print_check=print_check, tqdm_check=tqdm_check)
-        self.S_2.plot_name = S_name
-
-        if statistics_model == 0:
-            self.system_model_to_memory_sim_model()
-        else:
-            self.system_model_to_memory_statistics(statistics_model)
-
-    def simulate_statistics_experiment(self, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100) -> None:
-        if self.S.sim.test_model == 'statistics_pointdistribution_openloop':
+    def simulate_statistics_experiment(self, print_check: bool = False, start_idx: int = 1,
+                                       number_of_samples: int = 100) -> None:
+        if self.S[0].sim.test_model == 'statistics_pointdistribution_openloop':
             self.system_model_to_memory_gen_model()
-            idx_range = list(range(1, 1 + self.S.number_of_states))
+            idx_range = list(range(1, 1 + self.S[0].number_of_states))
         else:
             idx_range = list(range(start_idx, number_of_samples + start_idx))
 
-        if self.S.sim.multiprocess_check:
+        self.S[0].sim.test_model = self.experiment_mapper_statistics[self.S[0].sim.test_model]
+
+        if self.S[0].sim.multiprocess_check:
+            tqdm_check = False
             with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-                # with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-                with concurrent.futures.ProcessPoolExecutor() as executor:
-                    for _ in executor.map(self.experiment_function_mapper_statistics[self.S.sim.test_model], itertools.repeat(print_check), itertools.repeat(False), idx_range):
+                with concurrent.futures.ProcessPoolExecutor(max_workers=self.process_pool_max_workers) as executor:
+                    for _ in executor.map(self.simulate_experiment, idx_range, itertools.repeat(print_check),
+                                          itertools.repeat(tqdm_check)):
                         pbar.update()
         else:
             for test_no in tqdm(idx_range, desc='Simulations', ncols=100, position=0, leave=True):
-                self.experiment_function_mapper_statistics[self.S.sim.test_model](statistics_model=test_no, print_check=print_check, tqdm_check=True)
+                self.simulate_experiment(statistics_model=test_no, print_check=print_check, tqdm_check=True)
+
+    def simulate_experiment_fixed_vs_self_tuning(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        if statistics_model > 0:
+            self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+
+        self.S[statistics_model].optimize_initial_architecture(print_check=print_check)
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        self.S_1[statistics_model].sim.sim_model = "fixed"
+        self.S_1[statistics_model].plot_name = 'fixed arch'
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].sim.sim_model = "self_tuning"
+        self.S_2[statistics_model].plot_name = 'self_tuning arch'
+
+    def simulate_experiment_fixed_vs_self_tuning_pointdistribution_openloop(self, statistics_model: int = 0, print_check: bool = False) -> None:
+
+        # if statistics_model is not 0:
+        #     self.system_model_from_memory_gen_model(self.S[0].model_name)
+        # self.S[0].sim.self_tuning_parameter = None if self.S[0].sim.test_parameter == 0 else self.S[0].sim.test_parameter
+
+        self.S[statistics_model] = dc(self.S[0])
+        self.S[statistics_model].initialize_trajectory(statistics_model - 1)
+
+        self.S[statistics_model].optimize_initial_architecture(print_check=print_check)
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        self.S_1[statistics_model].sim.sim_model = "fixed"
+        self.S_1[statistics_model].plot_name = 'fixed arch'
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].sim.sim_model = "self_tuning"
+        self.S_2[statistics_model].sim.self_tuning_parameter = None if self.S[statistics_model].sim.test_parameter == 0 else self.S[statistics_model].sim.test_parameter
+        self.S_2[statistics_model].plot_name = 'self_tuning arch'
+
+    def simulate_experiment_self_tuning_number_of_changes(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        if statistics_model > 0:
+            self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+
+        self.S[statistics_model].sim.sim_model = "self_tuning"
+        self.S[statistics_model].optimize_initial_architecture(print_check=print_check)
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        # self.S_1[statistics_model].sim.self_tuning_parameter = 1 : Default parameter
+        self.S_1[statistics_model].plot_name = 'self_tuning 1change'
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].sim.self_tuning_parameter = None if self.S[statistics_model].sim.test_parameter == 0 else self.S[statistics_model].sim.test_parameter
+        self.S_2[statistics_model].plot_name = 'self_tuning bestchange'
+
+    def simulate_experiment_self_tuning_prediction_horizon(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        if statistics_model > 0:
+            self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+
+        self.S[statistics_model].sim.sim_model = "self_tuning"
+        self.S[statistics_model].optimize_initial_architecture(print_check=print_check)
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        self.S_1[statistics_model].plot_name = 'self_tuning Tp' + str(self.S_1[statistics_model].sim.t_predict)
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].sim.t_predict *= 2 if self.S[statistics_model].sim.test_parameter is None else self.S[statistics_model].sim.test_parameter
+        self.S_2[statistics_model].plot_name = 'self_tuning Tp' + str(self.S_2[statistics_model].sim.t_predict)
+
+    def simulate_experiment_self_tuning_architecture_cost(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        if statistics_model > 0:
+            self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+
+        self.S[statistics_model].sim.sim_model = "self_tuning"
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        self.S_1[statistics_model].optimize_initial_architecture(print_check=print_check)
+        self.S_1[statistics_model].plot_name = 'self_tuning base arch cost'
+
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].scalecost_by_test_parameter()
+        self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
+
+    def simulate_experiment_self_tuning_architecture_cost_no_lim(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        if statistics_model > 0:
+            self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+
+        self.S[statistics_model].sim.sim_model = "self_tuning"
+        self.S[statistics_model].sim.self_tuning_parameter = None
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        self.S_1[statistics_model].optimize_initial_architecture(print_check=print_check)
+        self.S_1[statistics_model].plot_name = 'self_tuning base arch cost'
+
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].scalecost_by_test_parameter()
+        self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
 
     def plot_experiment(self, exp_no=None) -> None:
         self.initialize_system_from_experiment_number(exp_no=exp_no)
 
         print('\nPlotting Experiment No: {}'.format(self.exp_no))
 
-        if self.S.sim.test_model in ['fixed_vs_selftuning', 'selftuning_number_of_changes', 'selftuning_prediction_horizon', 'selftuning_architecture_cost', 'selftuning_architecture_cost_no_lim']:
+        if self.S[0].sim.test_model in ['fixed_vs_self_tuning', 'self_tuning_number_of_changes', 'self_tuning_prediction_horizon', 'self_tuning_architecture_cost', 'self_tuning_architecture_cost_no_lim']:
             self.plot_comparison_exp_no()
-        elif self.S.sim.test_model in ['statistics_fixed_vs_selftuning', 'statistics_selftuning_number_of_changes', 'statistics_selftuning_prediction_horizon', 'statistics_selftuning_architecture_cost', 'statistics_pointdistribution_openloop', 'statistics_selftuning_architecture_cost_no_lim']:
+        elif self.S[0].sim.test_model in ['statistics_fixed_vs_self_tuning', 'statistics_self_tuning_number_of_changes', 'statistics_self_tuning_prediction_horizon', 'statistics_self_tuning_architecture_cost', 'statistics_pointdistribution_openloop', 'statistics_self_tuning_architecture_cost_no_lim']:
             self.plot_statistics_exp_no()
         else:
             raise Exception('Experiment not defined')
@@ -477,11 +466,11 @@ class Experiment:
     def plot_comparison_exp_no(self) -> None:
         self.retrieve_experiment()
 
-        if self.S_1.plot is None:
-            self.S_1.plot = PlotParameters()
+        if self.S_1[0].plot is None:
+            self.S_1[0].plot = PlotParameters()
 
-        if self.S_2.plot is None:
-            self.S_2.plot = PlotParameters()
+        if self.S_2[0].plot is None:
+            self.S_2[0].plot = PlotParameters()
 
         fig = plt.figure(figsize=(6, 8), tight_layout=True)
         outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 7], width_ratios=[1, 1])
@@ -499,70 +488,69 @@ class Experiment:
         ax_C_count = fig.add_subplot(time_grid[5, 0], sharex=ax_cost)
         ax_compute_time = fig.add_subplot(time_grid[6, 0], sharex=ax_cost)
 
-        self.S_1.plot_openloop_eigvals(ax_in=ax_eval)
+        self.S_1[0].plot_openloop_eigvals(ax_in=ax_eval)
 
-        self.S_1.plot_cost(ax_in=ax_cost)
-        self.S_2.plot_cost(ax_in=ax_cost, set_details_flag=True)
+        self.S_1[0].plot_cost(ax_in=ax_cost)
+        self.S_2[0].plot_cost(ax_in=ax_cost, set_details_flag=True)
         ax_cost.tick_params(axis="x", labelbottom=False)
+        # ax_cost.yaxis.set_major_locator(MaxNLocator(2))
 
-        ax_exp_legend.legend(handles=[mpatches.Patch(color=self.S_1.plot.plot_parameters[self.S_1.plot.plot_system]['c'], label=self.S_1.plot_name),
-                                      mpatches.Patch(color=self.S_2.plot.plot_parameters[self.S_2.plot.plot_system]['c'], label=self.S_2.plot_name)],
+        ax_exp_legend.legend(handles=[mpatches.Patch(color=self.S_1[0].plot.plot_parameters[self.S_1[0].plot.plot_system]['c'], label=self.S_1[0].plot_name),
+                                      mpatches.Patch(color=self.S_2[0].plot.plot_parameters[self.S_2[0].plot.plot_system]['c'], label=self.S_2[0].plot_name)],
                              loc='center', ncol=1, title='Experiment No:' + str(self.exp_no))
         ax_exp_legend.axis('off')
 
-        self.S_1.plot_states(ax_in=ax_state)
-        self.S_2.plot_states(ax_in=ax_state, set_details_flag=True)
+        self.S_1[0].plot_states(ax_in=ax_state)
+        self.S_2[0].plot_states(ax_in=ax_state, set_details_flag=True)
         ax_state.tick_params(axis="x", labelbottom=False)
 
-        self.S_1.plot_architecture_history(arch='B', ax_in=ax_B_scatter)
-        self.S_2.plot_architecture_history(arch='B', ax_in=ax_B_scatter)
+        self.S_1[0].plot_architecture_history(arch='B', ax_in=ax_B_scatter)
+        self.S_2[0].plot_architecture_history(arch='B', ax_in=ax_B_scatter)
         ax_B_scatter.set_ylabel('Actuator\nPosition\n' + r'$S_t$')
         ax_B_scatter.tick_params(axis="x", labelbottom=False)
 
-        self.S_1.plot_architecture_history(arch='C', ax_in=ax_C_scatter)
-        self.S_2.plot_architecture_history(arch='C', ax_in=ax_C_scatter)
+        self.S_1[0].plot_architecture_history(arch='C', ax_in=ax_C_scatter)
+        self.S_2[0].plot_architecture_history(arch='C', ax_in=ax_C_scatter)
         ax_C_scatter.set_ylabel('Sensor\nPosition\n' + r'$S_t$' + '\'')
         ax_C_scatter.tick_params(axis="x", labelbottom=False)
 
-        for lim_val in [self.S.B.min, self.S.B.max]:
+        for lim_val in [self.S[0].B.min, self.S[0].B.max]:
             ax_B_count.axhline(y=lim_val, color='tab:gray', ls='dashdot', alpha=0.5)
             ax_C_count.axhline(y=lim_val, color='tab:gray', ls='dashdot', alpha=0.5)
 
-        self.S_1.plot_architecture_count(ax_in=ax_B_count, arch='B')
-        self.S_2.plot_architecture_count(ax_in=ax_B_count, arch='B')
+        self.S_1[0].plot_architecture_count(ax_in=ax_B_count, arch='B')
+        self.S_2[0].plot_architecture_count(ax_in=ax_B_count, arch='B')
         ax_B_count.set_ylabel('Actuator\nCount\n' + r'$|S_t|$')
         ax_B_count.tick_params(axis="x", labelbottom=False)
 
-        self.S_1.plot_architecture_count(ax_in=ax_C_count, arch='C')
-        self.S_2.plot_architecture_count(ax_in=ax_C_count, arch='C')
+        self.S_1[0].plot_architecture_count(ax_in=ax_C_count, arch='C')
+        self.S_2[0].plot_architecture_count(ax_in=ax_C_count, arch='C')
         ax_C_count.set_ylabel('Sensor\nCount\n' + r'$|S$' + '\'' + '$_t|$')
         ax_C_count.tick_params(axis="x", labelbottom=False)
 
-        self.S_1.plot_compute_time(ax_in=ax_compute_time)
-        self.S_2.plot_compute_time(ax_in=ax_compute_time)
+        self.S_1[0].plot_compute_time(ax_in=ax_compute_time)
+        self.S_2[0].plot_compute_time(ax_in=ax_compute_time)
         ax_compute_time.set_yscale('log')
         y_lims = list(ax_compute_time.get_ylim())
         y_lims[0] = 10 ** np.floor(np.log10(y_lims[0]))
         y_lims[1] = 10 ** np.ceil(np.log10(y_lims[1]))
         ax_compute_time.set_ylim(y_lims[0], y_lims[1])
-        ax_compute_time.set_yticks(y_lims)
-
+        # ax_compute_time.yaxis.set_major_locator(MaxNLocator(2))
 
         ax_compute_time.set_ylabel('Compute\nTime (s)')
         ax_compute_time.set_xlabel(r'Time $t$')
-
-        ax_compute_time.set_xlim(0, self.S.sim.t_simulate)
+        ax_compute_time.set_xlim(0, self.S[0].sim.t_simulate)
 
         plt.show()
 
         save_path = self.image_save_folder_path + 'exp' + str(self.exp_no) + '.pdf'
         fig.savefig(save_path, dpi=fig.dpi)
-        print('Image saved: {}'.format(save_path))
+        print('\nImage saved: {}\n'.format(save_path))
 
     def plot_statistics_exp_no(self) -> None:
 
         self.initialize_system_from_experiment_number()
-        sim_range = self.S.number_of_states if self.S.sim.test_model == 'statistics_pointdistribution_openloop' else 100
+        sim_range = range(1, self.S[0].number_of_states + 1) if self.S[0].sim.test_model == 'statistics_pointdistribution_openloop' else range(1, 100 + 1)
 
         fig = plt.figure(tight_layout=True)
         grid_outer = gs.GridSpec(3, 2, figure=fig, width_ratios=[1, 1], height_ratios=[1.5, 2, 1])
@@ -582,11 +570,11 @@ class Experiment:
         lstyle = ['dashdot', 'dashed']
         mstyle = ['o', '+', 'x']
 
-        cost_min_1, cost_min_2 = np.inf * np.ones(self.S.sim.t_simulate), np.inf * np.ones(self.S.sim.t_simulate)
-        cost_max_1, cost_max_2 = np.zeros(self.S.sim.t_simulate), np.zeros(self.S.sim.t_simulate)
-        sample_cost_1, sample_cost_2 = np.zeros(self.S.sim.t_simulate), np.zeros(self.S.sim.t_simulate)
+        cost_min_1, cost_min_2 = np.inf * np.ones(self.S[0].sim.t_simulate), np.inf * np.ones(self.S[0].sim.t_simulate)
+        cost_max_1, cost_max_2 = np.zeros(self.S[0].sim.t_simulate), np.zeros(self.S[0].sim.t_simulate)
+        sample_cost_1, sample_cost_2 = np.zeros(self.S[0].sim.t_simulate), np.zeros(self.S[0].sim.t_simulate)
         compute_time_1, compute_time_2 = [], []
-        sample_eig = np.zeros(self.S.number_of_states)
+        sample_eig = np.zeros(self.S[0].number_of_states)
         arch_change_1 = {'B': [], 'C': []}
         arch_change_2 = {'B': [], 'C': []}
         arch_count_1 = {'B': [], 'C': []}
@@ -594,54 +582,65 @@ class Experiment:
 
         m1_name, m2_name = '', ''
 
-        sample_ID = np.random.choice(range(1, sim_range + 1))
+        sample_ID = np.random.choice(sim_range)
 
-        for model_no in tqdm(range(1, sim_range + 1), ncols=100, desc='Model ID'):
+        for model_no in tqdm(sim_range, ncols=100, desc='Model ID'):
             self.data_from_memory_statistics(model_no)
 
-            cost_min_1, cost_max_1, compute_time_1, arch_change_1, arch_count_1 = statistics_data_parser(self.S_1, cost_min_1, cost_max_1, compute_time_1, arch_change_1, arch_count_1)
-            cost_min_2, cost_max_2, compute_time_2, arch_change_2, arch_count_2 = statistics_data_parser(self.S_2, cost_min_2, cost_max_2, compute_time_2, arch_change_2, arch_count_2)
+            cost_min_1, cost_max_1, compute_time_1, arch_change_1, arch_count_1 = statistics_data_parser(self.S_1[model_no], cost_min_1, cost_max_1, compute_time_1, arch_change_1, arch_count_1)
+            cost_min_2, cost_max_2, compute_time_2, arch_change_2, arch_count_2 = statistics_data_parser(self.S_2[model_no], cost_min_2, cost_max_2, compute_time_2, arch_change_2, arch_count_2)
 
-            ax_eigmodes.scatter(range(1, self.S.number_of_states + 1), np.sort(np.abs(self.S.A.open_loop_eig_vals)), marker=mstyle[0], s=10, color=cstyle[0], alpha=float(1 / self.S.number_of_states))
+            ax_eigmodes.scatter(range(1, self.S[model_no].number_of_states + 1), np.sort(np.abs(self.S[model_no].A.open_loop_eig_vals)),
+                                marker=mstyle[0], s=10, color=cstyle[0], alpha=float(1 / self.S[0].number_of_states))
 
             if sample_ID == model_no:
-                sample_cost_1 = list(itertools.accumulate(self.S_1.list_from_dict_key_time(self.S_1.trajectory.cost.true)))
-                sample_cost_2 = list(itertools.accumulate(self.S_2.list_from_dict_key_time(self.S_2.trajectory.cost.true)))
-                sample_eig = np.sort(np.abs(self.S.A.open_loop_eig_vals))
-                m1_name = self.S_1.plot_name
-                m2_name = self.S_2.plot_name
+                sample_cost_1 = list(
+                    itertools.accumulate(self.S_1[model_no].list_from_dict_key_time(self.S_1[model_no].trajectory.cost.true)))
+                sample_cost_2 = list(
+                    itertools.accumulate(self.S_2[model_no].list_from_dict_key_time(self.S_2[model_no].trajectory.cost.true)))
+                sample_eig = np.sort(np.abs(self.S[model_no].A.open_loop_eig_vals))
+                m1_name = self.S_1[model_no].plot_name
+                m2_name = self.S_2[model_no].plot_name
+
+            self.dict_memory_clear(model_id=model_no)
 
         ax_exp_legend.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
                                       mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name)],
                              title='Experiment No:' + str(self.exp_no), loc='center')
         ax_exp_legend.axis('off')
 
-        ax_cost.fill_between(range(0, self.S.sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4, linewidth=0)
-        ax_cost.fill_between(range(0, self.S.sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4, linewidth=0)
-        ax_cost.plot(range(0, self.S.sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
-        ax_cost.plot(range(0, self.S.sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
+        ax_cost.fill_between(range(0, self.S[0].sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
+        ax_cost.fill_between(range(0, self.S[0].sim.t_simulate), cost_min_2, cost_max_2, color=cstyle[1], alpha=0.4)
+        ax_cost.plot(range(0, self.S[0].sim.t_simulate), sample_cost_1, color=cstyle[2], ls=lstyle[0], linewidth=1)
+        ax_cost.plot(range(0, self.S[0].sim.t_simulate), sample_cost_2, color=cstyle[2], ls=lstyle[1], linewidth=1)
         ax_cost.legend(handles=[mlines.Line2D([], [], color=cstyle[2], ls=lstyle[0], label='Sample ' + r'$M_1$'),
                                 mlines.Line2D([], [], color=cstyle[2], ls=lstyle[1], label='Sample ' + r'$M_2$')],
                        loc='upper left', ncols=2)
         ax_cost.set_yscale('log')
         ax_cost.set_xlabel(r'Time $t$')
         ax_cost.set_ylabel(r'Cost $J_t$')
-        ax_cost.set_xlim(0, self.S.sim.t_simulate)
+        ax_cost.set_xlim(0, self.S[0].sim.t_simulate)
 
-        ax_eigmodes.scatter(range(1, self.S.number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], s=10)
-        ax_eigmodes.hlines(1, xmin=1, xmax=self.S.number_of_states, colors=cstyle[2], ls=lstyle[1])
+        ax_eigmodes.scatter(range(1, self.S[0].number_of_states + 1), sample_eig, marker=mstyle[2], color=cstyle[2], s=10)
+        ax_eigmodes.hlines(1, xmin=1, xmax=self.S[0].number_of_states, colors=cstyle[2], ls=lstyle[1])
         # ax_eigmodes.set_xlabel('Mode ' + r'$i$')
         ax_eigmodes.set_ylabel(r'$|\lambda_i(A)|$')
         ax_eigmodes.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
-        ax_eigmodes.legend(handles=[mlines.Line2D([], [], color=cstyle[2], marker=mstyle[2], linewidth=0, label='Sample'),
-                                    mlines.Line2D([], [], color=cstyle[0], marker=mstyle[0], linewidth=0, label='Modes')],
-                           loc='upper left')
+        ax_eigmodes.legend(
+            handles=[mlines.Line2D([], [], color=cstyle[2], marker=mstyle[2], linewidth=0, label='Sample'),
+                     mlines.Line2D([], [], color=cstyle[0], marker=mstyle[0], linewidth=0, label='Modes')],
+            loc='upper left')
 
-        a1 = ax_architecture_B_change.boxplot([arch_change_2['B'], arch_change_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
-        a2 = ax_architecture_C_change.boxplot([arch_change_2['C'], arch_change_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
-        a3 = ax_architecture_B_count.boxplot([arch_count_2['B'], arch_count_1['B']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
-        a4 = ax_architecture_C_count.boxplot([arch_count_2['C'], arch_count_1['C']], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
-        a5 = ax_architecture_compute_time.boxplot([compute_time_2, compute_time_1], labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+        a1 = ax_architecture_B_change.boxplot([arch_change_2['B'], arch_change_1['B']],
+                                              labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+        a2 = ax_architecture_C_change.boxplot([arch_change_2['C'], arch_change_1['C']],
+                                              labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+        a3 = ax_architecture_B_count.boxplot([arch_count_2['B'], arch_count_1['B']],
+                                             labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+        a4 = ax_architecture_C_count.boxplot([arch_count_2['C'], arch_count_1['C']],
+                                             labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
+        a5 = ax_architecture_compute_time.boxplot([compute_time_2, compute_time_1],
+                                                  labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
 
         for bplot in (a1, a2, a3, a4, a5):
             for patch, color in zip(bplot['medians'], [cstyle[1], cstyle[0]]):
@@ -656,8 +655,8 @@ class Experiment:
 
         ax_architecture_compute_time.set_xscale('log')
         x_lims = list(ax_architecture_compute_time.get_xlim())
-        x_lims[0] = 10**np.floor(np.log10(x_lims[0]))
-        x_lims[1] = 10**np.ceil(np.log10(x_lims[1]))
+        x_lims[0] = 10 ** np.floor(np.log10(x_lims[0]))
+        x_lims[1] = 10 ** np.ceil(np.log10(x_lims[1]))
         ax_architecture_compute_time.set_xlim(x_lims[0], x_lims[1])
         ax_architecture_compute_time.set_xticks(x_lims)
 
@@ -671,7 +670,7 @@ class Experiment:
 
         save_path = self.image_save_folder_path + 'exp' + str(self.exp_no) + '.pdf'
         fig.savefig(save_path, dpi=fig.dpi)
-        print('Image saved: {}'.format(save_path))
+        print('\nImage saved: {}\n'.format(save_path))
 
 
 def coin_toss() -> bool:
@@ -680,13 +679,15 @@ def coin_toss() -> bool:
 
 
 def compare_lists(list1: list, list2: list) -> dict:
-    return {'only1': [k for k in list1 if k not in list2], 'only2': [k for k in list2 if k not in list1], 'both': [k for k in list1 if k in list2]}
+    return {'only1': [k for k in list1 if k not in list2], 'only2': [k for k in list2 if k not in list1],
+            'both': [k for k in list1 if k in list2]}
 
 
 def architecture_iterator(arch=None) -> list:
     if type(arch) == list and len(arch) == 1:
         arch = arch[0]
-    arch = [arch] if arch in ['B', 'C'] else ['B', 'C'] if (arch is None or arch == ['B', 'C']) else [] if arch == 'skip' else 'Error'
+    arch = [arch] if arch in ['B', 'C'] else ['B', 'C'] if (
+                arch is None or arch == ['B', 'C']) else [] if arch == 'skip' else 'Error'
     if arch == 'Error':
         raise ArchitectureError
     return arch
@@ -707,8 +708,10 @@ class PlotParameters:
         self.network_state_graph, self.network_state_locations = netx.Graph(), {}
         self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
         self.plot_parameters = \
-            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:blue', 'ms': 20, 'ls': 'solid'},
-             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:orange', 'ms': 20, 'ls': 'dashed'}}
+            {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:blue', 'ms': 20,
+                 'ls': 'solid'},
+             2: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'o', 'c': 'tab:orange', 'ms': 20,
+                 'ls': 'dashed'}}
         self.network_plot_limits = []
         self.B_history = [[], []]
         self.C_history = [[], []]
@@ -758,8 +761,10 @@ class System:
             self.Q = np.zeros((0, 0))  # Cost on states/Process noise covariance
             self.R1 = np.zeros((0, 0))  # Cost on active actuators/Measurement noise covariance
             self.R1_reference = np.zeros((0, 0))  # Cost on available actuators
-            self.indicator_vector_current = np.zeros(self.number_of_available)  # {1, 0} binary vector of currently active architecture - to compute running/switching costs
-            self.indicator_vector_history = np.zeros(self.number_of_available)  # {1, 0} binary vector of previously active architecture - to compute switching costs
+            self.indicator_vector_current = np.zeros(
+                self.number_of_available)  # {1, 0} binary vector of currently active architecture - to compute running/switching costs
+            self.indicator_vector_history = np.zeros(
+                self.number_of_available)  # {1, 0} binary vector of previously active architecture - to compute switching costs
             self.history_active_set = {}  # Record of active architecture over simulation horizon
             self.change_count = 0  # Count of number of changes in architecture over simulation horizon
             self.active_count = []  # Count size of active architecture at each timestep of the simulation horizon
@@ -797,6 +802,7 @@ class System:
             self.experiment_number = 0  # Experiment number based on parameter sheet
             self.t_predict = int(10)  # Prediction time horizon
             self.sim_model = None  # Simulation model of architecture
+            self.self_tuning_parameter = 1  # Number of self tuning changes per step
             self.test_model = None  # Test case
             self.test_parameter = None  # Test case
             self.multiprocess_check = False  # Boolean to determine if multiprocess mapping is used or not for choices
@@ -864,6 +870,11 @@ class System:
         self.model_name = ''
         self.plot_name = None
 
+    def copy_from_system(self, ref_sys):
+        if not isinstance(ref_sys, System):
+            raise Exception('Check system')
+        self.__dict__.update(ref_sys.__dict__)
+
     def initialize_system_from_experiment_parameters(self, experiment_parameters, experiment_keys) -> None:
 
         parameters = dict(zip(experiment_keys, experiment_parameters))
@@ -892,7 +903,8 @@ class System:
         self.sim.test_model = None if parameters['test_model'] == 'None' else parameters['test_model']
         self.sim.test_parameter = None if parameters['test_parameter'] == 0 else int(parameters['test_parameter'])
 
-        parameters['disturbance_model'] = None if parameters['disturbance_model'] == 'None' else parameters['disturbance_model']
+        parameters['disturbance_model'] = None if parameters['disturbance_model'] == 'None' else parameters[
+            'disturbance_model']
 
         self.disturbance.W_scaling = parameters['W_scaling']
         self.disturbance.V_scaling = parameters['V_scaling']
@@ -908,7 +920,8 @@ class System:
         self.B.R3 = parameters['B_switch_cost']
         self.C.R3 = parameters['C_switch_cost']
 
-        self.architecture_limit_set(min_set=parameters['architecture_constraint_min'], max_set=parameters['architecture_constraint_max'])
+        self.architecture_limit_set(min_set=parameters['architecture_constraint_min'],
+                                    max_set=parameters['architecture_constraint_max'])
 
         self.initialize_available_vectors_as_basis_vectors()
 
@@ -1044,7 +1057,8 @@ class System:
 
     def rescale(self) -> None:
         if self.A.rho is not None:
-            self.A.A_mat = self.A.rho * self.A.adjacency_matrix / np.max(np.abs(np.linalg.eigvals(self.A.adjacency_matrix)))
+            self.A.A_mat = self.A.rho * self.A.adjacency_matrix / np.max(
+                np.abs(np.linalg.eigvals(self.A.adjacency_matrix)))
         else:
             self.A.A_mat = self.A.adjacency_matrix
 
@@ -1053,10 +1067,12 @@ class System:
             if self.A.second_order_network_type == 1:
 
                 self.A.A_mat = np.block([[self.A.A_mat, np.zeros_like(self.A.A_mat)],
-                                         [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * np.identity(self.number_of_nodes)]])
+                                         [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes),
+                                          self.A.second_order_scaling_factor * np.identity(self.number_of_nodes)]])
             elif self.A.second_order_network_type == 2:
                 self.A.A_mat = np.block([[np.identity(self.number_of_nodes), np.zeros_like(self.A.A_mat)],
-                                         [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes), self.A.second_order_scaling_factor * self.A.A_mat]])
+                                         [self.A.second_order_scaling_factor * np.identity(self.number_of_nodes),
+                                          self.A.second_order_scaling_factor * self.A.A_mat]])
             else:
                 raise SecondOrderError()
 
@@ -1107,35 +1123,47 @@ class System:
     def initialize_random_architecture_active_set(self, initialize_random: int, arch=None) -> None:
         for a in architecture_iterator(arch):
             if a == 'B':
-                self.B.active_set = list(np.sort(np.random.default_rng().choice(self.B.available_indices, size=initialize_random, replace=False)))
+                self.B.active_set = list(np.sort(
+                    np.random.default_rng().choice(self.B.available_indices, size=initialize_random, replace=False)))
             else:  # a == 'C'
-                self.C.active_set = list(np.sort(np.random.default_rng().choice(self.C.available_indices, size=initialize_random, replace=False)))
+                self.C.active_set = list(np.sort(
+                    np.random.default_rng().choice(self.C.available_indices, size=initialize_random, replace=False)))
 
     def initialize_disturbance(self) -> None:
         self.disturbance.W = np.identity(self.number_of_states) * self.disturbance.W_scaling
         self.disturbance.V = np.identity(self.number_of_states) * self.disturbance.V_scaling
 
-        self.disturbance.w_gen = {t: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.disturbance.W) for t in range(0, self.sim.t_simulate)}
-        self.disturbance.v_gen = {t: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.disturbance.V) for t in range(0, self.sim.t_simulate)}
+        self.disturbance.w_gen = {
+            t: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.disturbance.W) for t in
+            range(0, self.sim.t_simulate)}
+        self.disturbance.v_gen = {
+            t: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.disturbance.V) for t in
+            range(0, self.sim.t_simulate)}
 
         if self.disturbance.noise_model in ['process', 'measurement', 'combined']:
             if self.disturbance.disturbance_number == 0 or self.disturbance.disturbance_magnitude == 0 or self.disturbance.disturbance_step == 0:
                 raise Exception('Check disturbance parameters')
             for t in range(0, self.sim.t_simulate, self.disturbance.disturbance_step):
                 if self.disturbance.noise_model in ['process', 'combined']:
-                    self.disturbance.w_gen[t][np.random.default_rng().choice(self.number_of_states, self.disturbance.disturbance_number, replace=False)] = self.disturbance.disturbance_magnitude * np.array([coin_toss() for _ in range(0, self.disturbance.disturbance_number)])
+                    self.disturbance.w_gen[t][
+                        np.random.default_rng().choice(self.number_of_states, self.disturbance.disturbance_number,
+                                                       replace=False)] = self.disturbance.disturbance_magnitude * np.array(
+                        [coin_toss() for _ in range(0, self.disturbance.disturbance_number)])
                 if self.disturbance.noise_model in ['measurement', 'combined']:
-                    self.disturbance.v_gen[t] = self.disturbance.disturbance_magnitude * np.array([coin_toss() for _ in range(0, self.number_of_states)])
+                    self.disturbance.v_gen[t] = self.disturbance.disturbance_magnitude * np.array(
+                        [coin_toss() for _ in range(0, self.number_of_states)])
 
     def initialize_trajectory(self, x0_idx=None) -> None:
         self.trajectory.X0_covariance = np.identity(self.number_of_states) * self.trajectory.X0_scaling
 
         if x0_idx is None:
-            self.trajectory.x = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)}
+            self.trajectory.x = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states),
+                                                                                self.trajectory.X0_covariance)}
         else:
             self.trajectory.x = {0: self.A.open_loop_eig_vecs[:, x0_idx] * self.trajectory.X0_scaling}
 
-        self.trajectory.x_estimate = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states), self.trajectory.X0_covariance)}
+        self.trajectory.x_estimate = {0: np.random.default_rng().multivariate_normal(np.zeros(self.number_of_states),
+                                                                                     self.trajectory.X0_covariance)}
 
         self.trajectory.X_augmented = {0: np.concatenate((self.trajectory.x[0], self.trajectory.x_estimate[0]))}
 
@@ -1188,7 +1216,7 @@ class System:
                 self.B.indicator_vector_current = np.zeros(self.B.number_of_available, dtype=int)
                 self.B.indicator_vector_current[self.B.history_active_set[self.sim.t_current]] = 1
                 if self.sim.t_current >= 1:
-                    self.B.indicator_vector_history[self.B.history_active_set[self.sim.t_current-1]] = 1
+                    self.B.indicator_vector_history[self.B.history_active_set[self.sim.t_current - 1]] = 1
                 else:
                     self.B.indicator_vector_history = dc(self.B.indicator_vector_current)
 
@@ -1227,7 +1255,8 @@ class System:
     def architecture_compare_active_set_to_system(self, reference_system) -> bool:
         if not isinstance(reference_system, System):
             raise ClassError
-        return set(self.B.active_set) == set(reference_system.B.active_set) and set(self.C.active_set) == set(reference_system.C.active_set)
+        return set(self.B.active_set) == set(reference_system.B.active_set) and set(self.C.active_set) == set(
+            reference_system.C.active_set)
 
     def architecture_limit_check(self) -> bool:
         if self.B.min <= len(self.B.active_set) <= self.B.max and self.C.min <= len(self.C.active_set) <= self.C.max:
@@ -1240,15 +1269,16 @@ class System:
             raise ClassError
         B_compare = compare_lists(self.B.active_set, reference_system.B.active_set)
         C_compare = compare_lists(self.C.active_set, reference_system.C.active_set)
-        number_of_changes = max(len(B_compare['only1']), len(B_compare['only2'])) + max(len(C_compare['only1']), len(C_compare['only2']))
+        number_of_changes = max(len(B_compare['only1']), len(B_compare['only2'])) + max(len(C_compare['only1']),
+                                                                                        len(C_compare['only2']))
         return number_of_changes
 
     def architecture_count_number_of_sim_changes(self) -> None:
         self.B.change_count, self.C.change_count = 0, 0
-        if self.sim.sim_model == "selftuning":
+        if self.sim.sim_model == "self_tuning":
             for t in range(1, self.sim.t_simulate):
-                compare_B = compare_lists(self.B.history_active_set[t-1], self.B.history_active_set[t])
-                compare_C = compare_lists(self.C.history_active_set[t-1], self.C.history_active_set[t])
+                compare_B = compare_lists(self.B.history_active_set[t - 1], self.B.history_active_set[t])
+                compare_C = compare_lists(self.C.history_active_set[t - 1], self.C.history_active_set[t])
                 self.B.change_count += max(len(compare_B['only2']), len(compare_B['only1']))
                 self.C.change_count += max(len(compare_C['only2']), len(compare_C['only1']))
 
@@ -1260,8 +1290,12 @@ class System:
         if self.trajectory.cost.metric_running == 0 or (self.B.R2 == 0 and self.C.R2 == 0):
             self.trajectory.cost.running = 0
         elif self.trajectory.cost.metric_running == 1 or (type(self.B.R2) == int and type(self.C.R2) == int):
-            self.trajectory.cost.running = np.linalg.norm(self.B.indicator_vector_current, ord=0) * self.B.R2 + np.linalg.norm(self.C.indicator_vector_current, ord=0) * self.C.R2
-        elif self.trajectory.cost.metric_running == 2 or (np.shape(self.B.R2) == (len(self.B.active_set), len(self.B.active_set)) and np.shape(self.C.R2) == (len(self.C.active_set), len(self.C.active_set))):
+            self.trajectory.cost.running = np.linalg.norm(self.B.indicator_vector_current,
+                                                          ord=0) * self.B.R2 + np.linalg.norm(
+                self.C.indicator_vector_current, ord=0) * self.C.R2
+        elif self.trajectory.cost.metric_running == 2 or (
+                np.shape(self.B.R2) == (len(self.B.active_set), len(self.B.active_set)) and np.shape(self.C.R2) == (
+        len(self.C.active_set), len(self.C.active_set))):
             self.trajectory.cost.running = self.B.indicator_vector_current.T @ self.B.R2 @ self.B.indicator_vector_current + self.C.indicator_vector_current.T @ self.C.R2 @ self.C.indicator_vector_current
         else:
             print(self.B.R2)
@@ -1271,8 +1305,11 @@ class System:
         if self.trajectory.cost.metric_switching == 0 or (self.B.R3 == 0 and self.C.R3 == 0):
             self.trajectory.cost.switching = 0
         elif self.trajectory.cost.metric_switching == 1 or (type(self.B.R3) == int and type(self.C.R3) == int):
-            self.trajectory.cost.switching = np.linalg.norm(self.B.indicator_vector_current - self.B.indicator_vector_history, ord=0) * self.B.R3 + np.linalg.norm(self.C.indicator_vector_current - self.C.indicator_vector_history, ord=0) * self.C.R3
-        elif self.trajectory.cost.metric_switching == 2 or (np.shape(self.B.R3) == (len(self.B.active_set), len(self.B.active_set)) and np.shape(self.C.R3) == (len(self.C.active_set), len(self.C.active_set))):
+            self.trajectory.cost.switching = np.linalg.norm(
+                self.B.indicator_vector_current - self.B.indicator_vector_history, ord=0) * self.B.R3 + np.linalg.norm(
+                self.C.indicator_vector_current - self.C.indicator_vector_history, ord=0) * self.C.R3
+        elif self.trajectory.cost.metric_switching == 2 or (
+                np.shape(self.B.R3) == (len(self.B.active_set), len(self.B.active_set)) and np.shape(self.C.R3) == (len(self.C.active_set), len(self.C.active_set))):
             self.trajectory.cost.switching = (self.B.indicator_vector_current - self.B.indicator_vector_history).T @ self.B.R2 @ (self.B.indicator_vector_current - self.B.indicator_vector_history) + (self.C.indicator_vector_current - self.C.indicator_vector_history).T @ self.C.R2 @ (self.C.indicator_vector_current - self.C.indicator_vector_history)
         else:
             raise Exception('Check switching cost metric')
@@ -1287,14 +1324,21 @@ class System:
     def prediction_control_gain(self) -> None:
         self.B.recursion_matrix = {self.sim.t_predict: self.B.Q}
         for t in range(self.sim.t_predict - 1, -1, -1):
-            self.B.gain[t] = np.linalg.inv((self.B.active_matrix.T @ self.B.recursion_matrix[t + 1] @ self.B.active_matrix) + self.B.R1) @ self.B.active_matrix.T @ self.B.recursion_matrix[t + 1] @ self.A.A_mat
-            self.B.recursion_matrix[t] = (self.A.A_mat.T @ self.B.recursion_matrix[t + 1] @ self.A.A_mat) - (self.A.A_mat.T @ self.B.recursion_matrix[t + 1] @ self.B.active_matrix @ self.B.gain[t]) + self.B.Q
+            self.B.gain[t] = np.linalg.inv((self.B.active_matrix.T @ self.B.recursion_matrix[
+                t + 1] @ self.B.active_matrix) + self.B.R1) @ self.B.active_matrix.T @ self.B.recursion_matrix[
+                                 t + 1] @ self.A.A_mat
+            self.B.recursion_matrix[t] = (self.A.A_mat.T @ self.B.recursion_matrix[t + 1] @ self.A.A_mat) - (
+                        self.A.A_mat.T @ self.B.recursion_matrix[t + 1] @ self.B.active_matrix @ self.B.gain[
+                    t]) + self.B.Q
 
     def prediction_estimation_gain(self) -> None:
         self.C.recursion_matrix = {0: self.trajectory.estimation_matrix[self.sim.t_current]}
         for t in range(0, self.sim.t_predict):
-            self.C.gain[t] = self.C.recursion_matrix[t] @ self.C.active_matrix.T @ np.linalg.inv((self.C.active_matrix @ self.C.recursion_matrix[t] @ self.C.active_matrix.T) + self.C.R1)
-            self.C.recursion_matrix[t + 1] = (self.A.A_mat @ self.C.recursion_matrix[t] @ self.A.A_mat.T) - (self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix @ self.C.recursion_matrix[t] @ self.A.A_mat.T) + self.C.Q
+            self.C.gain[t] = self.C.recursion_matrix[t] @ self.C.active_matrix.T @ np.linalg.inv(
+                (self.C.active_matrix @ self.C.recursion_matrix[t] @ self.C.active_matrix.T) + self.C.R1)
+            self.C.recursion_matrix[t + 1] = (self.A.A_mat @ self.C.recursion_matrix[t] @ self.A.A_mat.T) - (
+                        self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix @ self.C.recursion_matrix[
+                    t] @ self.A.A_mat.T) + self.C.Q
 
     def cost_prediction(self) -> None:
         A_augmented_mat = {}
@@ -1303,24 +1347,29 @@ class System:
         Q_augmented = {}
 
         W_mat = np.block([[self.disturbance.W, np.zeros((self.number_of_states, len(self.C.active_set)))],
-                          [np.zeros((len(self.C.active_set), self.number_of_states)), self.disturbance.V[:, self.C.active_set][self.C.active_set, :]]])
+                          [np.zeros((len(self.C.active_set), self.number_of_states)),
+                           self.disturbance.V[:, self.C.active_set][self.C.active_set, :]]])
 
         for t in range(0, self.sim.t_predict):
             BKt = self.B.active_matrix @ self.B.gain[t]
             ALtC = self.A.A_mat @ self.C.gain[t] @ self.C.active_matrix
 
             A_augmented_mat[t] = np.block([[self.A.A_mat, -BKt],
-                                          [ALtC, self.A.A_mat - ALtC - BKt]])
+                                           [ALtC, self.A.A_mat - ALtC - BKt]])
 
-            F_augmented[t] = np.block([[np.identity(self.number_of_states), np.zeros((self.number_of_states, len(self.C.active_set)))],
-                                      [np.zeros((self.number_of_states, self.number_of_states)), self.A.A_mat @ self.C.gain[t]]])
+            F_augmented[t] = np.block(
+                [[np.identity(self.number_of_states), np.zeros((self.number_of_states, len(self.C.active_set)))],
+                 [np.zeros((self.number_of_states, self.number_of_states)), self.A.A_mat @ self.C.gain[t]]])
             W_augmented[t] = F_augmented[t] @ W_mat @ F_augmented[t].T
 
             Q_augmented[t] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
-                                      [np.zeros((self.number_of_states, self.number_of_states)), self.B.gain[t].T @ self.B.R1 @ self.B.gain[t]]])
+                                       [np.zeros((self.number_of_states, self.number_of_states)),
+                                        self.B.gain[t].T @ self.B.R1 @ self.B.gain[t]]])
 
-        Q_augmented[self.sim.t_predict] = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
-                                                   [np.zeros((self.number_of_states, self.number_of_states)), np.zeros((self.number_of_states, self.number_of_states))]])
+        Q_augmented[self.sim.t_predict] = np.block(
+            [[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
+             [np.zeros((self.number_of_states, self.number_of_states)),
+              np.zeros((self.number_of_states, self.number_of_states))]])
 
         self.A.A_augmented_mat = A_augmented_mat[0]
         self.disturbance.F_augmented = F_augmented[0]
@@ -1330,11 +1379,13 @@ class System:
 
         for t in range(self.sim.t_predict - 1, -1, -1):
             self.trajectory.cost.control += np.trace(self.trajectory.cost.predicted_matrix[t + 1] @ W_augmented[t])
-            self.trajectory.cost.predicted_matrix[t] = A_augmented_mat[t].T @ self.trajectory.cost.predicted_matrix[t + 1] @ A_augmented_mat[t]
+            self.trajectory.cost.predicted_matrix[t] = A_augmented_mat[t].T @ self.trajectory.cost.predicted_matrix[
+                t + 1] @ A_augmented_mat[t]
 
         if self.trajectory.cost.metric_control == 1:
             x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[self.sim.t_current], (1, 2)))
-            self.trajectory.cost.control += (x_estimate_stack.T @ self.trajectory.cost.predicted_matrix[0] @ x_estimate_stack)
+            self.trajectory.cost.control += (
+                        x_estimate_stack.T @ self.trajectory.cost.predicted_matrix[0] @ x_estimate_stack)
         elif self.trajectory.cost.metric_control == 2:
             self.trajectory.cost.control += np.max(np.linalg.eigvals(self.trajectory.cost.predicted_matrix[0]))
         else:
@@ -1342,7 +1393,8 @@ class System:
 
     def cost_true(self) -> None:
         Q_mat = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
-                          [np.zeros((self.number_of_states, self.number_of_states)), self.B.gain[0].T @ self.B.R1 @ self.B.gain[0]]])
+                          [np.zeros((self.number_of_states, self.number_of_states)),
+                           self.B.gain[0].T @ self.B.R1 @ self.B.gain[0]]])
         self.trajectory.cost.control = 0
         if self.trajectory.cost.metric_control == 1:
             x_estimate_stack = np.squeeze(np.tile(self.trajectory.x_estimate[self.sim.t_current], (1, 2)))
@@ -1357,7 +1409,8 @@ class System:
         self.cost_prediction()
         self.cost_architecture_running()
         self.cost_architecture_switching()
-        self.trajectory.cost.predicted[self.sim.t_current] = self.trajectory.cost.control + self.trajectory.cost.running + self.trajectory.cost.switching
+        self.trajectory.cost.predicted[
+            self.sim.t_current] = self.trajectory.cost.control + self.trajectory.cost.running + self.trajectory.cost.switching
 
     def cost_true_wrapper(self) -> None:
         self.cost_true()
@@ -1376,14 +1429,18 @@ class System:
         # High selection priority of actuators or sensors if < minimum
         if len(self.B.active_set) < self.B.min or len(self.C.active_set) < self.C.min:
             if len(self.B.active_set) < self.B.min:
-                choices.extend([{'arch': 'B', 'idx': i, 'change': '+'} for i in compare_lists(self.B.active_set, self.B.available_indices)['only2']])
+                choices.extend([{'arch': 'B', 'idx': i, 'change': '+'} for i in
+                                compare_lists(self.B.active_set, self.B.available_indices)['only2']])
             if len(self.C.active_set) < self.C.min:
-                choices.extend([{'arch': 'C', 'idx': i, 'change': '+'} for i in compare_lists(self.C.active_set, self.C.available_indices)['only2']])
+                choices.extend([{'arch': 'C', 'idx': i, 'change': '+'} for i in
+                                compare_lists(self.C.active_set, self.C.available_indices)['only2']])
         else:  # Low selection priority of actuators or sensors if >= min and < maximum
             if len(self.B.active_set) < self.B.max:
-                choices.extend([{'arch': 'B', 'idx': i, 'change': '+'} for i in compare_lists(self.B.active_set, self.B.available_indices)['only2']])
+                choices.extend([{'arch': 'B', 'idx': i, 'change': '+'} for i in
+                                compare_lists(self.B.active_set, self.B.available_indices)['only2']])
             if len(self.C.active_set) < self.C.max:
-                choices.extend([{'arch': 'C', 'idx': i, 'change': '+'} for i in compare_lists(self.C.active_set, self.C.available_indices)['only2']])
+                choices.extend([{'arch': 'C', 'idx': i, 'change': '+'} for i in
+                                compare_lists(self.C.active_set, self.C.available_indices)['only2']])
 
         return choices
 
@@ -1438,15 +1495,24 @@ class System:
     def one_step_system_update(self) -> None:
         # print('1:', np.shape(self.disturbance.F_augmented), np.shape(self.disturbance.w_gen[self.sim.t_current]), np.shape(self.disturbance.v_gen[self.sim.t_current]))
         # print('2:', np.shape(self.A.A_augmented_mat), np.shape(self.trajectory.X_augmented[self.sim.t_current]))
-        self.trajectory.X_augmented[self.sim.t_current + 1] = (self.A.A_augmented_mat @ self.trajectory.X_augmented[self.sim.t_current]) + (self.disturbance.F_augmented @ np.concatenate((self.disturbance.w_gen[self.sim.t_current], self.disturbance.v_gen[self.sim.t_current][self.C.active_set])))
+        self.trajectory.X_augmented[self.sim.t_current + 1] = (self.A.A_augmented_mat @ self.trajectory.X_augmented[
+            self.sim.t_current]) + (self.disturbance.F_augmented @ np.concatenate((self.disturbance.w_gen[
+                                                                                       self.sim.t_current],
+                                                                                   self.disturbance.v_gen[
+                                                                                       self.sim.t_current][
+                                                                                       self.C.active_set])))
 
-        self.trajectory.x[self.sim.t_current + 1] = self.trajectory.X_augmented[self.sim.t_current + 1][0:self.number_of_states]
+        self.trajectory.x[self.sim.t_current + 1] = self.trajectory.X_augmented[self.sim.t_current + 1][
+                                                    0:self.number_of_states]
 
-        self.trajectory.x_estimate[self.sim.t_current + 1] = self.trajectory.X_augmented[self.sim.t_current + 1][self.number_of_states:]
+        self.trajectory.x_estimate[self.sim.t_current + 1] = self.trajectory.X_augmented[self.sim.t_current + 1][
+                                                             self.number_of_states:]
 
-        self.trajectory.error[self.sim.t_current + 1] = self.trajectory.x[self.sim.t_current + 1] - self.trajectory.x_estimate[self.sim.t_current + 1]
+        self.trajectory.error[self.sim.t_current + 1] = self.trajectory.x[self.sim.t_current + 1] - \
+                                                        self.trajectory.x_estimate[self.sim.t_current + 1]
 
-        self.trajectory.error_2norm[self.sim.t_current + 1] = np.linalg.norm(self.trajectory.error[self.sim.t_current + 1])
+        self.trajectory.error_2norm[self.sim.t_current + 1] = np.linalg.norm(
+            self.trajectory.error[self.sim.t_current + 1])
 
         self.trajectory.estimation_matrix[self.sim.t_current + 1] = self.C.recursion_matrix[1]
         self.trajectory.control_cost_matrix[self.sim.t_current] = self.B.recursion_matrix[0]
@@ -1475,7 +1541,7 @@ class System:
         x = [full_pos[k][0] for k in full_pos]
         y = [full_pos[k][1] for k in full_pos]
         scale = 1.5
-        self.plot.network_plot_limits = [[min(x)*scale, max(x)*scale], [min(y)*scale, max(y)*scale]]
+        self.plot.network_plot_limits = [[min(x) * scale, max(x) * scale], [min(y) * scale, max(y) * scale]]
 
     def generate_network_architecture_graph_matrix(self, mA: float = 1, mB: float = 1, mC: float = 1) -> None:
         A_mat = np.array((self.A.adjacency_matrix > 0) * mA, dtype=float)
@@ -1483,13 +1549,15 @@ class System:
         C_mat = np.array((self.C.active_matrix > 0) * mC, dtpye=float)
 
         net_matrix = np.block([[A_mat, B_mat, C_mat.T],
-                               [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))), np.zeros((len(self.B.active_set), len(self.C.active_set)))],
-                               [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))), np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
+                               [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))),
+                                np.zeros((len(self.B.active_set), len(self.C.active_set)))],
+                               [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))),
+                                np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
         self.plot.network_architecture_graph = netx.from_numpy_array(net_matrix)
 
         node_label_map = {}
         for i in range(0, self.number_of_states):
-            node_label_map[i] = str(i+1)
+            node_label_map[i] = str(i + 1)
         for i in range(0, len(self.B.active_set)):
             node_label_map[self.number_of_states + i] = "B" + str(i + 1)
         for i in range(0, len(self.C.active_set)):
@@ -1523,7 +1591,10 @@ class System:
     def generate_network_graph_architecture_locations(self, t: int = None) -> None:
         self.architecture_at_timestep_t(t)
         self.generate_network_architecture_graph_matrix()
-        self.plot.network_architecture_locations = netx.spring_layout(self.plot.network_architecture_graph, pos=self.plot.network_state_locations, fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
+        self.plot.network_architecture_locations = netx.spring_layout(self.plot.network_architecture_graph,
+                                                                      pos=self.plot.network_state_locations,
+                                                                      fixed=[str(i) for i in
+                                                                             range(1, 1 + self.number_of_states)])
 
     def generate_architecture_history_points(self, arch=None) -> None:
         for a in architecture_iterator(arch):
@@ -1531,26 +1602,28 @@ class System:
                 for t in self.B.history_active_set:
                     for node in self.B.history_active_set[t]:
                         self.plot.B_history[0].append(t)
-                        self.plot.B_history[1].append(node+1)
+                        self.plot.B_history[1].append(node + 1)
             else:  # a == 'C'
                 for t in self.C.history_active_set:
                     for node in self.C.history_active_set[t]:
                         self.plot.C_history[0].append(t)
-                        self.plot.C_history[1].append(node+1)
+                        self.plot.C_history[1].append(node + 1)
 
     def architecture_active_count(self, arch=None) -> None:
         for a in architecture_iterator(arch):
             if a == 'B':
-                if self.sim.sim_model == 'selftuning':
-                    self.B.active_count = [len(self.B.history_active_set[i]) for i in range(0, len(self.B.history_active_set))]
+                if self.sim.sim_model == 'self_tuning':
+                    self.B.active_count = [len(self.B.history_active_set[i]) for i in
+                                           range(0, len(self.B.history_active_set))]
                 elif self.sim.sim_model == "fixed":
                     self.B.active_count = [len(self.B.active_set)] * len(self.B.history_active_set)
                 else:
                     raise Exception('Invalid test model')
 
             else:  # if arch == 'C'
-                if self.sim.sim_model == 'selftuning':
-                    self.C.active_count = [len(self.C.history_active_set[i]) for i in range(0, len(self.C.history_active_set))]
+                if self.sim.sim_model == 'self_tuning':
+                    self.C.active_count = [len(self.C.history_active_set[i]) for i in
+                                           range(0, len(self.C.history_active_set))]
                 elif self.sim.sim_model == "fixed":
                     self.C.active_count = [len(self.C.active_set)] * len(self.C.history_active_set)
                 else:
@@ -1570,15 +1643,21 @@ class System:
         node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['B']] * len(self.B.active_set)
         node_color_array.extend([self.plot.plot_parameters[self.plot.plot_system]['C']] * len(self.C.active_set))
 
-        architecture_list = ["B"+str(i) for i in range(1, 1+len(self.B.active_set))] + ["C"+str(i) for i in range(1, 1+len(self.C.active_set))]
-        architecture_labels = {"B"+str(i): "B"+str(i) for i in range(1, 1+len(self.B.active_set))}
-        architecture_labels.update({"C"+str(i): "C"+str(i) for i in range(1, 1+len(self.C.active_set))})
+        architecture_list = ["B" + str(i) for i in range(1, 1 + len(self.B.active_set))] + ["C" + str(i) for i in
+                                                                                            range(1, 1 + len(
+                                                                                                self.C.active_set))]
+        architecture_labels = {"B" + str(i): "B" + str(i) for i in range(1, 1 + len(self.B.active_set))}
+        architecture_labels.update({"C" + str(i): "C" + str(i) for i in range(1, 1 + len(self.C.active_set))})
 
-        netx.draw_networkx_nodes(self.plot.network_architecture_graph, ax=ax, pos=self.plot.network_architecture_locations, nodelist=architecture_list, node_color=node_color_array)
+        netx.draw_networkx_nodes(self.plot.network_architecture_graph, ax=ax,
+                                 pos=self.plot.network_architecture_locations, nodelist=architecture_list,
+                                 node_color=node_color_array)
 
-        netx.draw_networkx_labels(self.plot.network_architecture_graph, ax=ax, pos=self.plot.network_architecture_locations, labels=architecture_labels)
+        netx.draw_networkx_labels(self.plot.network_architecture_graph, ax=ax,
+                                  pos=self.plot.network_architecture_locations, labels=architecture_labels)
 
-        netx.draw_networkx_edges(self.plot.network_architecture_graph, ax=ax, pos=self.plot.network_architecture_locations)
+        netx.draw_networkx_edges(self.plot.network_architecture_graph, ax=ax,
+                                 pos=self.plot.network_architecture_locations)
 
         if ax_in is None:
             plt.show()
@@ -1588,10 +1667,12 @@ class System:
             fig = plt.figure()
             grid = fig.add_gridspec(1, 1)
             ax1 = fig.add_subplot(grid[0, 0], frameon=False, zorder=1.1, aspect='equal')
-            ax1.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+            ax1.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
+                            right=False)
             # ax1.patch.set_alpha(0.1)
             ax2 = fig.add_subplot(grid[0, 0], sharex=ax1, sharey=ax1, zorder=1.2, aspect='equal')
-            ax2.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False, right=False)
+            ax2.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
+                            right=False)
             ax2.patch.set_alpha(0.1)
         else:
             ax1 = ax1_in
@@ -1647,7 +1728,8 @@ class System:
             ax = ax_in
 
         compute_time = self.list_from_dict_key_time(self.trajectory.computation_time)
-        ax.scatter(range(0, len(compute_time)), compute_time, color=self.plot.plot_parameters[self.plot.plot_system]['c'], marker='o', s=5)
+        ax.scatter(range(0, len(compute_time)), compute_time,
+                   color=self.plot.plot_parameters[self.plot.plot_system]['c'], marker='o', s=5)
         ax.grid(visible=True, which='major', axis='x')
 
         if ax_in is None:
@@ -1703,7 +1785,8 @@ class System:
             else:
                 raise Exception('Check argument')
 
-            ax.plot(range(0, self.sim.t_simulate), cost, c=self.plot.plot_parameters[self.plot.plot_system]['c'], linestyle=ls, alpha=0.7)
+            ax.plot(range(0, self.sim.t_simulate), cost, c=self.plot.plot_parameters[self.plot.plot_system]['c'],
+                    linestyle=ls, alpha=0.7)
             legend_handler.append(mlines.Line2D([], [], color='black', ls=ls, label=labeler))
 
         ax.set_yscale('log')
@@ -1726,7 +1809,7 @@ class System:
         else:
             ax = ax_in
 
-        ax.scatter(range(1, self.number_of_states+1), np.sort(np.abs(self.A.open_loop_eig_vals)),
+        ax.scatter(range(1, self.number_of_states + 1), np.sort(np.abs(self.A.open_loop_eig_vals)),
                    marker='x', s=10, c='black', alpha=0.7)
         ax.axhline(y=1, color='tab:gray', ls='dashdot', alpha=0.5)
         # ax.set_ylim(np.min(np.abs(self.A.open_loop_eig_vals)), np.max(np.abs(self.A.open_loop_eig_vals)))
@@ -1768,7 +1851,8 @@ class System:
                 raise Exception('Check iterator')
 
             x_norm = [np.linalg.norm(x[:, i]) for i in range(0, self.sim.t_simulate)]
-            ax.plot(range(0, self.sim.t_simulate), x_norm, color=self.plot.plot_parameters[self.plot.plot_system]['c'], ls=ls, alpha=0.8)
+            ax.plot(range(0, self.sim.t_simulate), x_norm, color=self.plot.plot_parameters[self.plot.plot_system]['c'],
+                    ls=ls, alpha=0.8)
             legend_handler.append(mlines.Line2D([], [], color='black', ls=ls, label=labeler))
 
         if set_details_flag:
@@ -1794,315 +1878,368 @@ class System:
             ret_list[:, t] = v[t]
         return ret_list
 
+    def scalecost_by_test_parameter(self) -> None:
+        cost_scale = 0 if self.sim.test_parameter is None else self.sim.test_parameter
+        self.B.R2 = self.B.R2 * cost_scale
+        self.B.R3 = self.B.R3 * cost_scale
+        self.C.R2 = self.C.R2 * cost_scale
+        self.C.R3 = self.C.R3 * cost_scale
+        if cost_scale == 0:
+            self.plot_name = 'self_tuning free arch'
+        else:
+            self.plot_name = 'self_tuning ' + str(cost_scale) + 'scale arch cost'
+
+    def optimize_initial_architecture(self, print_check: bool = False):
+        if print_check:
+            print('Optimizing design-time architecture from:')
+            self.architecture_display()
+
+        t_predict_ref = dc(self.sim.t_predict)
+        self.sim.t_predict = 2 * t_predict_ref
+        self.trajectory.cost.metric_control = 2
+        BR3, CR3 = dc(self.B.R3), dc(self.C.R3)
+        self.B.R3 *= 0
+        self.C.R3 *= 0
+        self.prediction_gains()
+        self.cost_prediction_wrapper()
+
+        self.greedy_simultaneous(print_check_inner=print_check, print_check_outer=print_check)
+
+        self.sim.t_predict = dc(t_predict_ref)
+        self.trajectory.cost.metric_control = 1
+        self.B.R3 = dc(BR3)
+        self.C.R3 = dc(CR3)
+        self.prediction_gains()
+        self.cost_prediction_wrapper()
+
+        if print_check:
+            print('Design-time architecture optimized to:')
+            self.architecture_display()
+
+    def simulate(self, print_check: bool = False, tqdm_check: bool = False):
+        if self.sim.sim_model == "fixed":
+            self.simulate_fixed_architecture(print_check=print_check, tqdm_check=tqdm_check)
+        elif self.sim.sim_model == "self_tuning":
+            self.simulate_self_tuning_architecture(print_check=print_check, tqdm_check=tqdm_check)
+        else:
+            raise Exception('Invalid sim model')
+
+    def simulate_fixed_architecture(self, print_check: bool = False, tqdm_check: bool = True):
+        self.model_namer()
+
+        if print_check:
+            print('Simulating Fixed Architecture')
+
+        if tqdm_check:
+            with tqdm(total=self.sim.t_simulate, ncols=100, desc='Fixed (P_ID:' + str(os.getpid()) + ')',
+                      leave=False) as pbar:
+                for _ in range(0, self.sim.t_simulate):
+                    t_start = process_time()
+                    self.cost_true_wrapper()
+                    self.trajectory.computation_time[self.sim.t_current] = process_time() - t_start
+                    self.one_step_system_update()
+                    pbar.update()
+        else:
+            for _ in range(0, self.sim.t_simulate):
+                t_start = process_time()
+                self.cost_true_wrapper()
+                self.trajectory.computation_time[self.sim.t_current] = process_time() - t_start
+                self.one_step_system_update()
+
+        if print_check:
+            print('Fixed Architecture Simulation: DONE')
+
+    def simulate_self_tuning_architecture(self, print_check: bool = False, tqdm_check: bool = True):
+        self.model_namer()
+
+        if print_check:
+            print('Simulating Self-Tuning Architecture')
+
+        if tqdm_check:
+            with tqdm(total=self.sim.t_simulate, ncols=100, desc='Self-Tuning (P_ID:' + str(os.getpid()) + ')',
+                      leave=False) as pbar:
+                for t in range(0, self.sim.t_simulate):
+                    t_start = process_time()
+                    if t > 0:
+                        self.greedy_simultaneous(print_check_outer=print_check)
+                    self.cost_true_wrapper()
+                    self.trajectory.computation_time[self.sim.t_current] = process_time() - t_start
+                    self.one_step_system_update()
+                    pbar.update()
+        else:
+            for t in range(0, self.sim.t_simulate):
+                t_start = process_time()
+                if t > 0:
+                    self.greedy_simultaneous(print_check_outer=print_check)
+                self.cost_true_wrapper()
+                self.trajectory.computation_time[self.sim.t_current] = process_time() - t_start
+                self.one_step_system_update()
+
+        if print_check:
+            print('Self-Tuning Architecture Simulation: DONE')
+
+    def greedy_selection(self, print_check: bool = False):
+        exit_condition = 0
+        work_sys = dc(self)
+        arch_ref = dc(self)
+        cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
+
+        if print_check:
+            print('Initial architecture')
+            work_sys.architecture_display()
+
+        number_of_changes, number_of_choices, selection_check = 0, 0, True
+        while selection_check:
+            work_iteration = dc(work_sys)
+            choices = work_iteration.available_choices_selection()
+            if print_check:
+                print('Iteration: {}'.format(number_of_changes))
+                work_iteration.architecture_display()
+
+            if len(choices) == 0:
+                # Exit if there are no available selections or the only option is no change
+                selection_check = False
+                exit_condition = 1
+                if print_check:
+                    print('Selection exit 1: No available selections')
+
+            elif len(choices) == 1 and choices[0]['arch'] == 'skip':
+                # Exit if the only option is no change
+                selection_check = False
+                exit_condition = 2
+                if print_check:
+                    print('Selection exit 2: No valuable selections')
+
+            else:
+                number_of_choices += len(choices)
+                # evaluations = list(map(work_iteration.evaluate_cost_for_choice, choices))
+                evaluations = cost_mapper(work_iteration, choices)
+                # smallest_cost = min(d['cost'] for d in evaluations)
+                # index_of_smallest_cost = evaluations.index(min(d for d in evaluations if d['cost'] == smallest_cost))
+
+                index_of_smallest_cost = min(range(len(evaluations)),
+                                             key=lambda change: evaluations[change].get('cost', float('inf')))
+                smallest_cost = evaluations[index_of_smallest_cost]['cost']
+
+                if print_check:
+                    print('Choice evaluations')
+                    for i in range(0, len(evaluations)):
+                        print('{}: {} | {} | {} | {}'.format(i, evaluations[i]['arch'], evaluations[i]['idx'],
+                                                             evaluations[i]['change'], evaluations[i]['cost']))
+                    print('Smallest cost: {} @ {}'.format(smallest_cost, index_of_smallest_cost))
+                    evaluations[index_of_smallest_cost]['system'].architecture_display()
+
+                if evaluations[index_of_smallest_cost]['arch'] == 'skip':
+                    # Exit if the best option is no change
+                    selection_check = False
+                    exit_condition = 5
+                    if print_check:
+                        print('Selection exit 5: No valuable selections')
+
+                else:
+                    work_sys = dc(evaluations[index_of_smallest_cost]['system'])
+                    cost_improvement.append(smallest_cost)
+                    number_of_changes = arch_ref.architecture_compute_active_set_changes(work_sys)
+                    # number_of_changes += 1
+
+                    if self.sim.self_tuning_parameter is not None and number_of_changes >= self.sim.self_tuning_parameter:
+                        # Exit if maximum number of changes have been completed
+                        selection_check = False
+                        exit_condition = 3
+                        if print_check:
+                            print('Selection exit 3: Maximum selections done')
+
+                    elif number_of_changes == 0:
+                        # Trigger 2 should always activate before this
+                        selection_check = False
+                        exit_condition = 4
+                        if print_check:
+                            print('Selection exit 4: No selections done')
+
+        # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
+        if print_check:
+            print('Number of iterations: {}'.format(number_of_changes))
+            work_sys.architecture_display()
+            # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+
+        if not work_sys.architecture_limit_check():
+            print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set),
+                                                                                    len(work_sys.C.active_set),
+                                                                                    work_sys.B.max, work_sys.B.min,
+                                                                                    exit_condition))
+            raise Exception('Architecture limits failed')
+
+        self.copy_from_system(work_sys)
+
+    def greedy_rejection(self, print_check: bool = False):
+        exit_condition = 0
+        work_sys = dc(self)
+        cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
+
+        if print_check:
+            print('Initial architecture')
+            work_sys.architecture_display()
+
+        number_of_changes, number_of_choices, rejection_check = 0, 0, True
+        while rejection_check:
+            work_iteration = dc(work_sys)
+            choices = work_iteration.available_choices_rejection()
+            if print_check:
+                print('Iteration: {}'.format(number_of_changes))
+                work_iteration.architecture_display()
+
+            if len(choices) == 0:
+                # Exit if there are no available rejections or the only option is no change
+                rejection_check = False
+                exit_condition = 1
+                if print_check:
+                    print('Rejection exit 1: No available rejections')
+
+            elif len(choices) == 1 and choices[0]['arch'] == 'skip':
+                # Exit if the only option is no change
+                rejection_check = False
+                exit_condition = 2
+                if print_check:
+                    print('Rejection exit 2: No valuable rejections')
+
+            else:
+                number_of_choices += len(choices)
+                evaluations = cost_mapper(work_iteration, choices)
+
+                index_of_smallest_cost = min(range(len(evaluations)),
+                                             key=lambda change: evaluations[change].get('cost', float('inf')))
+                smallest_cost = evaluations[index_of_smallest_cost]['cost']
+
+                if print_check:
+                    print('Choice evaluations')
+                    for i in range(0, len(evaluations)):
+                        print('{}: {} | {} | {} | {}'.format(i, evaluations[i]['arch'], evaluations[i]['idx'],
+                                                             evaluations[i]['change'], evaluations[i]['cost']))
+                    print('Smallest cost: {} @ {}'.format(smallest_cost, index_of_smallest_cost))
+                    evaluations[index_of_smallest_cost]['system'].architecture_display()
+
+                if evaluations[index_of_smallest_cost]['arch'] == 'skip':
+                    # Exit if the best option is no change
+                    rejection_check = False
+                    exit_condition = 5
+                    if print_check:
+                        print('Rejection exit 5: No valuable rejections')
+
+                else:
+                    work_sys = dc(evaluations[index_of_smallest_cost]['system'])
+                    cost_improvement.append(smallest_cost)
+                    number_of_changes = self.architecture_compute_active_set_changes(work_sys)
+
+                    if self.sim.self_tuning_parameter is not None and number_of_changes >= self.sim.self_tuning_parameter:
+                        # Exit if maximum number of changes have been completed
+                        rejection_check = False
+                        exit_condition = 3
+                        if print_check:
+                            print('Rejection exit 3: Maximum rejections done')
+
+                    elif number_of_changes == 0:
+                        # Trigger 2 should always activate before this
+                        rejection_check = False
+                        exit_condition = 4
+                        if print_check:
+                            print('Rejection exit 4: No valuable rejections')
+
+        # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
+        if print_check:
+            print('Number of iterations: {}'.format(number_of_changes))
+            work_sys.architecture_display()
+            # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+
+        if not work_sys.architecture_limit_check():
+            print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set),
+                                                                                    len(work_sys.C.active_set),
+                                                                                    work_sys.B.max, work_sys.B.min,
+                                                                                    exit_condition))
+            raise Exception('Architecture limits failed')
+
+        self.copy_from_system(work_sys)
+
+    def greedy_simultaneous(self, number_of_changes_per_iteration: int = None, print_check_outer: bool = False,
+                            print_check_inner: bool = False):
+        work_sys = dc(self)
+        cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
+        swap_limit_mod = 1 if number_of_changes_per_iteration is None else number_of_changes_per_iteration
+        work_sys.sim.self_tuning_parameter = 2 * swap_limit_mod
+        safety_counter = 0
+        exit_condition = 0
+
+        if print_check_outer:
+            print('Initial architecture')
+            work_sys.architecture_display()
+
+        number_of_changes, number_of_choices, simultaneous_check = 0, 0, True
+        while simultaneous_check:
+            force_swap = dc(work_sys)
+            # force_swap.sim.self_tuning_parameter = 2 * swap_limit_mod
+            force_swap.architecture_limit_mod(min_mod=swap_limit_mod, max_mod=swap_limit_mod)
+            force_swap.greedy_selection(print_check=print_check_inner)
+
+            if print_check_outer:
+                print('After force selection')
+                force_swap.architecture_display()
+
+            force_swap.architecture_limit_mod(min_mod=-swap_limit_mod, max_mod=-swap_limit_mod)
+            force_swap.greedy_rejection(print_check=print_check_inner)
+
+            cost_improvement.append(force_swap.trajectory.cost.predicted[force_swap.sim.t_current])
+
+            if print_check_outer:
+                print('After force rejection')
+                force_swap.architecture_display()
+
+            if work_sys.architecture_compare_active_set_to_system(
+                    force_swap):  # Comparison of previous to current iteration of architecture update
+                simultaneous_check = False
+                exit_condition = 1
+                if print_check_outer:
+                    print('Swap exit 1: No more valuable forced swaps')
+
+            else:
+                number_of_changes = self.architecture_compute_active_set_changes(
+                    force_swap)  # Comparison of initial reference to current architecture
+                work_sys = dc(force_swap)
+                safety_counter += 1
+
+                if self.sim.self_tuning_parameter is not None and number_of_changes >= 2 * self.sim.self_tuning_parameter:
+                    simultaneous_check = False
+                    exit_condition = 2
+                    if print_check_outer:
+                        print('Swap exit 2: Maximum swaps done')
+                elif number_of_changes == 0:
+                    simultaneous_check = False
+                    exit_condition = 3
+                    if print_check_outer:
+                        print('Swap exit 3: No valuable swaps or cyclic swaps')
+
+                if safety_counter > work_sys.number_of_states:
+                    raise Exception('Triggered safety constraint - too many changes - check system')
+
+        # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
+        if print_check_outer:
+            work_sys.architecture_display()
+            # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
+
+        if not work_sys.architecture_limit_check():
+            print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set),
+                                                                                    len(work_sys.C.active_set),
+                                                                                    work_sys.B.max, work_sys.B.min,
+                                                                                    exit_condition))
+            raise Exception('Architecture limits failed')
+
+        self.copy_from_system(work_sys)
+
 
 def cost_mapper(S: System, choices) -> list:
     evaluation = list(map(S.evaluate_cost_for_choice, choices))
     return evaluation
 
 
-def greedy_selection(S: System, number_of_changes_limit: int = None, print_check: bool = False):
-    exit_condition = 0
-    work_sys = dc(S)
-    arch_ref = dc(S)
-    cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
-
-    if print_check:
-        print('Initial architecture')
-        work_sys.architecture_display()
-
-    number_of_changes, number_of_choices, selection_check = 0, 0, True
-    while selection_check:
-        work_iteration = dc(work_sys)
-        choices = work_iteration.available_choices_selection()
-        if print_check:
-            print('Iteration: {}'.format(number_of_changes))
-            work_iteration.architecture_display()
-
-        if len(choices) == 0:
-            # Exit if there are no available selections or the only option is no change
-            selection_check = False
-            exit_condition = 1
-            if print_check:
-                print('Selection exit 1: No available selections')
-
-        elif len(choices) == 1 and choices[0]['arch'] == 'skip':
-            # Exit if the only option is no change
-            selection_check = False
-            exit_condition = 2
-            if print_check:
-                print('Selection exit 2: No valuable selections')
-
-        else:
-            number_of_choices += len(choices)
-            # evaluations = list(map(work_iteration.evaluate_cost_for_choice, choices))
-            evaluations = cost_mapper(work_iteration, choices)
-            # smallest_cost = min(d['cost'] for d in evaluations)
-            # index_of_smallest_cost = evaluations.index(min(d for d in evaluations if d['cost'] == smallest_cost))
-
-            index_of_smallest_cost = min(range(len(evaluations)), key=lambda change: evaluations[change].get('cost', float('inf')))
-            smallest_cost = evaluations[index_of_smallest_cost]['cost']
-
-            if print_check:
-                print('Choice evaluations')
-                for i in range(0, len(evaluations)):
-                    print('{}: {} | {} | {} | {}'.format(i, evaluations[i]['arch'], evaluations[i]['idx'], evaluations[i]['change'], evaluations[i]['cost']))
-                print('Smallest cost: {} @ {}'.format(smallest_cost, index_of_smallest_cost))
-                evaluations[index_of_smallest_cost]['system'].architecture_display()
-
-            if evaluations[index_of_smallest_cost]['arch'] == 'skip':
-                # Exit if the best option is no change
-                selection_check = False
-                exit_condition = 5
-                if print_check:
-                    print('Selection exit 5: No valuable selections')
-
-            else:
-                work_sys = dc(evaluations[index_of_smallest_cost]['system'])
-                cost_improvement.append(smallest_cost)
-                number_of_changes = arch_ref.architecture_compute_active_set_changes(work_sys)
-                # number_of_changes += 1
-
-                if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
-                    # Exit if maximum number of changes have been completed
-                    selection_check = False
-                    exit_condition = 3
-                    if print_check:
-                        print('Selection exit 3: Maximum selections done')
-
-                elif number_of_changes == 0:
-                    # Trigger 2 should always activate before this
-                    selection_check = False
-                    exit_condition = 4
-                    if print_check:
-                        print('Selection exit 4: No selections done')
-
-    # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
-    if print_check:
-        print('Number of iterations: {}'.format(number_of_changes))
-        work_sys.architecture_display()
-        # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
-
-    if not work_sys.architecture_limit_check():
-        print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
-        raise Exception('Architecture limits failed')
-    return work_sys
-
-
-def greedy_rejection(S: System, number_of_changes_limit: int = None, print_check: bool = False):
-    exit_condition = 0
-    work_sys = dc(S)
-    arch_ref = dc(S)
-    cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
-
-    if print_check:
-        print('Initial architecture')
-        work_sys.architecture_display()
-
-    number_of_changes, number_of_choices, rejection_check = 0, 0, True
-    while rejection_check:
-        work_iteration = dc(work_sys)
-        choices = work_iteration.available_choices_rejection()
-        if print_check:
-            print('Iteration: {}'.format(number_of_changes))
-            work_iteration.architecture_display()
-
-        if len(choices) == 0:
-            # Exit if there are no available rejections or the only option is no change
-            rejection_check = False
-            exit_condition = 1
-            if print_check:
-                print('Rejection exit 1: No available rejections')
-
-        elif len(choices) == 1 and choices[0]['arch'] == 'skip':
-            # Exit if the only option is no change
-            rejection_check = False
-            exit_condition = 2
-            if print_check:
-                print('Rejection exit 2: No valuable rejections')
-
-        else:
-            number_of_choices += len(choices)
-            evaluations = cost_mapper(work_iteration, choices)
-
-            index_of_smallest_cost = min(range(len(evaluations)), key=lambda change: evaluations[change].get('cost', float('inf')))
-            smallest_cost = evaluations[index_of_smallest_cost]['cost']
-
-            if print_check:
-                print('Choice evaluations')
-                for i in range(0, len(evaluations)):
-                    print('{}: {} | {} | {} | {}'.format(i, evaluations[i]['arch'], evaluations[i]['idx'], evaluations[i]['change'], evaluations[i]['cost']))
-                print('Smallest cost: {} @ {}'.format(smallest_cost, index_of_smallest_cost))
-                evaluations[index_of_smallest_cost]['system'].architecture_display()
-
-            if evaluations[index_of_smallest_cost]['arch'] == 'skip':
-                # Exit if the best option is no change
-                rejection_check = False
-                exit_condition = 5
-                if print_check:
-                    print('Rejection exit 5: No valuable rejections')
-
-            else:
-                work_sys = dc(evaluations[index_of_smallest_cost]['system'])
-                cost_improvement.append(smallest_cost)
-                number_of_changes = arch_ref.architecture_compute_active_set_changes(work_sys)
-
-                if number_of_changes_limit is not None and number_of_changes >= number_of_changes_limit:
-                    # Exit if maximum number of changes have been completed
-                    rejection_check = False
-                    exit_condition = 3
-                    if print_check:
-                        print('Rejection exit 3: Maximum rejections done')
-
-                elif number_of_changes == 0:
-                    # Trigger 2 should always activate before this
-                    rejection_check = False
-                    exit_condition = 4
-                    if print_check:
-                        print('Rejection exit 4: No valuable rejections')
-
-    # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
-    if print_check:
-        print('Number of iterations: {}'.format(number_of_changes))
-        work_sys.architecture_display()
-        # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
-
-    if not work_sys.architecture_limit_check():
-        print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
-        raise Exception('Architecture limits failed')
-    return work_sys
-
-
-def greedy_simultaneous(S: System, number_of_changes_limit: int = None, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False):
-    work_sys = dc(S)
-    ref_arch = dc(S)
-    cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
-    swap_limit_mod = 1 if number_of_changes_per_iteration is None else number_of_changes_per_iteration
-    safety_counter = 0
-    exit_condition = 0
-
-    if print_check_outer:
-        print('Initial architecture')
-        work_sys.architecture_display()
-
-    number_of_changes, number_of_choices, simultaneous_check = 0, 0, True
-    while simultaneous_check:
-        force_swap = dc(work_sys)
-        force_swap.architecture_limit_mod(min_mod=swap_limit_mod, max_mod=swap_limit_mod)
-        force_swap = greedy_selection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
-
-        if print_check_outer:
-            print('After force selection')
-            force_swap.architecture_display()
-
-        force_swap.architecture_limit_mod(min_mod=-swap_limit_mod, max_mod=-swap_limit_mod)
-        force_swap = greedy_rejection(force_swap, number_of_changes_limit=2*swap_limit_mod, print_check=print_check_inner)
-
-        cost_improvement.append(force_swap.trajectory.cost.predicted[force_swap.sim.t_current])
-
-        if print_check_outer:
-            print('After force rejection')
-            force_swap.architecture_display()
-
-        if work_sys.architecture_compare_active_set_to_system(force_swap):      # Comparison of previous to current iteration of architecture update
-            simultaneous_check = False
-            exit_condition = 1
-            if print_check_outer:
-                print('Swap exit 1: No more valuable forced swaps')
-
-        else:
-            number_of_changes = ref_arch.architecture_compute_active_set_changes(force_swap)    # Comparison of initial reference to current architecture
-            work_sys = dc(force_swap)
-            safety_counter += 1
-
-            if number_of_changes_limit is not None and number_of_changes >= 2*number_of_changes_limit:
-                simultaneous_check = False
-                exit_condition = 2
-                if print_check_outer:
-                    print('Swap exit 2: Maximum swaps done')
-            elif number_of_changes == 0:
-                simultaneous_check = False
-                exit_condition = 3
-                if print_check_outer:
-                    print('Swap exit 3: No valuable swaps or cyclic swaps')
-
-            if safety_counter > work_sys.number_of_states:
-                raise Exception('Triggered safety constraint - too many changes - check system')
-
-    # work_sys.trajectory.computation_time[work_sys.sim.t_current] = time.time() - t_start
-    if print_check_outer:
-        work_sys.architecture_display()
-        # print('Computation time: {}\nCost Improvement: {}'.format(work_sys.trajectory.computation_time[work_sys.sim.t_current], cost_improvement))
-
-    if not work_sys.architecture_limit_check():
-        print('\nB: {} | C: {} | max: {} | min: {} | Exit condition: {}'.format(len(work_sys.B.active_set), len(work_sys.C.active_set), work_sys.B.max, work_sys.B.min, exit_condition))
-        raise Exception('Architecture limits failed')
-    return work_sys
-
-
-def simulate_fixed_architecture(S: System, print_check: bool = False, tqdm_check: bool = True):
-    S_fix = dc(S)
-    S_fix.sim.sim_model = "fixed"
-    S_fix.model_namer()
-
-    if print_check:
-        print('Simulating Fixed Architecture')
-
-    if tqdm_check:
-        with tqdm(total=S_fix.sim.t_simulate, ncols=100, desc='Fixed (P_ID:' + str(os.getpid()) + ')', leave=False) as pbar:
-            for _ in range(0, S_fix.sim.t_simulate):
-                t_start = process_time()
-                S_fix.cost_true_wrapper()
-                S_fix.trajectory.computation_time[S_fix.sim.t_current] = process_time() - t_start
-                S_fix.one_step_system_update()
-                pbar.update()
-    else:
-        for _ in range(0, S_fix.sim.t_simulate):
-            t_start = process_time()
-            S_fix.cost_true_wrapper()
-            S_fix.trajectory.computation_time[S_fix.sim.t_current] = process_time() - t_start
-            S_fix.one_step_system_update()
-
-    if print_check:
-        print('Fixed Architecture Simulation: DONE')
-
-    return S_fix
-
-
-def simulate_self_tuning_architecture(S: System, number_of_changes_limit: int = None, print_check: bool = False, tqdm_check: bool = True):
-    S_self_tuning = dc(S)
-    S_self_tuning.sim.sim_model = "selftuning"
-    S_self_tuning.model_namer()
-
-    if print_check:
-        print('Simulating Self-Tuning Architecture')
-
-    if tqdm_check:
-        with tqdm(total=S_self_tuning.sim.t_simulate, ncols=100, desc='Self-Tuning (P_ID:' + str(os.getpid()) + ')', leave=False) as pbar:
-            for t in range(0, S_self_tuning.sim.t_simulate):
-                t_start = process_time()
-                if t > 0:
-                    S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
-                S_self_tuning.cost_true_wrapper()
-                S_self_tuning.trajectory.computation_time[S_self_tuning.sim.t_current] = process_time() - t_start
-                S_self_tuning.one_step_system_update()
-                pbar.update()
-    else:
-        for t in range(0, S_self_tuning.sim.t_simulate):
-            t_start = process_time()
-            if t > 0:
-                S_self_tuning = greedy_simultaneous(S_self_tuning, number_of_changes_limit=number_of_changes_limit, print_check_outer=print_check)
-            S_self_tuning.cost_true_wrapper()
-            S_self_tuning.trajectory.computation_time[S_self_tuning.sim.t_current] = process_time() - t_start
-            S_self_tuning.one_step_system_update()
-
-    if print_check:
-        print('Self-Tuning Architecture Simulation: DONE')
-
-    return S_self_tuning
-
-
 def element_wise_min_max(v_ref_min, v_ref_max, v):
-
     v_ret_min = [min(e) for e in zip(v_ref_min, v)]
     v_ret_max = [max(e) for e in zip(v_ref_max, v)]
 
@@ -2110,7 +2247,6 @@ def element_wise_min_max(v_ref_min, v_ref_max, v):
 
 
 def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_change, arch_count):
-
     cost_min, cost_max = element_wise_min_max(cost_min, cost_max, list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.cost.true))))
     compute_time.append(np.average(list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.computation_time)))))
     S.architecture_count_number_of_sim_changes()
@@ -2125,7 +2261,7 @@ def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_cha
     return cost_min, cost_max, compute_time, arch_change, arch_count
 
 
-def run_experiment(exp_no=None, run_check : bool = True, plot_check : bool = True):
+def run_experiment(exp_no=None, run_check: bool = True, plot_check: bool = True):
     Exp = Experiment()
     if run_check:
         Exp.simulate_experiment_wrapper(exp_no=exp_no)
@@ -2135,5 +2271,4 @@ def run_experiment(exp_no=None, run_check : bool = True, plot_check : bool = Tru
 
 
 if __name__ == "__main__":
-
     print('Function file run check')
