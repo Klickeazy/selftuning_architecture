@@ -72,12 +72,14 @@ class ClassError(Exception):
 
 class Experiment:
     """
-    Class to manage experiment parameters - save/load from csv file
+    Manage experiment parameters - save/load from csv file
+    Wrapper to simulate and plot objects of System class
     """
 
     def __init__(self):
         self.parameters_save_filename = "experiment_parameters.csv"  # File name for experiment parameters
 
+        # Dictionary of parameter names and default value with data-type
         self.default_parameter_datatype_map = {'experiment_no': int(1),
                                                'test_model': str(None),
                                                'test_parameter': int(0),
@@ -105,20 +107,21 @@ class Experiment:
                                                'disturbance_magnitude': int(0),
                                                'prediction_time_horizon': int(10),
                                                'X0_scaling': float(1),
-                                               'multiprocessing': False}  # Dictionary of parameter names and default value with data-type
+                                               'multiprocessing': False}
 
         self.parameter_keys = list(self.default_parameter_datatype_map.keys())  # Strip parameter names from dict
         self.parameter_datatypes = {k: type(self.default_parameter_datatype_map[k]) for k in
                                     self.default_parameter_datatype_map}  # Strip parameter data types from dict
-        self.process_pool_max_workers = None
 
         # Parameters and simulation systems for current experiment
         self.exp_no = 1
         self.parameter_values = []
-        self.S = {0: System()}
-        self.S_1 = {}
-        self.S_2 = {}
-        self.index_range = []
+
+        # System dictionaries: key = 0 for single exp, model_id for statistical
+        self.S = {0: System()}  # Dictionary of generated systems
+        self.S_1 = {}   # Dictionary of first system to compare
+        self.S_2 = {}   # Dictionary of second system to compare
+        self.process_pool_workers = None    # number of workers for processpool: none=max
 
         # Save folder for data dump
         if socket.gethostname() == 'melap257805':
@@ -304,7 +307,7 @@ class Experiment:
             if model_id in S:
                 del S[model_id]
 
-    def simulate_experiment_wrapper(self, exp_no=None, print_check: bool = False):
+    def simulate_experiment_wrapper(self, exp_no=None, print_check: bool = False) -> None:
         self.initialize_system_from_experiment_number(exp_no=exp_no)
 
         print('Simulating Exp No: {}'.format(self.exp_no))
@@ -317,7 +320,7 @@ class Experiment:
         else:
             raise Exception('Experiment not defined')
 
-    def simulate_experiment(self, statistics_model: int = 0, print_check: bool = False, tqdm_check: bool = True):
+    def simulate_experiment(self, statistics_model: int = 0, print_check: bool = False, tqdm_check: bool = True) -> None:
         if statistics_model > 0:
             self.S[statistics_model] = System()
             self.initialize_system_from_experiment_number()
@@ -355,7 +358,7 @@ class Experiment:
         if self.S[0].sim.multiprocess_check:
             tqdm_check = False
             with tqdm(total=len(idx_range), ncols=100, desc='Model ID', leave=True) as pbar:
-                with concurrent.futures.ProcessPoolExecutor(max_workers=self.process_pool_max_workers) as executor:
+                with concurrent.futures.ProcessPoolExecutor(max_workers=self.process_pool_workers) as executor:
                     for _ in executor.map(self.simulate_experiment, idx_range, itertools.repeat(print_check),
                                           itertools.repeat(tqdm_check)):
                         pbar.update()
