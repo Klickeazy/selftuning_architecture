@@ -6,9 +6,9 @@ if __name__ == "__main__":
     # exp_master_list = [22, 41, 19, 20, 34, 31, 47, 49, 50, 51]
     # exp_single_run = [52, 53, 54, 55, 56]
 
-    # rerun = [41, 19, 20, 34, 31, 50]
+    # rerun = [20, 34, 31, 50]
 
-    exp_list = [47, 51]
+    exp_list = [20, 34]
 
     run_flag = True
     # run_flag = False

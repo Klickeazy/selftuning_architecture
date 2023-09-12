@@ -406,11 +406,13 @@ class Experiment:
         self.S[statistics_model].optimize_initial_architecture(print_check=print_check)
 
         self.S_1[statistics_model] = dc(self.S[statistics_model])
-        # self.S_1[statistics_model].sim.self_tuning_parameter = 1 : Default parameter
+        self.S_1[statistics_model].sim.self_tuning_parameter = 1
         self.S_1[statistics_model].plot_name = 'self_tuning 1change'
+        print("1:", self.S_1[statistics_model].sim.test_parameter)
         self.S_2[statistics_model] = dc(self.S[statistics_model])
         self.S_2[statistics_model].sim.self_tuning_parameter = None if self.S[statistics_model].sim.test_parameter == 0 else self.S[statistics_model].sim.test_parameter
         self.S_2[statistics_model].plot_name = 'self_tuning bestchange'
+        print("2:", self.S_2[statistics_model].sim.test_parameter)
 
     def simulate_experiment_self_tuning_prediction_horizon(self, statistics_model: int = 0, print_check: bool = False) -> None:
         if statistics_model > 0:
@@ -661,7 +663,8 @@ class Experiment:
         x_lims[0] = 10 ** np.floor(np.log10(x_lims[0]))
         x_lims[1] = 10 ** np.ceil(np.log10(x_lims[1]))
         ax_architecture_compute_time.set_xlim(x_lims[0], x_lims[1])
-        ax_architecture_compute_time.set_xticks(x_lims)
+        # ax_architecture_compute_time.locator_params(axis='x', nbins=2)
+        # ax_architecture_compute_time.set_xticks(x_lims)
 
         ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + '\nSize')
         ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nSize')
@@ -2251,7 +2254,7 @@ def element_wise_min_max(v_ref_min, v_ref_max, v):
 
 def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_change, arch_count):
     cost_min, cost_max = element_wise_min_max(cost_min, cost_max, list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.cost.true))))
-    compute_time.append(np.average(list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.computation_time)))))
+    compute_time.append(np.average(S.list_from_dict_key_time(S.trajectory.computation_time)))
     S.architecture_count_number_of_sim_changes()
     S.architecture_active_count()
 
