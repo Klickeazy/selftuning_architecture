@@ -376,6 +376,7 @@ class Experiment:
         self.S_1[statistics_model].sim.sim_model = "fixed"
         self.S_1[statistics_model].plot_name = 'fixed arch'
         self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].sim.self_tuning_parameter = None if self.S_2[statistics_model].sim.test_parameter == 0 else self.S_2[statistics_model].sim.test_parameter
         self.S_2[statistics_model].sim.sim_model = "self_tuning"
         self.S_2[statistics_model].plot_name = 'self_tuning arch'
 
