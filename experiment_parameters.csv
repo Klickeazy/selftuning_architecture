@@ -55,3 +55,8 @@ experiment_no,test_model,test_parameter,number_of_nodes,network_model,network_pa
 54,fixed_vs_self_tuning,0,20,eval_squeeze,0.1,1,FALSE,0,2,2,2,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,FALSE
 55,self_tuning_prediction_horizon,2,20,eval_squeeze,0.1,1,FALSE,0,2,2,2,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,FALSE
 56,self_tuning_architecture_cost,0,20,eval_squeeze,0.1,1,FALSE,0,2,2,2,0,1,1,100,100,100,100,1,1,None,0,0,0,5,10,FALSE
+57,self_tuning_architecture_constraints,1,20,eval_squeeze,0.1,1,FALSE,0,3,3,2,0,1,1,100,100,100,100,1,1,None,0,0,0,5,10,FALSE
+58,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,100,100,100,100,1,1,None,0,0,0,5,10,FALSE
+59,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,100,100,100,100,1,1,None,0,0,0,10,10,FALSE
+60,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,100,100,100,100,1,1,None,0,0,0,2,10,FALSE
+61,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,100,100,100,100,1,1,None,0,0,0,20,10,FALSE

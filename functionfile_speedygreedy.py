@@ -146,7 +146,8 @@ class Experiment:
             'self_tuning_prediction_horizon': self.simulate_experiment_self_tuning_prediction_horizon,
             'self_tuning_architecture_cost': self.simulate_experiment_self_tuning_architecture_cost,
             'pointdistribution_openloop': self.simulate_experiment_fixed_vs_self_tuning_pointdistribution_openloop,
-            'self_tuning_architecture_cost_no_lim': self.simulate_experiment_self_tuning_architecture_cost_no_lim
+            'self_tuning_architecture_cost_no_lim': self.simulate_experiment_self_tuning_architecture_cost_no_lim,
+            'self_tuning_architecture_constraints': self.simulate_experiment_self_tuning_architecture_constraints
         }
 
         self.experiment_mapper_statistics = {
@@ -155,7 +156,8 @@ class Experiment:
             'statistics_self_tuning_prediction_horizon': 'self_tuning_prediction_horizon',
             'statistics_self_tuning_architecture_cost': 'self_tuning_architecture_cost',
             'statistics_self_tuning_architecture_cost_no_lim': 'self_tuning_architecture_cost_no_lim',
-            'statistics_pointdistribution_openloop': 'pointdistribution_openloop'
+            'statistics_pointdistribution_openloop': 'pointdistribution_openloop',
+            'statistics_self_tuning_architecture_constraints': 'self_tuning_architecture_constraints'
         }
 
     def initialize_table(self) -> None:
@@ -310,7 +312,7 @@ class Experiment:
     def simulate_experiment_wrapper(self, exp_no=None, print_check: bool = False) -> None:
         self.initialize_system_from_experiment_number(exp_no=exp_no)
 
-        print('Simulating Exp No: {}'.format(self.exp_no))
+        print('\nSimulating Exp No: {}'.format(self.exp_no))
 
         if self.S[0].sim.test_model in self.experiment_modifications_mapper:
             self.simulate_experiment(print_check=print_check)
@@ -409,11 +411,9 @@ class Experiment:
         self.S_1[statistics_model] = dc(self.S[statistics_model])
         self.S_1[statistics_model].sim.self_tuning_parameter = 1
         self.S_1[statistics_model].plot_name = 'self_tuning 1change'
-        print("1:", self.S_1[statistics_model].sim.test_parameter)
         self.S_2[statistics_model] = dc(self.S[statistics_model])
         self.S_2[statistics_model].sim.self_tuning_parameter = None if self.S[statistics_model].sim.test_parameter == 0 else self.S[statistics_model].sim.test_parameter
         self.S_2[statistics_model].plot_name = 'self_tuning bestchange'
-        print("2:", self.S_2[statistics_model].sim.test_parameter)
 
     def simulate_experiment_self_tuning_prediction_horizon(self, statistics_model: int = 0, print_check: bool = False) -> None:
         if statistics_model > 0:
@@ -457,14 +457,30 @@ class Experiment:
         self.S_2[statistics_model].scalecost_by_test_parameter()
         self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
 
+    def simulate_experiment_self_tuning_architecture_constraints(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        if statistics_model > 0:
+            self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
+
+        self.S[statistics_model].sim.sim_model = "self_tuning"
+        self.S[statistics_model].sim.self_tuning_parameter = None
+
+        self.S_1[statistics_model] = dc(self.S[statistics_model])
+        self.S_1[statistics_model].optimize_initial_architecture(print_check=print_check)
+        self.S_1[statistics_model].plot_name = r"self_tuning $|$arch$|\in [${},{}$]$".format(self.S_1[statistics_model].B.min, self.S_1[statistics_model].B.max)
+
+        self.S_2[statistics_model] = dc(self.S[statistics_model])
+        self.S_2[statistics_model].architecture_limit_set(min_set=self.S_2[statistics_model].sim.test_parameter)
+        self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
+        self.S_2[statistics_model].plot_name = r"self_tuning $|$arch$|\in [${},{}$]$".format(self.S_2[statistics_model].B.min, self.S_2[statistics_model].B.max)
+
     def plot_experiment(self, exp_no=None) -> None:
         self.initialize_system_from_experiment_number(exp_no=exp_no)
 
         print('\nPlotting Experiment No: {}'.format(self.exp_no))
 
-        if self.S[0].sim.test_model in ['fixed_vs_self_tuning', 'self_tuning_number_of_changes', 'self_tuning_prediction_horizon', 'self_tuning_architecture_cost', 'self_tuning_architecture_cost_no_lim']:
+        if self.S[0].sim.test_model in self.experiment_modifications_mapper:
             self.plot_comparison_exp_no()
-        elif self.S[0].sim.test_model in ['statistics_fixed_vs_self_tuning', 'statistics_self_tuning_number_of_changes', 'statistics_self_tuning_prediction_horizon', 'statistics_self_tuning_architecture_cost', 'statistics_pointdistribution_openloop', 'statistics_self_tuning_architecture_cost_no_lim']:
+        elif self.S[0].sim.test_model in self.experiment_mapper_statistics:
             self.plot_statistics_exp_no()
         else:
             raise Exception('Experiment not defined')
@@ -538,9 +554,8 @@ class Experiment:
         self.S_2[0].plot_compute_time(ax_in=ax_compute_time)
         ax_compute_time.set_yscale('log')
         y_lims = list(ax_compute_time.get_ylim())
-        y_lims[0] = 10 ** np.floor(np.log10(y_lims[0]))
-        y_lims[1] = 10 ** np.ceil(np.log10(y_lims[1]))
-        ax_compute_time.set_ylim(y_lims[0], y_lims[1])
+        ax_compute_time.locator_params(axis='y', subs=(1, ))
+        ax_compute_time.set_ylim(10 ** np.floor(np.log10(y_lims[0])), 10 ** np.ceil(np.log10(y_lims[1])))
         # ax_compute_time.yaxis.set_major_locator(MaxNLocator(2))
 
         ax_compute_time.set_ylabel('Compute\nTime (s)')
@@ -661,10 +676,8 @@ class Experiment:
 
         ax_architecture_compute_time.set_xscale('log')
         x_lims = list(ax_architecture_compute_time.get_xlim())
-        x_lims[0] = 10 ** np.floor(np.log10(x_lims[0]))
-        x_lims[1] = 10 ** np.ceil(np.log10(x_lims[1]))
-        ax_architecture_compute_time.set_xlim(x_lims[0], x_lims[1])
-        # ax_architecture_compute_time.locator_params(axis='x', nbins=2)
+        ax_architecture_compute_time.locator_params(axis='x', subs=(1, ))
+        ax_architecture_compute_time.set_xlim(10 ** np.floor(np.log10(x_lims[0])), 10 ** np.ceil(np.log10(x_lims[1])))
         # ax_architecture_compute_time.set_xticks(x_lims)
 
         ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + '\nSize')
