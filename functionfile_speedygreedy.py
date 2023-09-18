@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
-from matplotlib.ticker import MaxNLocator, FuncFormatter
+from matplotlib.ticker import MaxNLocator, FuncFormatter, LogFormatter, LogLocator, NullFormatter
 
 from time import process_time
 from copy import deepcopy as dc
@@ -138,6 +138,9 @@ class Experiment:
         self.parameter_table = pd.DataFrame()  # Parameter table from csv
         self.experiments_list = []  # List of experiments
         self.read_table_from_file()
+
+        # Plot parameters
+        self.plot_title_check = True
 
         # Simulation function mapper
         self.experiment_modifications_mapper = {
@@ -517,9 +520,10 @@ class Experiment:
         ax_cost.tick_params(axis="x", labelbottom=False)
         # ax_cost.yaxis.set_major_locator(MaxNLocator(2))
 
+        plt_title = None if not self.plot_title_check else f"Experiment No: {self.exp_no}"
         ax_exp_legend.legend(handles=[mpatches.Patch(color=self.S_1[0].plot.plot_parameters[self.S_1[0].plot.plot_system]['c'], label=self.S_1[0].plot_name),
                                       mpatches.Patch(color=self.S_2[0].plot.plot_parameters[self.S_2[0].plot.plot_system]['c'], label=self.S_2[0].plot_name)],
-                             loc='center', ncol=1, title='Experiment No:' + str(self.exp_no))
+                             loc='center', ncol=1, title=plt_title)
         ax_exp_legend.axis('off')
 
         self.S_1[0].plot_states(ax_in=ax_state)
@@ -574,13 +578,14 @@ class Experiment:
         sim_range = range(1, self.S[0].number_of_states + 1) if self.S[0].sim.test_model == 'statistics_pointdistribution_openloop' else range(1, 100 + 1)
 
         fig = plt.figure(tight_layout=True)
-        grid_outer = gs.GridSpec(3, 2, figure=fig, width_ratios=[1, 1], height_ratios=[1.5, 2, 1])
+        grid_outer = gs.GridSpec(2, 1, figure=fig, height_ratios=[3, 1])
+        grid_inner = gs.GridSpecFromSubplotSpec(2, 2, subplot_spec=grid_outer[0, 0], hspace=0.2, width_ratios=[1, 1], height_ratios=[1, 2])
 
-        ax_exp_legend = fig.add_subplot(grid_outer[0, 0])
-        ax_eigmodes = fig.add_subplot(grid_outer[0, 1])
-        ax_cost = fig.add_subplot(grid_outer[1, :])
+        ax_exp_legend = fig.add_subplot(grid_inner[0, 0])
+        ax_eigmodes = fig.add_subplot(grid_inner[0, 1])
+        ax_cost = fig.add_subplot(grid_inner[1, :])
 
-        grid_architecture = gs.GridSpecFromSubplotSpec(1, 5, subplot_spec=grid_outer[2, :], hspace=0)
+        grid_architecture = gs.GridSpecFromSubplotSpec(1, 5, subplot_spec=grid_outer[1, :], hspace=0)
         ax_architecture_B_count = fig.add_subplot(grid_architecture[0, 0])
         ax_architecture_C_count = fig.add_subplot(grid_architecture[0, 1], sharey=ax_architecture_B_count)
         ax_architecture_B_change = fig.add_subplot(grid_architecture[0, 2], sharey=ax_architecture_B_count)
@@ -625,9 +630,11 @@ class Experiment:
 
             self.dict_memory_clear(model_id=model_no)
 
+        plt_title = None if not self.plot_title_check else f"Experiment No: {self.exp_no}"
+
         ax_exp_legend.legend(handles=[mpatches.Patch(color=cstyle[0], label=r'$M_1$:' + m1_name),
                                       mpatches.Patch(color=cstyle[1], label=r'$M_2$:' + m2_name)],
-                             title='Experiment No:' + str(self.exp_no), loc='center')
+                             loc='center', title = plt_title)
         ax_exp_legend.axis('off')
 
         ax_cost.fill_between(range(0, self.S[0].sim.t_simulate), cost_min_1, cost_max_1, color=cstyle[0], alpha=0.4)
@@ -676,9 +683,12 @@ class Experiment:
 
         ax_architecture_compute_time.set_xscale('log')
         x_lims = list(ax_architecture_compute_time.get_xlim())
-        ax_architecture_compute_time.locator_params(axis='x', subs=(1, ))
+        # ax_architecture_compute_time.locator_params(axis='x', subs=(1, ))
         ax_architecture_compute_time.set_xlim(10 ** np.floor(np.log10(x_lims[0])), 10 ** np.ceil(np.log10(x_lims[1])))
-        # ax_architecture_compute_time.set_xticks(x_lims)
+        # ax_architecture_compute_time.xaxis.set_major_locator(LogLocator(base=10, subs=(1.0,), numticks=2))
+        # ax_architecture_compute_time.xaxis.set_major_formatter(LogFormatter(labelOnlyBase=True))
+        ax_architecture_compute_time.set_xticks([10 ** np.floor(np.log10(x_lims[0])),  10 ** np.ceil(np.log10(x_lims[1]))])
+        ax_architecture_compute_time.xaxis.set_minor_formatter(NullFormatter())
 
         ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + '\nSize')
         ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nSize')
