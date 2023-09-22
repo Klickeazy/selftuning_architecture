@@ -8,10 +8,10 @@ if __name__ == "__main__":
 
     # rerun = [20, 34, 31, 50]
 
-    exp_list = [34]
+    exp_list = [41]
 
-    run_flag = True
-    # run_flag = False
+    # run_flag = True
+    run_flag = False
 
     plot_flag = True
     # plot_flag = False

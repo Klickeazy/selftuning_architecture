@@ -326,14 +326,14 @@ class Experiment:
             raise Exception('Experiment not defined')
 
     def simulate_experiment(self, statistics_model: int = 0, print_check: bool = False, tqdm_check: bool = True) -> None:
-        if statistics_model > 0:
-            self.S[statistics_model] = System()
-            self.initialize_system_from_experiment_number()
-
         if self.S[0].sim.test_model in self.experiment_modifications_mapper:
             sim_function = self.experiment_modifications_mapper[self.S[0].sim.test_model]
         else:
             sim_function = self.experiment_modifications_mapper[self.experiment_mapper_statistics[self.S[0].sim.test_model]]
+
+        if statistics_model > 0 and self.S[0].sim.test_model not in ['pointdistribution_openloop']:
+            self.S[statistics_model] = System()
+            self.initialize_system_from_experiment_number()
 
         if self.S[0].sim.test_model == 'pointdistribution_openloop' or self.S[0].sim.test_model in self.experiment_mapper_statistics:
             sim_function(statistics_model=statistics_model, print_check=print_check)
