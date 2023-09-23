@@ -3,12 +3,10 @@ import functionfile_speedygreedy as ff
 if __name__ == "__main__":
     print('Code run start')
 
-    # exp_master_list = [22, 41, 19, 20, 34, 31, 47, 49, 50, 51, 59]
-    # exp_single_run = [52, 53, 54, 55, 56]
+    # exp_master_list = [34, 31, 47, 49, 50, 51, 59]
 
-    # rerun = [20, 34, 31, 50]
 
-    exp_list = [41]
+    exp_list = [4]
 
     # run_flag = True
     run_flag = False

@@ -124,12 +124,13 @@ class Experiment:
         self.process_pool_workers = None    # number of workers for processpool: none=max
 
         # Save folder for data dump
-        if socket.gethostname() == 'melap257805':
-            self.datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-        elif socket.gethostname() == 'DESKTOP-D6E65VO':
-            self.datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-        else:
-            self.datadump_folder_path = 'DataDump/'
+        # if socket.gethostname() == 'melap257805':
+        #     self.datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+        # elif socket.gethostname() == 'DESKTOP-D6E65VO':
+        #     self.datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
+        # else:
+        #     self.datadump_folder_path = 'DataDump/'
+        self.datadump_folder_path = 'DataDump/'
 
         # Save folder for images within the same git folder
         self.image_save_folder_path = 'Images/'
