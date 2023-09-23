@@ -670,6 +670,12 @@ class Experiment:
         a5 = ax_architecture_compute_time.boxplot([compute_time_2, compute_time_1],
                                                   labels=[r'$M_2$', r'$M_1$'], vert=False, widths=0.5)
 
+        for ax in (ax_architecture_B_count, ax_architecture_C_count):
+            ax.xaxis.set_major_locator(MaxNLocator(min_n_ticks=1, integer=True))
+
+        for ax in (ax_architecture_B_change, ax_architecture_C_change):
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
         for bplot in (a1, a2, a3, a4, a5):
             for patch, color in zip(bplot['medians'], [cstyle[1], cstyle[0]]):
                 patch.set_color(color)
