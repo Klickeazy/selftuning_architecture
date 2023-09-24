@@ -1,5 +1,6 @@
 experiment_no,test_model,test_parameter,number_of_nodes,network_model,network_parameter,rho,second_order,second_order_network,initial_architecture_size,architecture_constraint_min,architecture_constraint_max,second_order_architecture,Q_cost_scaling,R_cost_scaling,B_run_cost,C_run_cost,B_switch_cost,C_switch_cost,W_scaling,V_scaling,disturbance_model,disturbance_step,disturbance_number,disturbance_magnitude,prediction_time_horizon,X0_scaling,multiprocessing
 1,fixed_vs_self_tuning,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,10,10,FALSE
 2,statistics_pointdistribution_openloop,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,TRUE
-3,statistics_fixed_vs_self_tuning,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,1,TRUE
-4,statistics_self_tuning_number_of_changes,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,1,TRUE
+3,statistics_fixed_vs_self_tuning,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,TRUE
+4,self_tuning_number_of_changes,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,FALSE
+5,statistics_self_tuning_number_of_changes,0,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,5,10,TRUE
