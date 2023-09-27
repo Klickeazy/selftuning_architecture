@@ -1,11 +1,22 @@
-# Speedy Greedy Algorithm
+# Architecture Selection for Self-Tuning Optimal Control of Networks
+
+
 
 Simultaneous greedy selection and rejection algorithm on multi-metric costs for run-time (online) architecture selection in networks
 
 ## Architecture Selection
 
-For a given system $$x_{t+1} = Ax_t + B_S u_t$$
-
+Consider a graph $\mathcal{G}=(\mathcal{V},\mathcal{E})$, with $\mathcal{V}$ nodes connected by $\mathcal{E}$ edges. The dynamics of the network system are
+$$x_{t+1} = Ax_t + B_{S_t} u_t + w_t$$
+$$y_t = C_{S^{'}_t} x_t + v_t$$
+where at time $t$:
+- $x_t$ is the vector of states
+- $y_t$ is the vector of measurements
+- $u_t$ is the vector of inputs
+- $w_t, v_t$ are i.i.d. zero-mean process and measurment noises
+- $A$ is the dynamics derived from the weighted adjacency matrix of network $\mathcal{G}$
+- $B_S$ is the control input matrix formed by columns of actuators in $S_t$. For all available actuators $\mathcal{B}$, $S_t \subseteq \mathcal{B}$ is the active set of actuators at the current time step
+- $C_{S'_ t}$ is the measurement matrix formed by rows of sensors in $S'_ t$. For all available sensors $\mathcal{C}$, $S'_ t \subseteq \mathcal{C}$ is the active set of sensors at the current time step
 
 
 
@@ -20,32 +31,4 @@ Exhaustive search for combinatorial optimization of solutions is not computation
 
 
 
-### Conda Environment - Python 3.10.8 packages
-Updated on: 4th Jan 2023
 
-Packages
-- Numpy
-- Scipy
-- Networkx
-- Matplotlib
-
-
-##### Option 1 - build from [Py3_10.yml](PyEnvironment\Py3_10.yml)
-Navigate terminal to folder and create environment using:
-
-    conda env create -f Py3_10.yml
-
-Update an existing *Py3_10* environment using:
-
-	conda env update -f Py3_10.yml --prune
-
-You can export an environment using:
-
-    conda env export > Py3_10.yml
-
-Note: _Py3_10_ is the name of the environment. You may choose to rename this.
-
-
-##### Option 2 - build from Anaconda backup package [Py3_10_condabackup.yaml](PyEnvironment/Py3_10_condabackup.yaml)
-
-Use _Import_ in Anaconda Navigator > Environment and navigate to file
