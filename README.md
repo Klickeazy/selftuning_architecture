@@ -4,12 +4,12 @@ Supporting documentation for "Architecture Selection for Self-Tuning Optimal Con
 
 ## Python package requirements
 The code is created and tested on Python 3.11.3
-Additional package requirements are provided in the *requirements.txt* file
+Additional package requirements are provided in the [requirements.txt](requirements.txt) file
 
 ## Run code
-The base execution code is provided in *run_code.py* with *exp_no=[1,9]* corresponding to the examples included in the main paper.
-The Jupyter notebook *numerical_analysis.ipynb* contains more extensive numerical analysis and explanations for the experiment parameters and test cases.
+The base execution code is provided in [run_code.py](run_code.py) for *exp_no=[1,9]* corresponding to the examples included in the main paper.
+The Jupyter notebook [numerical_analysis.ipynb](numerical_analysis.ipynb) contains more extensive numerical analysis and explanations for the experiment parameters and test cases.
 
 ## DataDump
-Pre-generated images for all provided experiments are available in the Images folder. Simulation data for all provided experiments are available in the linked repository. This is recommended for the statistical experiments which may take a long time to execute otherwise.
+Pre-generated images for all provided experiments are available in the Images folder. Simulation data for all provided experiments are available in the [selftuning_architecture_datadump](https://github.com/Klickeazy/selftuning_architecture_datadump). This is recommended for the statistical experiments which have long execution times.
 After cloning this repository, copy the contents of the DataDump folder from the linked repository to the DataDump folder of this repository to run the code.
