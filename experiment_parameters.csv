@@ -7,5 +7,6 @@ experiment_no,test_model,test_parameter,number_of_nodes,network_model,network_pa
 6,self_tuning_prediction_horizon,5,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,1,10,FALSE
 7,statistics_self_tuning_prediction_horizon,5,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,0,0,0,0,1,1,None,0,0,0,1,10,TRUE
 8,self_tuning_architecture_cost_no_lim,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,TRUE
-9,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,100,100,100,100,1,1,None,0,0,0,20,10,FALSE
+9,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,FALSE
 10,statistics_self_tuning_architecture_cost_no_lim,0,50,eval_squeeze,0.1,1,FALSE,0,5,1,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,TRUE
+11,self_tuning_architecture_constraints,1,50,eval_squeeze,0.1,1,FALSE,0,5,5,5,0,1,1,500,500,500,500,1,1,None,0,0,0,5,10,TRUE

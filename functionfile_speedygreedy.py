@@ -11,6 +11,7 @@ from matplotlib.ticker import MaxNLocator, FuncFormatter, LogFormatter, LogLocat
 from time import process_time
 from copy import deepcopy as dc
 import pandas as pd
+import dbm
 import shelve
 import itertools
 import concurrent.futures
@@ -675,7 +676,7 @@ class Experiment:
             ax.xaxis.set_major_locator(MaxNLocator(min_n_ticks=1, integer=True))
 
         for ax in (ax_architecture_B_change, ax_architecture_C_change):
-            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.xaxis.set_major_locator(MaxNLocator(min_n_ticks=1, integer=True))
 
         for bplot in (a1, a2, a3, a4, a5):
             for patch, color in zip(bplot['medians'], [cstyle[1], cstyle[0]]):
@@ -2303,8 +2304,11 @@ def run_experiment(exp_no=None, run_check: bool = True, plot_check: bool = True)
     if run_check:
         Exp.simulate_experiment_wrapper(exp_no=exp_no)
 
-    if plot_check:
-        Exp.plot_experiment(exp_no=exp_no)
+    try:
+        if plot_check:
+            Exp.plot_experiment(exp_no=exp_no)
+    except dbm.error:
+        print('No code run data for plotting')
 
 
 if __name__ == "__main__":
