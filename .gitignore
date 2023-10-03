@@ -1,8 +1,7 @@
 # Data dump files for git data mgmt
-.bin
-.bak
-.dir
-DataDump/
+*.bin
+DataDump/statistics
+*.ffs_db
 *.prof
 
 # Byte-compiled / optimized / DLL files
