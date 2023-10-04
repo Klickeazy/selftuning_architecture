@@ -483,14 +483,17 @@ class Experiment:
         self.S[statistics_model].sim.sim_model = "self_tuning"
         self.S[statistics_model].sim.self_tuning_parameter = None
 
+        # print('Check 1')
         self.S_1[statistics_model] = dc(self.S[statistics_model])
         self.S_1[statistics_model].optimize_initial_architecture(print_check=print_check)
         self.S_1[statistics_model].plot_name = r"self_tuning $|$arch$|\in [${},{}$]$".format(self.S_1[statistics_model].B.min, self.S_1[statistics_model].B.max)
+        # print(f"1: {self.S_1[statistics_model].B.min} | {self.S_1[statistics_model].B.max}")
 
         self.S_2[statistics_model] = dc(self.S[statistics_model])
         self.S_2[statistics_model].architecture_limit_set(min_set=self.S_2[statistics_model].sim.test_parameter)
         self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
         self.S_2[statistics_model].plot_name = r"self_tuning $|$arch$|\in [${},{}$]$".format(self.S_2[statistics_model].B.min, self.S_2[statistics_model].B.max)
+        # print(f"2: {self.S_2[statistics_model].B.min} | {self.S_2[statistics_model].B.max}")
 
     def plot_experiment(self, exp_no=None) -> None:
         self.initialize_system_from_experiment_number(exp_no=exp_no)
