@@ -432,7 +432,7 @@ class Experiment:
         self.S_1[statistics_model].plot_name = 'self_tuning 1change'
         self.S_2[statistics_model] = dc(self.S[statistics_model])
         self.S_2[statistics_model].sim.self_tuning_parameter = None if self.S[statistics_model].sim.test_parameter == 0 else self.S[statistics_model].sim.test_parameter
-        self.S_2[statistics_model].plot_name = 'self_tuning bestchange'
+        self.S_2[statistics_model].plot_name = 'self_tuning bestchange' if self.S_2[statistics_model].sim.self_tuning_parameter is None else f"self_tuning {self.S_2[statistics_model].sim.self_tuning_parameter}changes"
 
     def simulate_experiment_self_tuning_prediction_horizon(self, statistics_model: int = 0, print_check: bool = False) -> None:
         if statistics_model > 0:
