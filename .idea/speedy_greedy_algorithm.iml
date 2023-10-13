@@ -5,7 +5,7 @@
       <excludeFolder url="file://$MODULE_DIR$/DataDump" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
-    <orderEntry type="jdk" jdkName="D:\Anaconda\envs\py_3_11_x" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Py3_11_3" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">

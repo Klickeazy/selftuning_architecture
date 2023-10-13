@@ -260,6 +260,11 @@ class Experiment:
             exp_no = self.exp_no
         self.initialize_system_from_experiment_number(exp_no)
         self.system_model_from_memory_sim_model(self.S[0].model_name)
+        if self.S_1[0].plot is None:
+            self.S_1[0].plot = PlotParameters()
+
+        if self.S_2[0].plot is None:
+            self.S_2[0].plot = PlotParameters()
 
     def system_model_to_memory_gen_model(self) -> None:  # Store model generated from experiment parameters
         shelve_filename = self.datadump_folder_path + 'gen_' + self.S[0].model_name
@@ -501,20 +506,15 @@ class Experiment:
         print('\nPlotting Experiment No: {}'.format(self.exp_no))
 
         if self.S[0].sim.test_model in self.experiment_modifications_mapper:
+            self.retrieve_experiment()
             self.plot_comparison_exp_no()
+            self.S_2[0].plot_network()
         elif self.S[0].sim.test_model in self.experiment_mapper_statistics:
             self.plot_statistics_exp_no()
         else:
             raise Exception('Experiment not defined')
 
     def plot_comparison_exp_no(self) -> None:
-        self.retrieve_experiment()
-
-        if self.S_1[0].plot is None:
-            self.S_1[0].plot = PlotParameters()
-
-        if self.S_2[0].plot is None:
-            self.S_2[0].plot = PlotParameters()
 
         fig = plt.figure(figsize=(6, 8), tight_layout=True)
         outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 7], width_ratios=[1, 1])
@@ -1599,9 +1599,9 @@ class System:
         self.plot.network_plot_limits = [[min(x) * scale, max(x) * scale], [min(y) * scale, max(y) * scale]]
 
     def generate_network_architecture_graph_matrix(self, mA: float = 1, mB: float = 1, mC: float = 1) -> None:
-        A_mat = np.array((self.A.adjacency_matrix > 0) * mA, dtype=float)
-        B_mat = np.array((self.B.active_matrix > 0) * mB, dtpye=float)
-        C_mat = np.array((self.C.active_matrix > 0) * mC, dtpye=float)
+        A_mat = np.array((self.A.adjacency_matrix > 0) * mA)
+        B_mat = np.array((self.B.active_matrix > 0) * mB)
+        C_mat = np.array((self.C.active_matrix > 0) * mC)
 
         net_matrix = np.block([[A_mat, B_mat, C_mat.T],
                                [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))),
