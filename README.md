@@ -6,6 +6,8 @@ Paper authors: Karthik Ganapathy, Iman Shames, Mathias Hudoba de Badyn, Tyler Su
 
 Code author: Karthik Ganapathy
 
+Check latest release for working code
+
 ## Python package requirements
 The code is created and tested on Python 3.11.3.
 
