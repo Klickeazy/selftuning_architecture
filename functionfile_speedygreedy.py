@@ -508,7 +508,7 @@ class Experiment:
         if self.S[0].sim.test_model in self.experiment_modifications_mapper:
             self.retrieve_experiment()
             self.plot_comparison_exp_no()
-            self.S_2[0].plot_network()
+            # self.S_2[0].plot_network()
         elif self.S[0].sim.test_model in self.experiment_mapper_statistics:
             self.plot_statistics_exp_no()
         else:
@@ -551,7 +551,7 @@ class Experiment:
 
         self.S_1[0].plot_architecture_history(arch='B', ax_in=ax_B_scatter)
         self.S_2[0].plot_architecture_history(arch='B', ax_in=ax_B_scatter)
-        ax_B_scatter.set_ylabel('Actuator\nPosition\n' + r'$S_t$')
+        ax_B_scatter.set_ylabel('Actuator\nPosition\n' + r'$\mathcal{A}_t$')
         ax_B_scatter.tick_params(axis="x", labelbottom=False)
 
         self.S_1[0].plot_architecture_history(arch='C', ax_in=ax_C_scatter)
@@ -565,12 +565,12 @@ class Experiment:
 
         self.S_1[0].plot_architecture_count(ax_in=ax_B_count, arch='B')
         self.S_2[0].plot_architecture_count(ax_in=ax_B_count, arch='B')
-        ax_B_count.set_ylabel('Actuator\nCount\n' + r'$|S_t|$')
+        ax_B_count.set_ylabel('Actuator\nCount\n' + r'$\mathcal{A}_t$')
         ax_B_count.tick_params(axis="x", labelbottom=False)
 
         self.S_1[0].plot_architecture_count(ax_in=ax_C_count, arch='C')
         self.S_2[0].plot_architecture_count(ax_in=ax_C_count, arch='C')
-        ax_C_count.set_ylabel('Sensor\nCount\n' + r'$|S$' + '\'' + '$_t|$')
+        ax_C_count.set_ylabel('Sensor\nCount\n' + r'$S_t$')
         ax_C_count.tick_params(axis="x", labelbottom=False)
 
         self.S_1[0].plot_compute_time(ax_in=ax_compute_time)
@@ -715,10 +715,10 @@ class Experiment:
         ax_architecture_compute_time.set_xticks([10 ** np.floor(np.log10(x_lims[0])),  10 ** np.ceil(np.log10(x_lims[1]))])
         ax_architecture_compute_time.xaxis.set_minor_formatter(NullFormatter())
 
-        ax_architecture_B_count.set_xlabel('Avg ' + r'$|S_t|$' + '\nSize')
-        ax_architecture_C_count.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nSize')
-        ax_architecture_B_change.set_xlabel('Avg ' + r'$|S_t|$' + '\nChanges')
-        ax_architecture_C_change.set_xlabel('Avg ' + r'$|S$' + '\'' + r'$|$' + '\nChanges')
+        ax_architecture_B_count.set_xlabel('Avg ' + r'$\mathcal{A}_t$' + '\nSize')
+        ax_architecture_C_count.set_xlabel('Avg ' + r'$S_t$' + '\nSize')
+        ax_architecture_B_change.set_xlabel('Avg ' + r'$\mathcal{A}_t - \mathcal{A}_{t-1}$' + '\nChanges')
+        ax_architecture_C_change.set_xlabel('Avg ' + r'$S_t - S_{t-1}$' + '\nChanges')
         ax_architecture_compute_time.set_xlabel('Avg Compute \n Time (s)')
 
         plt.show()
@@ -1893,15 +1893,15 @@ class System:
             if state == 'state':
                 x = self.ndarray_from_dict_key_states(self.trajectory.x)
                 ls = 'solid'
-                labeler = r'$|x_t|_2$'
+                labeler = r'$|x(t)|_2$'
             elif state == 'estimate':
                 x = self.ndarray_from_dict_key_states(self.trajectory.x_estimate)
                 ls = 'dashdot'
-                labeler = r'$|\hat{x}_t|_2$'
+                labeler = r'$|\hat{x}(t)|_2$'
             elif state == 'error':
                 x = self.ndarray_from_dict_key_states(self.trajectory.error)
                 ls = 'dashed'
-                labeler = r'$|x_t - \hat{x}_t|_2$'
+                labeler = r'$|x(t) - \hat{x}(t)|_2$'
             else:
                 raise Exception('Check iterator')
 
