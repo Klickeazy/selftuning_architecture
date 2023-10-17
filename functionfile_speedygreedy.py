@@ -180,7 +180,7 @@ class Experiment:
         }
 
     def initialize_table(self) -> None:
-        # Initialize parameter csv file from nothing
+        # Initialize parameter csv file from nothing - FOR BUGFIXING ONLY
         print('Initializing table with default parameters')
         self.parameter_values = [[k] for k in self.default_parameter_datatype_map.values()]
         self.parameter_table = pd.DataFrame(dict(zip(self.parameter_keys, self.parameter_values)))
@@ -196,6 +196,7 @@ class Experiment:
             raise Exception("Dimension mismatch - values: {}, datatype: {}, keys: {}".format(len(self.parameter_values), len(self.parameter_datatypes), len(self.parameter_keys)))
 
     def check_experiment_number(self) -> None:
+        # Ensure experiment number is in the tables list
         if self.exp_no not in self.experiments_list:
             raise Exception('Invalid experiment number')
 
@@ -209,16 +210,19 @@ class Experiment:
             self.experiments_list = self.parameter_table.index
 
     def read_parameters_from_table(self) -> None:
+        # Read parameters from table
         if not isinstance(self.parameter_table, pd.DataFrame):
             raise Exception('Not a pandas frame')
 
         self.parameter_values = [self.exp_no] + [k for k in self.parameter_table.loc[self.exp_no]]
 
     def parameter_value_map(self) -> None:
+        # Mapping list for parameters to manage default csv values to python values
         self.parameter_values = [list(map(d, [v]))[0] if v is not None else None for d, v in
                                  zip(self.parameter_datatypes, self.parameter_values)]
 
     def write_parameters_to_table(self) -> None:
+        # Write a parameter dictionary to an experiment table - FOR BUGFIXING ONLY
         if len(self.parameter_values) == 0:
             raise Exception('No experiment parameters provided')
         self.check_dimensions()
@@ -235,16 +239,19 @@ class Experiment:
             self.write_table_to_file()
 
     def write_table_to_file(self) -> None:
+        # Write an experiment table to csv - FOR BUGFIXING ONLY
         self.parameter_table.to_csv(self.parameters_save_filename)
         print('Printing done')
 
-    def return_keys_values(self):
-        return self.parameter_values, self.parameter_keys
+    # def return_keys_values(self):
+    #     return self.parameter_values, self.parameter_keys
 
     def display_test_parameters(self) -> None:
+        # Print parameter table
         print(self.parameter_table)
 
     def initialize_system_from_experiment_number(self, exp_no=None) -> None:
+        # Define model S[0] for given experiment number
         if exp_no is not None:
             self.exp_no = exp_no
         self.check_experiment_number()
@@ -256,6 +263,7 @@ class Experiment:
             raise Exception('Experiment not defined')
 
     def retrieve_experiment(self, exp_no=None) -> None:
+        # Retrieve simulated experiment from datadump
         if exp_no is None:
             exp_no = self.exp_no
         self.initialize_system_from_experiment_number(exp_no)
@@ -266,13 +274,15 @@ class Experiment:
         if self.S_2[0].plot is None:
             self.S_2[0].plot = PlotParameters()
 
-    def system_model_to_memory_gen_model(self) -> None:  # Store model generated from experiment parameters
+    def system_model_to_memory_gen_model(self) -> None:
+        # Store model generated from experiment parameters
         shelve_filename = self.datadump_folder_path + 'gen_' + self.S[0].model_name
         with shelve.open(shelve_filename, writeback=True) as shelve_data:
             shelve_data['s'] = self.S[0]
         print('\nShelving gen model: {}'.format(shelve_filename))
 
-    def system_model_from_memory_gen_model(self, model, print_check=False):  # Retrieve model generated from experiment parameters
+    def system_model_from_memory_gen_model(self, model, print_check=False):
+        # Retrieve model generated from experiment parameters
         shelve_filename = self.datadump_folder_path + 'gen_' + model
         if print_check:
             print('\nReading gen model: {}'.format(shelve_filename))
@@ -281,7 +291,8 @@ class Experiment:
         if not isinstance(self.S[0], System):
             raise Exception('System model error')
 
-    def system_model_to_memory_sim_model(self) -> None:  # Store simulated models
+    def system_model_to_memory_sim_model(self) -> None:
+        # Store simulated models
         shelve_filename = self.datadump_folder_path + 'sim_' + self.S[0].model_name
         print('\nShelving sim model: {}'.format(shelve_filename))
         with shelve.open(shelve_filename, writeback=True) as shelve_data:
@@ -289,7 +300,8 @@ class Experiment:
             shelve_data['s1'] = self.S_1[0]
             shelve_data['s2'] = self.S_2[0]
 
-    def system_model_from_memory_sim_model(self, model):  # Retrieve simulated models
+    def system_model_from_memory_sim_model(self, model):
+        # Retrieve simulated models
         shelve_filename = self.datadump_folder_path + 'sim_' + model
         print('\nReading sim model: {}'.format(shelve_filename))
         with shelve.open(shelve_filename, flag='r') as shelve_data:
@@ -303,6 +315,7 @@ class Experiment:
         self.S_2[0].plot = PlotParameters(2)
 
     def system_model_to_memory_statistics(self, model_id: int, print_check: bool = False) -> None:
+        # Store simulated statistics model to memory
         shelve_filename = self.datadump_folder_path + 'statistics/' + self.S[0].model_name
         if not os.path.isdir(shelve_filename):
             os.makedirs(shelve_filename)
@@ -315,6 +328,7 @@ class Experiment:
             print('\nShelving model: {}'.format(shelve_filename))
 
     def data_from_memory_statistics(self, model_id: int = None, print_check=False):
+        # Retrieve simulated statistics model from memory
         if self.exp_no is None:
             raise Exception('Experiment not provided')
 
@@ -329,11 +343,13 @@ class Experiment:
             print('\nModel read done: {}'.format(shelve_filename))
 
     def dict_memory_clear(self, model_id : int = 0):
+        # Clear up memory after using statistics model
         for S in (self.S, self.S_1, self.S_2):
             if model_id in S:
                 del S[model_id]
 
     def simulate_experiment_wrapper(self, exp_no=None, print_check: bool = False) -> None:
+        # Wrapper function to simulate experiment based on specified test_model
         self.initialize_system_from_experiment_number(exp_no=exp_no)
 
         print('\nSimulating Exp No: {}'.format(self.exp_no))
@@ -347,6 +363,7 @@ class Experiment:
             raise Exception('Experiment not defined')
 
     def simulate_experiment(self, statistics_model: int = 0, print_check: bool = False, tqdm_check: bool = True) -> None:
+        # Experiment wrapper to create + modify, simulate and save test cases
         if self.S[0].sim.test_model in self.experiment_modifications_mapper:
             sim_function = self.experiment_modifications_mapper[self.S[0].sim.test_model]
         else:
@@ -371,8 +388,8 @@ class Experiment:
             self.system_model_to_memory_statistics(statistics_model)
             self.dict_memory_clear(model_id=statistics_model)
 
-    def simulate_statistics_experiment(self, print_check: bool = False, start_idx: int = 1,
-                                       number_of_samples: int = 100) -> None:
+    def simulate_statistics_experiment(self, print_check: bool = False, start_idx: int = 1, number_of_samples: int = 100) -> None:
+        # wrapper to simulate statistics experiments sequentially using a loop or in parallel using a ProcessPoolExecutor
         if self.S[0].sim.test_model == 'statistics_pointdistribution_openloop':
             self.system_model_to_memory_gen_model()
             idx_range = list(range(1, 1 + self.S[0].number_of_states))
@@ -393,6 +410,7 @@ class Experiment:
                 self.simulate_experiment(statistics_model=test_no, print_check=print_check, tqdm_check=True)
 
     def simulate_experiment_fixed_vs_self_tuning(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        # test_parameter is the number of optimizing greedy swap changes for self-tuning architecture
         if statistics_model > 0:
             self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
@@ -407,11 +425,8 @@ class Experiment:
         self.S_2[statistics_model].plot_name = 'self_tuning arch'
 
     def simulate_experiment_fixed_vs_self_tuning_pointdistribution_openloop(self, statistics_model: int = 0, print_check: bool = False) -> None:
-
-        # if statistics_model is not 0:
-        #     self.system_model_from_memory_gen_model(self.S[0].model_name)
-        # self.S[0].sim.self_tuning_parameter = None if self.S[0].sim.test_parameter == 0 else self.S[0].sim.test_parameter
-
+        # test fixed vs self-tuning after setting the true initial state based on the statistics model
+        # test_parameter is the number of optimizing greedy swap changes for self-tuning architecture
         self.S[statistics_model] = dc(self.S[0])
         self.S[statistics_model].initialize_trajectory(statistics_model - 1)
 
@@ -426,6 +441,7 @@ class Experiment:
         self.S_2[statistics_model].plot_name = 'self_tuning arch'
 
     def simulate_experiment_self_tuning_number_of_changes(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        # compare 1 vs test_parameter number of changes for self-tuning architecture
         if statistics_model > 0:
             self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
@@ -440,6 +456,7 @@ class Experiment:
         self.S_2[statistics_model].plot_name = 'self_tuning bestchange' if self.S_2[statistics_model].sim.self_tuning_parameter is None else f"self_tuning {self.S_2[statistics_model].sim.self_tuning_parameter}changes"
 
     def simulate_experiment_self_tuning_prediction_horizon(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        # compare Tp vs test_parameter*Tp simulation horizon for self-tuning architecture
         if statistics_model > 0:
             self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
@@ -453,6 +470,8 @@ class Experiment:
         self.S_2[statistics_model].plot_name = 'self_tuning Tp' + str(self.S_2[statistics_model].sim.t_predict)
 
     def simulate_experiment_self_tuning_architecture_cost(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        # compare base vs test_parameter*base running and switching costs
+        # Check if base-costs are non-zero for valid scaling
         if statistics_model > 0:
             self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
@@ -467,6 +486,7 @@ class Experiment:
         self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
 
     def simulate_experiment_self_tuning_architecture_cost_no_lim(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        # compare base vs test_parameter*base running and switching costs for unconstrainted architecture
         if statistics_model > 0:
             self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
@@ -482,6 +502,7 @@ class Experiment:
         self.S_2[statistics_model].optimize_initial_architecture(print_check=print_check)
 
     def simulate_experiment_self_tuning_architecture_constraints(self, statistics_model: int = 0, print_check: bool = False) -> None:
+        # compare [base,high] vs [test_parameter*base,high] architecture constraints
         if statistics_model > 0:
             self.S[statistics_model].initialize_system_from_experiment_parameters(self.parameter_values, self.parameter_keys)
 
@@ -501,6 +522,7 @@ class Experiment:
         # print(f"2: {self.S_2[statistics_model].B.min} | {self.S_2[statistics_model].B.max}")
 
     def plot_experiment(self, exp_no=None) -> None:
+        # Plotting wrapper for experiments
         self.initialize_system_from_experiment_number(exp_no=exp_no)
 
         print('\nPlotting Experiment No: {}'.format(self.exp_no))
@@ -508,14 +530,13 @@ class Experiment:
         if self.S[0].sim.test_model in self.experiment_modifications_mapper:
             self.retrieve_experiment()
             self.plot_comparison_exp_no()
-            # self.S_2[0].plot_network()
         elif self.S[0].sim.test_model in self.experiment_mapper_statistics:
             self.plot_statistics_exp_no()
         else:
             raise Exception('Experiment not defined')
 
     def plot_comparison_exp_no(self) -> None:
-
+        # Plot wrapper for a single experiment
         fig = plt.figure(figsize=(6, 8), tight_layout=True)
         outer_grid = gs.GridSpec(2, 2, figure=fig, height_ratios=[1, 7], width_ratios=[1, 1])
 
@@ -592,7 +613,7 @@ class Experiment:
         print('\nImage saved: {}\n'.format(save_path))
 
     def plot_statistics_exp_no(self) -> None:
-
+        # Plot wrapper for statistics experiment
         self.initialize_system_from_experiment_number()
         sim_range = range(1, self.S[0].number_of_states + 1) if self.S[0].sim.test_model == 'statistics_pointdistribution_openloop' else range(1, 100 + 1)
 
@@ -734,11 +755,13 @@ def coin_toss() -> bool:
 
 
 def compare_lists(list1: list, list2: list) -> dict:
+    # Find elements unique to each list and common to both lists
     return {'only1': [k for k in list1 if k not in list2], 'only2': [k for k in list2 if k not in list1],
             'both': [k for k in list1 if k in list2]}
 
 
 def architecture_iterator(arch=None) -> list:
+    # Iterate over either B, C or both
     if type(arch) == list and len(arch) == 1:
         arch = arch[0]
     arch = [arch] if arch in ['B', 'C'] else ['B', 'C'] if (
@@ -749,6 +772,7 @@ def architecture_iterator(arch=None) -> list:
 
 
 def normalize_columns_of_matrix(A_mat: np.ndarray) -> np.ndarray:
+    # Normalize columns of a matrix - used for eigenvector matrix normalization
     for i in range(0, np.shape(A_mat)[0]):
         if np.linalg.norm(A_mat[:, i]) != 0:
             A_mat[:, i] /= np.linalg.norm(A_mat[:, i])
@@ -756,6 +780,7 @@ def normalize_columns_of_matrix(A_mat: np.ndarray) -> np.ndarray:
 
 
 class PlotParameters:
+    # Plot values and parameters - updated when simulated systems are read from memory
     def __init__(self, sys_stage: int = 0):
         self.plot_system = sys_stage
         self.predicted_cost, self.true_cost = [], []
@@ -926,11 +951,13 @@ class System:
         self.plot_name = None
 
     def copy_from_system(self, ref_sys):
+        # Dict based deep copy from ref_sys
         if not isinstance(ref_sys, System):
             raise Exception('Check system')
         self.__dict__.update(ref_sys.__dict__)
 
     def initialize_system_from_experiment_parameters(self, experiment_parameters, experiment_keys) -> None:
+        # Create model from experiment parameters
 
         parameters = dict(zip(experiment_keys, experiment_parameters))
 
@@ -1035,6 +1062,7 @@ class System:
         self.trajectory.display_values()
 
     def adjacency_matrix_initialize(self) -> None:
+        # Create adjacency matrix based on network_model and network_parameters
         if self.A.network_model not in ['rand', 'ER', 'BA', 'path', 'cycle', 'eval_squeeze', 'eval_bound']:
             raise Exception('Network model not defined: {}'.format(self.A.network_model))
 
@@ -1105,12 +1133,14 @@ class System:
             self.A.adjacency_matrix += np.identity(self.number_of_nodes)
 
     def evaluate_modes(self) -> None:
+        # Find open loop eigenvalues, eigenvectors and stable/unstable modes
         self.A.open_loop_eig_vals = np.sort(np.abs(np.linalg.eigvals(self.A.A_mat)))
         _, self.A.open_loop_eig_vecs = np.linalg.eig(self.A.A_mat)
         self.A.open_loop_eig_vecs = normalize_columns_of_matrix(self.A.open_loop_eig_vecs)
         self.A.number_of_non_stable_modes = len([e for e in self.A.open_loop_eig_vals if e >= 1])
 
     def rescale(self) -> None:
+        # Scale dynamics matrix to rho*normalized_spectrum
         if self.A.rho is not None:
             self.A.A_mat = self.A.rho * self.A.adjacency_matrix / np.max(
                 np.abs(np.linalg.eigvals(self.A.adjacency_matrix)))
@@ -1118,6 +1148,7 @@ class System:
             self.A.A_mat = self.A.adjacency_matrix
 
     def second_order_matrix(self) -> None:
+        # second order matrix of either first order or second order states
         if self.A.second_order:
             if self.A.second_order_network_type == 1:
 
@@ -1132,11 +1163,13 @@ class System:
                 raise SecondOrderError()
 
     def rescale_wrapper(self) -> None:
+        # wrapper to define dynamics matrix, rescale and evaluate open-loop dynamics
         self.rescale()
         self.second_order_matrix()
         self.evaluate_modes()
 
     def initialize_active_matrix(self, arch=None) -> None:
+        # Initialize architecture matrix as zeros
         for a in architecture_iterator(arch):
             if a == 'B':
                 self.B.active_matrix = np.zeros((self.number_of_states, len(self.B.active_set)))
@@ -1144,6 +1177,7 @@ class System:
                 self.C.active_matrix = np.zeros((len(self.C.active_set), self.number_of_states))
 
     def initialize_available_vectors_as_basis_vectors(self, arch=None) -> None:
+        # Set all available architecture as normalized basis vectors of 1s and 0s - rows or column vectors suitably
         for a in architecture_iterator(arch):
             set_mat = np.identity(self.number_of_states)
 
@@ -1176,6 +1210,7 @@ class System:
                 self.C.indicator_vector_current = np.zeros(self.C.number_of_available, dtype=int)
 
     def initialize_random_architecture_active_set(self, initialize_random: int, arch=None) -> None:
+        # Randomize initial architecture of fixed size from available choices
         for a in architecture_iterator(arch):
             if a == 'B':
                 self.B.active_set = list(np.sort(
@@ -1185,6 +1220,8 @@ class System:
                     np.random.default_rng().choice(self.C.available_indices, size=initialize_random, replace=False)))
 
     def initialize_disturbance(self) -> None:
+        # Generate realizations of normally distributed process and measurement noises
+        # Generate realizations of unmodelled process and/or measurement noise
         self.disturbance.W = np.identity(self.number_of_states) * self.disturbance.W_scaling
         self.disturbance.V = np.identity(self.number_of_states) * self.disturbance.V_scaling
 
@@ -1209,6 +1246,8 @@ class System:
                         [coin_toss() for _ in range(0, self.number_of_states)])
 
     def initialize_trajectory(self, x0_idx=None) -> None:
+        # Initialize true, estimate and error state vectors
+        # Initializes along specified eigenvector of open-loop dynamics
         self.trajectory.X0_covariance = np.identity(self.number_of_states) * self.trajectory.X0_scaling
 
         if x0_idx is None:
@@ -1229,6 +1268,7 @@ class System:
         self.trajectory.error_2norm = {0: np.linalg.norm(self.trajectory.error[0])}
 
     def architecture_limit_set(self, arch=None, min_set: int = None, max_set: int = None) -> None:
+        # Sets specific values for lower and upper bounds on architecture
         for a in architecture_iterator(arch):
             if a == 'B':
                 self.B.min = self.B.number_of_available if self.B.min is None else min_set if min_set is not None else self.B.min
@@ -1238,6 +1278,7 @@ class System:
                 self.C.max = self.C.number_of_available if self.C.max is None else max_set if max_set is not None else self.C.max
 
     def architecture_limit_mod(self, arch=None, min_mod: int = None, max_mod: int = None) -> None:
+        # Modifies lower and upper bounds on architecture
         min_mod = 0 if min_mod is None else min_mod
         max_mod = 0 if max_mod is None else max_mod
         for a in architecture_iterator(arch):
@@ -1249,6 +1290,8 @@ class System:
                 self.C.max = self.C.max + max_mod
 
     def architecture_update_to_matrix_from_active_set(self, arch=None) -> None:
+        # Update architecture matrices and corresponding noise and cost matrices based on the active set
+        # Used for recursion calculations of cost/error matrices and gains
         self.initialize_active_matrix(arch)
         for a in architecture_iterator(arch):
             if a == 'B':
@@ -1265,6 +1308,8 @@ class System:
                     self.C.R1 = self.C.R1_reference[self.C.active_set, :][:, self.C.active_set]
 
     def architecture_update_to_indicator_from_active_set(self, arch=None) -> None:
+        # Update architecture indicator vectors from active set
+        # Used for architecture running and switching cost calculations
         for a in architecture_iterator(arch):
             if a == 'B':
                 self.B.indicator_vector_history = np.zeros(self.B.number_of_available, dtype=int)
@@ -1285,6 +1330,7 @@ class System:
                     self.C.indicator_vector_history = dc(self.C.indicator_vector_current)
 
     def architecture_update_to_history_from_active_set(self, arch=None) -> None:
+        # Update record of architecture from active set
         for a in architecture_iterator(arch):
             if a == 'B':
                 self.B.history_active_set[self.sim.t_current] = self.B.active_set
@@ -1292,6 +1338,7 @@ class System:
                 self.C.history_active_set[self.sim.t_current] = self.C.active_set
 
     def architecture_update_to_history_indicator_matrix_from_active_set(self, arch=None) -> None:
+        # Wrapper for all updates from active set
         self.architecture_update_to_history_from_active_set(arch)
         self.architecture_update_to_matrix_from_active_set(arch)
         self.architecture_update_to_indicator_from_active_set()
@@ -1308,18 +1355,21 @@ class System:
             self.architecture_update_to_history_indicator_matrix_from_active_set()
 
     def architecture_compare_active_set_to_system(self, reference_system) -> bool:
+        # Compare active architecture of two systems
         if not isinstance(reference_system, System):
             raise ClassError
         return set(self.B.active_set) == set(reference_system.B.active_set) and set(self.C.active_set) == set(
             reference_system.C.active_set)
 
     def architecture_limit_check(self) -> bool:
+        # Check if architecture sets are within lower and upper bounds
         if self.B.min <= len(self.B.active_set) <= self.B.max and self.C.min <= len(self.C.active_set) <= self.C.max:
             return True
         else:
             return False
 
     def architecture_compute_active_set_changes(self, reference_system) -> int:
+        # Compute the number of add/swap/drop changes between two architecture sets
         if not isinstance(reference_system, System):
             raise ClassError
         B_compare = compare_lists(self.B.active_set, reference_system.B.active_set)
@@ -1329,6 +1379,7 @@ class System:
         return number_of_changes
 
     def architecture_count_number_of_sim_changes(self) -> None:
+        # Compare total number of active set changes over simulation time horizon
         self.B.change_count, self.C.change_count = 0, 0
         if self.sim.sim_model == "self_tuning":
             for t in range(1, self.sim.t_simulate):
@@ -1338,10 +1389,12 @@ class System:
                 self.C.change_count += max(len(compare_C['only2']), len(compare_C['only1']))
 
     def architecture_display(self) -> None:
+        # Print architecture if required
         print('B: {}'.format(self.B.active_set))
         print('C: {}'.format(self.C.active_set))
 
     def cost_architecture_running(self) -> None:
+        # Compute architecture running costs based on given cost type as scalar or vector
         if self.trajectory.cost.metric_running == 0 or (self.B.R2 == 0 and self.C.R2 == 0):
             self.trajectory.cost.running = 0
         elif self.trajectory.cost.metric_running == 1 or (type(self.B.R2) == int and type(self.C.R2) == int):
@@ -1357,6 +1410,7 @@ class System:
             raise Exception('Check running cost metric')
 
     def cost_architecture_switching(self) -> None:
+        # Compute architecture switching costs based on given cost type as scalar or vector
         if self.trajectory.cost.metric_switching == 0 or (self.B.R3 == 0 and self.C.R3 == 0):
             self.trajectory.cost.switching = 0
         elif self.trajectory.cost.metric_switching == 1 or (type(self.B.R3) == int and type(self.C.R3) == int):
@@ -1370,6 +1424,7 @@ class System:
             raise Exception('Check switching cost metric')
 
     def prediction_gains(self, arch=None) -> None:
+        # Compute only the gains with architecture changes - minimizes computation at each iteration
         for a in architecture_iterator(arch):
             if a == 'B':
                 self.prediction_control_gain()
@@ -1377,6 +1432,7 @@ class System:
                 self.prediction_estimation_gain()
 
     def prediction_control_gain(self) -> None:
+        # Control gains over prediction time horizon
         self.B.recursion_matrix = {self.sim.t_predict: self.B.Q}
         for t in range(self.sim.t_predict - 1, -1, -1):
             self.B.gain[t] = np.linalg.inv((self.B.active_matrix.T @ self.B.recursion_matrix[
@@ -1387,6 +1443,7 @@ class System:
                     t]) + self.B.Q
 
     def prediction_estimation_gain(self) -> None:
+        # Estimation gains over prediction time horizon
         self.C.recursion_matrix = {0: self.trajectory.estimation_matrix[self.sim.t_current]}
         for t in range(0, self.sim.t_predict):
             self.C.gain[t] = self.C.recursion_matrix[t] @ self.C.active_matrix.T @ np.linalg.inv(
@@ -1396,6 +1453,7 @@ class System:
                     t] @ self.A.A_mat.T) + self.C.Q
 
     def cost_prediction(self) -> None:
+        # Cost over prediction horizon
         A_augmented_mat = {}
         W_augmented = {}
         F_augmented = {}
@@ -1447,6 +1505,7 @@ class System:
             raise Exception('Check control cost metric')
 
     def cost_true(self) -> None:
+        # True cost incurred at current timestep
         Q_mat = np.block([[self.B.Q, np.zeros((self.number_of_states, self.number_of_states))],
                           [np.zeros((self.number_of_states, self.number_of_states)),
                            self.B.gain[0].T @ self.B.R1 @ self.B.gain[0]]])
@@ -1460,6 +1519,7 @@ class System:
             raise Exception('Check control cost metric')
 
     def cost_prediction_wrapper(self, evaluate_gains='skip') -> None:
+        # Wrapper to update only the required gains and compute predicted costs
         self.prediction_gains(evaluate_gains)
         self.cost_prediction()
         self.cost_architecture_running()
@@ -1468,6 +1528,7 @@ class System:
             self.sim.t_current] = self.trajectory.cost.control + self.trajectory.cost.running + self.trajectory.cost.switching
 
     def cost_true_wrapper(self) -> None:
+        # Wrapper to update only the required gains and compute true costs
         self.cost_true()
         self.cost_architecture_running()
         self.cost_architecture_switching()
@@ -1521,6 +1582,7 @@ class System:
         return choices
 
     def architecture_update_active_set_from_choices(self, architecture_change_parameters) -> None:
+        # Update active set for a specific choice
         if architecture_change_parameters['arch'] == 'B':
             if architecture_change_parameters['change'] == '+':
                 self.B.active_set.append(architecture_change_parameters['idx'])
@@ -1539,6 +1601,7 @@ class System:
             raise Exception('Invalid update choice')
 
     def evaluate_cost_for_choice(self, choice_parameter) -> dict:
+        # Wrapper to update active set and evaluate costs
         S_choice = dc(self)
         S_choice.architecture_update_active_set_from_choices(choice_parameter)
         S_choice.architecture_update_to_history_indicator_matrix_from_active_set()
@@ -1548,6 +1611,8 @@ class System:
         return return_values
 
     def one_step_system_update(self) -> None:
+        # Update state and architecture trajectories and costs based
+
         # print('1:', np.shape(self.disturbance.F_augmented), np.shape(self.disturbance.w_gen[self.sim.t_current]), np.shape(self.disturbance.v_gen[self.sim.t_current]))
         # print('2:', np.shape(self.A.A_augmented_mat), np.shape(self.trajectory.X_augmented[self.sim.t_current]))
         self.trajectory.X_augmented[self.sim.t_current + 1] = (self.A.A_augmented_mat @ self.trajectory.X_augmented[
@@ -1577,81 +1642,82 @@ class System:
         self.prediction_gains()
         self.cost_prediction_wrapper()
 
-    def generate_network_graph_state_locations(self) -> None:
-        S_A = dc(self)
-        S_A.generate_network_architecture_graph_matrix(mB=0, mC=0)
-        S_A.plot.network_architecture_graph.remove_nodes_from(list(netx.isolates(S_A.plot.network_architecture_graph)))
-        self.plot.network_state_graph = dc(S_A.plot.network_architecture_graph)
-        self.plot.network_state_locations = netx.circular_layout(S_A.plot.network_architecture_graph)
+    # def generate_network_graph_state_locations(self) -> None:
+    #     S_A = dc(self)
+    #     S_A.generate_network_architecture_graph_matrix(mB=0, mC=0)
+    #     S_A.plot.network_architecture_graph.remove_nodes_from(list(netx.isolates(S_A.plot.network_architecture_graph)))
+    #     self.plot.network_state_graph = dc(S_A.plot.network_architecture_graph)
+    #     self.plot.network_state_locations = netx.circular_layout(S_A.plot.network_architecture_graph)
 
-    def generate_network_plot_limits(self) -> None:
-        S_full = dc(self)
-        S_full.B.active_set = dc(S_full.B.available_indices)
-        S_full.C.active_set = dc(S_full.C.available_indices)
-        S_full.architecture_update_to_matrix_from_active_set()
-        S_full.generate_network_architecture_graph_matrix()
-        full_pos = netx.spring_layout(S_full.plot.network_architecture_graph,
-                                      pos=self.plot.network_state_locations,
-                                      fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
-        x = [full_pos[k][0] for k in full_pos]
-        y = [full_pos[k][1] for k in full_pos]
-        scale = 1.5
-        self.plot.network_plot_limits = [[min(x) * scale, max(x) * scale], [min(y) * scale, max(y) * scale]]
+    # def generate_network_plot_limits(self) -> None:
+    #     S_full = dc(self)
+    #     S_full.B.active_set = dc(S_full.B.available_indices)
+    #     S_full.C.active_set = dc(S_full.C.available_indices)
+    #     S_full.architecture_update_to_matrix_from_active_set()
+    #     S_full.generate_network_architecture_graph_matrix()
+    #     full_pos = netx.spring_layout(S_full.plot.network_architecture_graph,
+    #                                   pos=self.plot.network_state_locations,
+    #                                   fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
+    #     x = [full_pos[k][0] for k in full_pos]
+    #     y = [full_pos[k][1] for k in full_pos]
+    #     scale = 1.5
+    #     self.plot.network_plot_limits = [[min(x) * scale, max(x) * scale], [min(y) * scale, max(y) * scale]]
 
-    def generate_network_architecture_graph_matrix(self, mA: float = 1, mB: float = 1, mC: float = 1) -> None:
-        A_mat = np.array((self.A.adjacency_matrix > 0) * mA)
-        B_mat = np.array((self.B.active_matrix > 0) * mB)
-        C_mat = np.array((self.C.active_matrix > 0) * mC)
+    # def generate_network_architecture_graph_matrix(self, mA: float = 1, mB: float = 1, mC: float = 1) -> None:
+    #     A_mat = np.array((self.A.adjacency_matrix > 0) * mA)
+    #     B_mat = np.array((self.B.active_matrix > 0) * mB)
+    #     C_mat = np.array((self.C.active_matrix > 0) * mC)
+    #
+    #     net_matrix = np.block([[A_mat, B_mat, C_mat.T],
+    #                            [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))),
+    #                             np.zeros((len(self.B.active_set), len(self.C.active_set)))],
+    #                            [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))),
+    #                             np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
+    #     self.plot.network_architecture_graph = netx.from_numpy_array(net_matrix)
+    #
+    #     node_label_map = {}
+    #     for i in range(0, self.number_of_states):
+    #         node_label_map[i] = str(i + 1)
+    #     for i in range(0, len(self.B.active_set)):
+    #         node_label_map[self.number_of_states + i] = "B" + str(i + 1)
+    #     for i in range(0, len(self.C.active_set)):
+    #         node_label_map[self.number_of_states + len(self.B.active_set) + i] = "C" + str(i + 1)
+    #     netx.relabel_nodes(self.plot.network_architecture_graph, node_label_map, copy=False)
 
-        net_matrix = np.block([[A_mat, B_mat, C_mat.T],
-                               [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))),
-                                np.zeros((len(self.B.active_set), len(self.C.active_set)))],
-                               [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))),
-                                np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
-        self.plot.network_architecture_graph = netx.from_numpy_array(net_matrix)
+    # def plot_network_states(self, ax_in=None) -> None:
+    #     if ax_in is None:
+    #         fig = plt.figure()
+    #         grid = fig.add_gridspec(1, 1)
+    #         ax = fig.add_subplot(grid[0, 0])
+    #     else:
+    #         ax = ax_in
+    #
+    #     node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['node']] * self.number_of_states
+    #     netx.draw_networkx(self.plot.network_state_graph,
+    #                        ax=ax, node_color=node_color_array,
+    #                        pos=self.plot.network_state_locations)
+    #     # ax.set_xlim(self.plot.network_plot_limits[0])
+    #     # ax.set_ylim(self.plot.network_plot_limits[1])
+    #
+    #     if ax_in is None:
+    #         plt.show()
 
-        node_label_map = {}
-        for i in range(0, self.number_of_states):
-            node_label_map[i] = str(i + 1)
-        for i in range(0, len(self.B.active_set)):
-            node_label_map[self.number_of_states + i] = "B" + str(i + 1)
-        for i in range(0, len(self.C.active_set)):
-            node_label_map[self.number_of_states + len(self.B.active_set) + i] = "C" + str(i + 1)
-        netx.relabel_nodes(self.plot.network_architecture_graph, node_label_map, copy=False)
+    # def architecture_at_timestep_t(self, t: int = None) -> None:
+    #     if t is not None:
+    #         self.B.active_set = dc(self.B.history_active_set[t])
+    #         self.C.active_set = dc(self.C.history_active_set[t])
+    #         self.architecture_update_to_matrix_from_active_set()
 
-    def plot_network_states(self, ax_in=None) -> None:
-        if ax_in is None:
-            fig = plt.figure()
-            grid = fig.add_gridspec(1, 1)
-            ax = fig.add_subplot(grid[0, 0])
-        else:
-            ax = ax_in
-
-        node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['node']] * self.number_of_states
-        netx.draw_networkx(self.plot.network_state_graph,
-                           ax=ax, node_color=node_color_array,
-                           pos=self.plot.network_state_locations)
-        # ax.set_xlim(self.plot.network_plot_limits[0])
-        # ax.set_ylim(self.plot.network_plot_limits[1])
-
-        if ax_in is None:
-            plt.show()
-
-    def architecture_at_timestep_t(self, t: int = None) -> None:
-        if t is not None:
-            self.B.active_set = dc(self.B.history_active_set[t])
-            self.C.active_set = dc(self.C.history_active_set[t])
-            self.architecture_update_to_matrix_from_active_set()
-
-    def generate_network_graph_architecture_locations(self, t: int = None) -> None:
-        self.architecture_at_timestep_t(t)
-        self.generate_network_architecture_graph_matrix()
-        self.plot.network_architecture_locations = netx.spring_layout(self.plot.network_architecture_graph,
-                                                                      pos=self.plot.network_state_locations,
-                                                                      fixed=[str(i) for i in
-                                                                             range(1, 1 + self.number_of_states)])
+    # def generate_network_graph_architecture_locations(self, t: int = None) -> None:
+    #     self.architecture_at_timestep_t(t)
+    #     self.generate_network_architecture_graph_matrix()
+    #     self.plot.network_architecture_locations = netx.spring_layout(self.plot.network_architecture_graph,
+    #                                                                   pos=self.plot.network_state_locations,
+    #                                                                   fixed=[str(i) for i in
+    #                                                                          range(1, 1 + self.number_of_states)])
 
     def generate_architecture_history_points(self, arch=None) -> None:
+        # Scatter plot (x,y) for architecture history
         for a in architecture_iterator(arch):
             if a == 'B':
                 for t in self.B.history_active_set:
@@ -1665,6 +1731,7 @@ class System:
                         self.plot.C_history[1].append(node + 1)
 
     def architecture_active_count(self, arch=None) -> None:
+        # populate list of size of active architecture at each time step
         for a in architecture_iterator(arch):
             if a == 'B':
                 if self.sim.sim_model == 'self_tuning':
@@ -1684,67 +1751,67 @@ class System:
                 else:
                     raise Exception('Invalid test model')
 
-    def plot_network_architecture(self, t: int = None, ax_in=None) -> None:
-        if ax_in is None:
-            fig = plt.figure()
-            grid = fig.add_gridspec(1, 1)
-            ax = fig.add_subplot(grid[0, 0])
-        else:
-            ax = ax_in
+    # def plot_network_architecture(self, t: int = None, ax_in=None) -> None:
+    #     if ax_in is None:
+    #         fig = plt.figure()
+    #         grid = fig.add_gridspec(1, 1)
+    #         ax = fig.add_subplot(grid[0, 0])
+    #     else:
+    #         ax = ax_in
+    #
+    #     self.generate_network_graph_architecture_locations(t)
+    #
+    #     self.generate_network_architecture_graph_matrix(mA=0)
+    #     node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['B']] * len(self.B.active_set)
+    #     node_color_array.extend([self.plot.plot_parameters[self.plot.plot_system]['C']] * len(self.C.active_set))
+    #
+    #     architecture_list = ["B" + str(i) for i in range(1, 1 + len(self.B.active_set))] + ["C" + str(i) for i in
+    #                                                                                         range(1, 1 + len(
+    #                                                                                             self.C.active_set))]
+    #     architecture_labels = {"B" + str(i): "B" + str(i) for i in range(1, 1 + len(self.B.active_set))}
+    #     architecture_labels.update({"C" + str(i): "C" + str(i) for i in range(1, 1 + len(self.C.active_set))})
+    #
+    #     netx.draw_networkx_nodes(self.plot.network_architecture_graph, ax=ax,
+    #                              pos=self.plot.network_architecture_locations, nodelist=architecture_list,
+    #                              node_color=node_color_array)
+    #
+    #     netx.draw_networkx_labels(self.plot.network_architecture_graph, ax=ax,
+    #                               pos=self.plot.network_architecture_locations, labels=architecture_labels)
+    #
+    #     netx.draw_networkx_edges(self.plot.network_architecture_graph, ax=ax,
+    #                              pos=self.plot.network_architecture_locations)
+    #
+    #     if ax_in is None:
+    #         plt.show()
 
-        self.generate_network_graph_architecture_locations(t)
-
-        self.generate_network_architecture_graph_matrix(mA=0)
-        node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['B']] * len(self.B.active_set)
-        node_color_array.extend([self.plot.plot_parameters[self.plot.plot_system]['C']] * len(self.C.active_set))
-
-        architecture_list = ["B" + str(i) for i in range(1, 1 + len(self.B.active_set))] + ["C" + str(i) for i in
-                                                                                            range(1, 1 + len(
-                                                                                                self.C.active_set))]
-        architecture_labels = {"B" + str(i): "B" + str(i) for i in range(1, 1 + len(self.B.active_set))}
-        architecture_labels.update({"C" + str(i): "C" + str(i) for i in range(1, 1 + len(self.C.active_set))})
-
-        netx.draw_networkx_nodes(self.plot.network_architecture_graph, ax=ax,
-                                 pos=self.plot.network_architecture_locations, nodelist=architecture_list,
-                                 node_color=node_color_array)
-
-        netx.draw_networkx_labels(self.plot.network_architecture_graph, ax=ax,
-                                  pos=self.plot.network_architecture_locations, labels=architecture_labels)
-
-        netx.draw_networkx_edges(self.plot.network_architecture_graph, ax=ax,
-                                 pos=self.plot.network_architecture_locations)
-
-        if ax_in is None:
-            plt.show()
-
-    def plot_network(self, t: int = None, ax1_in=None, ax2_in=None) -> None:
-        if ax1_in is None and ax2_in is None:
-            fig = plt.figure()
-            grid = fig.add_gridspec(1, 1)
-            ax1 = fig.add_subplot(grid[0, 0], frameon=False, zorder=1.1, aspect='equal')
-            ax1.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
-                            right=False)
-            # ax1.patch.set_alpha(0.1)
-            ax2 = fig.add_subplot(grid[0, 0], sharex=ax1, sharey=ax1, zorder=1.2, aspect='equal')
-            ax2.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
-                            right=False)
-            ax2.patch.set_alpha(0.1)
-        else:
-            ax1 = ax1_in
-            ax2 = ax2_in
-
-        self.generate_network_graph_state_locations()
-        self.generate_network_plot_limits()
-
-        self.architecture_display()
-        self.plot_network_states(ax_in=ax2)
-        self.plot_network_architecture(t=t, ax_in=ax1)
-
-        # ax1.set_xlim(self.plot.network_plot_limits[0])
-        # ax1.set_ylim(self.plot.network_plot_limits[1])
-
-        if ax1_in is None and ax2_in is None:
-            plt.show()
+    # def plot_network(self, t: int = None, ax1_in=None, ax2_in=None) -> None:
+    #     if ax1_in is None and ax2_in is None:
+    #         fig = plt.figure()
+    #         grid = fig.add_gridspec(1, 1)
+    #         ax1 = fig.add_subplot(grid[0, 0], frameon=False, zorder=1.1, aspect='equal')
+    #         ax1.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
+    #                         right=False)
+    #         # ax1.patch.set_alpha(0.1)
+    #         ax2 = fig.add_subplot(grid[0, 0], sharex=ax1, sharey=ax1, zorder=1.2, aspect='equal')
+    #         ax2.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
+    #                         right=False)
+    #         ax2.patch.set_alpha(0.1)
+    #     else:
+    #         ax1 = ax1_in
+    #         ax2 = ax2_in
+    #
+    #     self.generate_network_graph_state_locations()
+    #     self.generate_network_plot_limits()
+    #
+    #     self.architecture_display()
+    #     self.plot_network_states(ax_in=ax2)
+    #     self.plot_network_architecture(t=t, ax_in=ax1)
+    #
+    #     # ax1.set_xlim(self.plot.network_plot_limits[0])
+    #     # ax1.set_ylim(self.plot.network_plot_limits[1])
+    #
+    #     if ax1_in is None and ax2_in is None:
+    #         plt.show()
 
     def plot_architecture_history(self, arch=None, ax_in=None) -> None:
         if ax_in is None:
@@ -1922,18 +1989,21 @@ class System:
             plt.show()
 
     def list_from_dict_key_time(self, v: dict) -> list:
+        # Simulation-time indexed sorted list from dictionary
         ret_list = []
         for t in range(0, self.sim.t_simulate):
             ret_list.append(v[t])
         return ret_list
 
     def ndarray_from_dict_key_states(self, v: dict) -> np.ndarray:
+        # Simulation-time index updated numpy array from dictionary
         ret_list = np.empty((self.number_of_states, self.sim.t_simulate))
         for t in range(0, self.sim.t_simulate):
             ret_list[:, t] = v[t]
         return ret_list
 
     def scalecost_by_test_parameter(self) -> None:
+        # Check for non-zero base costs for valuable scaling
         cost_scale = 0 if self.sim.test_parameter is None else self.sim.test_parameter
         self.B.R2 = self.B.R2 * cost_scale
         self.B.R3 = self.B.R3 * cost_scale
@@ -1945,6 +2015,7 @@ class System:
             self.plot_name = 'self_tuning ' + str(cost_scale) + 'scale arch cost'
 
     def optimize_initial_architecture(self, print_check: bool = False):
+        # Optimize architecture using simultaneous greedy architecture assuming no switching costs - free offline optimization
         if print_check:
             print('Optimizing design-time architecture from:')
             self.architecture_display()
@@ -1972,6 +2043,7 @@ class System:
             self.architecture_display()
 
     def simulate(self, print_check: bool = False, tqdm_check: bool = False):
+        # Simulation wrapper for both fixed and self-tuning architecture based on sim_model
         if self.sim.sim_model == "fixed":
             self.simulate_fixed_architecture(print_check=print_check, tqdm_check=tqdm_check)
         elif self.sim.sim_model == "self_tuning":
@@ -1980,6 +2052,7 @@ class System:
             raise Exception('Invalid sim model')
 
     def simulate_fixed_architecture(self, print_check: bool = False, tqdm_check: bool = True):
+        # Fixed architecture - Only update trajectories over time
         self.model_namer()
 
         if print_check:
@@ -2005,6 +2078,7 @@ class System:
             print('Fixed Architecture Simulation: DONE')
 
     def simulate_self_tuning_architecture(self, print_check: bool = False, tqdm_check: bool = True):
+        # Self-tuning architecture - optimize architecture and update trajectory at each time-step
         self.model_namer()
 
         if print_check:
@@ -2034,6 +2108,9 @@ class System:
             print('Self-Tuning Architecture Simulation: DONE')
 
     def greedy_selection(self, print_check: bool = False):
+        # Uses priority system to determine choices
+        # Limits number of changes per iteration and maximum number of selections
+        # Implements early exit
         exit_condition = 0
         work_sys = dc(self)
         arch_ref = dc(self)
@@ -2127,6 +2204,9 @@ class System:
         self.copy_from_system(work_sys)
 
     def greedy_rejection(self, print_check: bool = False):
+        # Uses priority system to determine choices
+        # Limits number of changes per iteration and maximum number of rejections
+        # Implements early exit
         exit_condition = 0
         work_sys = dc(self)
         cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
@@ -2214,8 +2294,11 @@ class System:
 
         self.copy_from_system(work_sys)
 
-    def greedy_simultaneous(self, number_of_changes_per_iteration: int = None, print_check_outer: bool = False,
-                            print_check_inner: bool = False):
+    def greedy_simultaneous(self, number_of_changes_per_iteration: int = None, print_check_outer: bool = False, print_check_inner: bool = False):
+        # Implements sequential greedy selection rejection
+        # Uses early exit conditions if optimal solution is reached
+        # Otherwise requires limit on maximum number of changes to architecture
+        # Implements a safety check if more than number_of_states iterations of changes
         work_sys = dc(self)
         cost_improvement = [work_sys.trajectory.cost.predicted[work_sys.sim.t_current]]
         swap_limit_mod = 1 if number_of_changes_per_iteration is None else number_of_changes_per_iteration
@@ -2290,6 +2373,7 @@ class System:
 
 
 def cost_mapper(S: System, choices) -> list:
+    # Mapper for function to evaluate cost for each choice
     evaluation = list(map(S.evaluate_cost_for_choice, choices))
     return evaluation
 
@@ -2302,6 +2386,7 @@ def element_wise_min_max(v_ref_min, v_ref_max, v):
 
 
 def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_change, arch_count):
+    # Data parser function for pulling plotting info from simulated statistics models
     cost_min, cost_max = element_wise_min_max(cost_min, cost_max, list(itertools.accumulate(S.list_from_dict_key_time(S.trajectory.cost.true))))
     compute_time.append(np.average(S.list_from_dict_key_time(S.trajectory.computation_time)))
     S.architecture_count_number_of_sim_changes()
@@ -2317,6 +2402,7 @@ def statistics_data_parser(S: System, cost_min, cost_max, compute_time, arch_cha
 
 
 def run_experiment(exp_no=None, run_check: bool = True, plot_check: bool = True):
+    # Primary caller to simulate/plot an experiment
     Exp = Experiment()
     if run_check:
         Exp.simulate_experiment_wrapper(exp_no=exp_no)
