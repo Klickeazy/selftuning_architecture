@@ -138,16 +138,8 @@ class Experiment:
         self.S_2 = {}   # Dictionary of second system to compare
         self.process_pool_workers = None    # number of workers for processpool: none=max
 
-        # Save folder for data dump
-        # if socket.gethostname() == 'melap257805':
-        #     self.datadump_folder_path = 'C:/Users/kxg161630/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-        # elif socket.gethostname() == 'DESKTOP-D6E65VO':
-        #     self.datadump_folder_path = 'D:/Box/KarthikGanapathy_Research/SpeedyGreedyAlgorithm/DataDump/'
-        # else:
-        #     self.datadump_folder_path = 'DataDump/'
         self.datadump_folder_path = 'DataDump/'
 
-        # Save folder for images within the same git folder
         self.image_save_folder_path = 'Images/'
 
         # Saved experiment data parse
@@ -577,7 +569,7 @@ class Experiment:
 
         self.S_1[0].plot_architecture_history(arch='C', ax_in=ax_C_scatter)
         self.S_2[0].plot_architecture_history(arch='C', ax_in=ax_C_scatter)
-        ax_C_scatter.set_ylabel('Sensor\nPosition\n' + r'$S_t$' + '\'')
+        ax_C_scatter.set_ylabel('Sensor\nPosition\n' + r'$S_t$')
         ax_C_scatter.tick_params(axis="x", labelbottom=False)
 
         for lim_val in [self.S[0].B.min, self.S[0].B.max]:
@@ -586,12 +578,12 @@ class Experiment:
 
         self.S_1[0].plot_architecture_count(ax_in=ax_B_count, arch='B')
         self.S_2[0].plot_architecture_count(ax_in=ax_B_count, arch='B')
-        ax_B_count.set_ylabel('Actuator\nCount\n' + r'$\mathcal{A}_t$')
+        ax_B_count.set_ylabel('Actuator\nCount\n' + r'$|\mathcal{A}_t|$')
         ax_B_count.tick_params(axis="x", labelbottom=False)
 
         self.S_1[0].plot_architecture_count(ax_in=ax_C_count, arch='C')
         self.S_2[0].plot_architecture_count(ax_in=ax_C_count, arch='C')
-        ax_C_count.set_ylabel('Sensor\nCount\n' + r'$S_t$')
+        ax_C_count.set_ylabel('Sensor\nCount\n' + r'$|S_t|$')
         ax_C_count.tick_params(axis="x", labelbottom=False)
 
         self.S_1[0].plot_compute_time(ax_in=ax_compute_time)
@@ -785,8 +777,6 @@ class PlotParameters:
         self.plot_system = sys_stage
         self.predicted_cost, self.true_cost = [], []
         self.x_2norm, self.x_estimate_2norm, self.error_2norm = [], [], []
-        self.network_state_graph, self.network_state_locations = netx.Graph(), {}
-        self.network_architecture_graph, self.network_architecture_locations = netx.Graph(), {}
         self.plot_parameters = \
             {1: {'node': 'tab:blue', 'B': 'tab:orange', 'C': 'tab:green', 'm': 'x', 'c': 'tab:blue', 'ms': 20,
                  'ls': 'solid'},
@@ -795,6 +785,8 @@ class PlotParameters:
         self.network_plot_limits = []
         self.B_history = [[], []]
         self.C_history = [[], []]
+        self.states_graph, self.state_positions = netx.DiGraph(), {}
+        self.actutator_positions, self.sensor_positions = {}, {}
 
 
 class System:
@@ -1432,7 +1424,7 @@ class System:
                 self.prediction_estimation_gain()
 
     def prediction_control_gain(self) -> None:
-        # Control gains over prediction time horizon
+        # Control gains over the prediction time horizon
         self.B.recursion_matrix = {self.sim.t_predict: self.B.Q}
         for t in range(self.sim.t_predict - 1, -1, -1):
             self.B.gain[t] = np.linalg.inv((self.B.active_matrix.T @ self.B.recursion_matrix[
@@ -1443,7 +1435,7 @@ class System:
                     t]) + self.B.Q
 
     def prediction_estimation_gain(self) -> None:
-        # Estimation gains over prediction time horizon
+        # Estimation gains over the prediction time horizon
         self.C.recursion_matrix = {0: self.trajectory.estimation_matrix[self.sim.t_current]}
         for t in range(0, self.sim.t_predict):
             self.C.gain[t] = self.C.recursion_matrix[t] @ self.C.active_matrix.T @ np.linalg.inv(
@@ -1453,7 +1445,7 @@ class System:
                     t] @ self.A.A_mat.T) + self.C.Q
 
     def cost_prediction(self) -> None:
-        # Cost over prediction horizon
+        # Cost over the prediction horizon
         A_augmented_mat = {}
         W_augmented = {}
         F_augmented = {}
@@ -1613,8 +1605,6 @@ class System:
     def one_step_system_update(self) -> None:
         # Update state and architecture trajectories and costs based
 
-        # print('1:', np.shape(self.disturbance.F_augmented), np.shape(self.disturbance.w_gen[self.sim.t_current]), np.shape(self.disturbance.v_gen[self.sim.t_current]))
-        # print('2:', np.shape(self.A.A_augmented_mat), np.shape(self.trajectory.X_augmented[self.sim.t_current]))
         self.trajectory.X_augmented[self.sim.t_current + 1] = (self.A.A_augmented_mat @ self.trajectory.X_augmented[
             self.sim.t_current]) + (self.disturbance.F_augmented @ np.concatenate((self.disturbance.w_gen[
                                                                                        self.sim.t_current],
@@ -1641,80 +1631,6 @@ class System:
         self.architecture_update_to_history_indicator_matrix_from_active_set()
         self.prediction_gains()
         self.cost_prediction_wrapper()
-
-    # def generate_network_graph_state_locations(self) -> None:
-    #     S_A = dc(self)
-    #     S_A.generate_network_architecture_graph_matrix(mB=0, mC=0)
-    #     S_A.plot.network_architecture_graph.remove_nodes_from(list(netx.isolates(S_A.plot.network_architecture_graph)))
-    #     self.plot.network_state_graph = dc(S_A.plot.network_architecture_graph)
-    #     self.plot.network_state_locations = netx.circular_layout(S_A.plot.network_architecture_graph)
-
-    # def generate_network_plot_limits(self) -> None:
-    #     S_full = dc(self)
-    #     S_full.B.active_set = dc(S_full.B.available_indices)
-    #     S_full.C.active_set = dc(S_full.C.available_indices)
-    #     S_full.architecture_update_to_matrix_from_active_set()
-    #     S_full.generate_network_architecture_graph_matrix()
-    #     full_pos = netx.spring_layout(S_full.plot.network_architecture_graph,
-    #                                   pos=self.plot.network_state_locations,
-    #                                   fixed=[str(i) for i in range(1, 1 + self.number_of_states)])
-    #     x = [full_pos[k][0] for k in full_pos]
-    #     y = [full_pos[k][1] for k in full_pos]
-    #     scale = 1.5
-    #     self.plot.network_plot_limits = [[min(x) * scale, max(x) * scale], [min(y) * scale, max(y) * scale]]
-
-    # def generate_network_architecture_graph_matrix(self, mA: float = 1, mB: float = 1, mC: float = 1) -> None:
-    #     A_mat = np.array((self.A.adjacency_matrix > 0) * mA)
-    #     B_mat = np.array((self.B.active_matrix > 0) * mB)
-    #     C_mat = np.array((self.C.active_matrix > 0) * mC)
-    #
-    #     net_matrix = np.block([[A_mat, B_mat, C_mat.T],
-    #                            [B_mat.T, np.zeros((len(self.B.active_set), len(self.B.active_set))),
-    #                             np.zeros((len(self.B.active_set), len(self.C.active_set)))],
-    #                            [C_mat, np.zeros((len(self.C.active_set), len(self.B.active_set))),
-    #                             np.zeros((len(self.C.active_set), len(self.C.active_set)))]])
-    #     self.plot.network_architecture_graph = netx.from_numpy_array(net_matrix)
-    #
-    #     node_label_map = {}
-    #     for i in range(0, self.number_of_states):
-    #         node_label_map[i] = str(i + 1)
-    #     for i in range(0, len(self.B.active_set)):
-    #         node_label_map[self.number_of_states + i] = "B" + str(i + 1)
-    #     for i in range(0, len(self.C.active_set)):
-    #         node_label_map[self.number_of_states + len(self.B.active_set) + i] = "C" + str(i + 1)
-    #     netx.relabel_nodes(self.plot.network_architecture_graph, node_label_map, copy=False)
-
-    # def plot_network_states(self, ax_in=None) -> None:
-    #     if ax_in is None:
-    #         fig = plt.figure()
-    #         grid = fig.add_gridspec(1, 1)
-    #         ax = fig.add_subplot(grid[0, 0])
-    #     else:
-    #         ax = ax_in
-    #
-    #     node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['node']] * self.number_of_states
-    #     netx.draw_networkx(self.plot.network_state_graph,
-    #                        ax=ax, node_color=node_color_array,
-    #                        pos=self.plot.network_state_locations)
-    #     # ax.set_xlim(self.plot.network_plot_limits[0])
-    #     # ax.set_ylim(self.plot.network_plot_limits[1])
-    #
-    #     if ax_in is None:
-    #         plt.show()
-
-    # def architecture_at_timestep_t(self, t: int = None) -> None:
-    #     if t is not None:
-    #         self.B.active_set = dc(self.B.history_active_set[t])
-    #         self.C.active_set = dc(self.C.history_active_set[t])
-    #         self.architecture_update_to_matrix_from_active_set()
-
-    # def generate_network_graph_architecture_locations(self, t: int = None) -> None:
-    #     self.architecture_at_timestep_t(t)
-    #     self.generate_network_architecture_graph_matrix()
-    #     self.plot.network_architecture_locations = netx.spring_layout(self.plot.network_architecture_graph,
-    #                                                                   pos=self.plot.network_state_locations,
-    #                                                                   fixed=[str(i) for i in
-    #                                                                          range(1, 1 + self.number_of_states)])
 
     def generate_architecture_history_points(self, arch=None) -> None:
         # Scatter plot (x,y) for architecture history
@@ -1750,68 +1666,6 @@ class System:
                     self.C.active_count = [len(self.C.active_set)] * len(self.C.history_active_set)
                 else:
                     raise Exception('Invalid test model')
-
-    # def plot_network_architecture(self, t: int = None, ax_in=None) -> None:
-    #     if ax_in is None:
-    #         fig = plt.figure()
-    #         grid = fig.add_gridspec(1, 1)
-    #         ax = fig.add_subplot(grid[0, 0])
-    #     else:
-    #         ax = ax_in
-    #
-    #     self.generate_network_graph_architecture_locations(t)
-    #
-    #     self.generate_network_architecture_graph_matrix(mA=0)
-    #     node_color_array = [self.plot.plot_parameters[self.plot.plot_system]['B']] * len(self.B.active_set)
-    #     node_color_array.extend([self.plot.plot_parameters[self.plot.plot_system]['C']] * len(self.C.active_set))
-    #
-    #     architecture_list = ["B" + str(i) for i in range(1, 1 + len(self.B.active_set))] + ["C" + str(i) for i in
-    #                                                                                         range(1, 1 + len(
-    #                                                                                             self.C.active_set))]
-    #     architecture_labels = {"B" + str(i): "B" + str(i) for i in range(1, 1 + len(self.B.active_set))}
-    #     architecture_labels.update({"C" + str(i): "C" + str(i) for i in range(1, 1 + len(self.C.active_set))})
-    #
-    #     netx.draw_networkx_nodes(self.plot.network_architecture_graph, ax=ax,
-    #                              pos=self.plot.network_architecture_locations, nodelist=architecture_list,
-    #                              node_color=node_color_array)
-    #
-    #     netx.draw_networkx_labels(self.plot.network_architecture_graph, ax=ax,
-    #                               pos=self.plot.network_architecture_locations, labels=architecture_labels)
-    #
-    #     netx.draw_networkx_edges(self.plot.network_architecture_graph, ax=ax,
-    #                              pos=self.plot.network_architecture_locations)
-    #
-    #     if ax_in is None:
-    #         plt.show()
-
-    # def plot_network(self, t: int = None, ax1_in=None, ax2_in=None) -> None:
-    #     if ax1_in is None and ax2_in is None:
-    #         fig = plt.figure()
-    #         grid = fig.add_gridspec(1, 1)
-    #         ax1 = fig.add_subplot(grid[0, 0], frameon=False, zorder=1.1, aspect='equal')
-    #         ax1.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
-    #                         right=False)
-    #         # ax1.patch.set_alpha(0.1)
-    #         ax2 = fig.add_subplot(grid[0, 0], sharex=ax1, sharey=ax1, zorder=1.2, aspect='equal')
-    #         ax2.tick_params(axis='both', labelbottom=False, labelleft=False, bottom=False, top=False, left=False,
-    #                         right=False)
-    #         ax2.patch.set_alpha(0.1)
-    #     else:
-    #         ax1 = ax1_in
-    #         ax2 = ax2_in
-    #
-    #     self.generate_network_graph_state_locations()
-    #     self.generate_network_plot_limits()
-    #
-    #     self.architecture_display()
-    #     self.plot_network_states(ax_in=ax2)
-    #     self.plot_network_architecture(t=t, ax_in=ax1)
-    #
-    #     # ax1.set_xlim(self.plot.network_plot_limits[0])
-    #     # ax1.set_ylim(self.plot.network_plot_limits[1])
-    #
-    #     if ax1_in is None and ax2_in is None:
-    #         plt.show()
 
     def plot_architecture_history(self, arch=None, ax_in=None) -> None:
         if ax_in is None:
