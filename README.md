@@ -14,7 +14,7 @@ The code is created and tested on Python 3.11.3.
 Additional package requirements are provided in the [requirements.txt](requirements.txt) file
 
 ## Run code
-The base execution code is provided in [run_code.py](run_code.py) for *exp_no=[1,9]* corresponding to the examples included in the main paper.
+The base execution code is provided in [run_code.py](run_code.py) for `exp_no=[1,9]` corresponding to the examples included in the main paper.
 
 The Jupyter notebook [numerical_analysis.ipynb](numerical_analysis.ipynb) contains more extensive numerical analysis and explanations for the experiment parameters and test cases.
 
